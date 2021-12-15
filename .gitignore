@@ -1,0 +1,12 @@
+# Python code
+__pycache__
+*.pyc
+
+# bios_extract
+bios_extract/src/bios_extract
+lh5_test
+ami_slab
+bcpvpd
+efidecomp
+*.o
+*~

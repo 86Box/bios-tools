@@ -1,6 +1,6 @@
 86Box BIOS Tools
 ================
-A full toolkit for analyzing and extracting x86 BIOS ROM images (mostly) within the context of the 86Box project.
+A toolkit for analyzing and extracting x86 BIOS ROM images (mostly) within the context of the 86Box project.
 
 ## System requirements
 
@@ -16,6 +16,7 @@ A full toolkit for analyzing and extracting x86 BIOS ROM images (mostly) within 
 ```
 cd bios_extract
 make
+cd ..
 ```
 
 3. Download the `uefiextract` tool from its [GitHub repository](https://github.com/LongSoft/UEFITool/releases) and place its executable on the repository's root directory. Prebuilt versions are only available for `x86_64`, but this tool is optional; UEFI extraction will not work without it.
