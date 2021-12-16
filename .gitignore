@@ -2,8 +2,11 @@
 __pycache__
 *.pyc
 
+# State
+biostools_error.log
+
 # bios_extract
-bios_extract/src/bios_extract
+bios_extract/bios_extract
 lh5_test
 ami_slab
 bcpvpd
