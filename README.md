@@ -20,7 +20,7 @@ make
 cd ..
 ```
 
-3. Download the `uefiextract` tool from its [GitHub repository](https://github.com/LongSoft/UEFITool/releases) and place its executable on the repository's root directory. Prebuilt versions are only available for `x86_64`, but this tool is optional; UEFI extraction will not work without it.
+3. Download the `UEFIExtract` tool from its [GitHub repository](https://github.com/LongSoft/UEFITool/releases) and place its executable on the repository's root directory. Prebuilt versions are only available for `x86_64`, but this tool is optional; UEFI extraction will not work without it.
 4. Optionally run this command to install a dependency required for BIOS logo extraction:
 
 ```
