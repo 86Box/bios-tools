@@ -1,6 +1,6 @@
 86Box BIOS Tools
 ================
-A toolkit for analyzing and extracting x86 BIOS ROM images (mostly) within the context of the 86Box project.
+A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the context of the 86Box project.
 
 ## System requirements
 
@@ -20,8 +20,8 @@ make
 cd ..
 ```
 
-3. Download the `UEFIExtract` tool from its [GitHub repository](https://github.com/LongSoft/UEFITool/releases) and place its executable on the repository's root directory. Prebuilt versions are only available for `x86_64`, but this tool is optional; UEFI extraction will not work without it.
-4. Optionally run this command to install a dependency required for BIOS logo extraction:
+3. Download the `UEFIExtract` tool from its [GitHub repository](https://github.com/LongSoft/UEFITool/releases) and place its executable on the repository's root directory. Prebuilt versions are only available for `x86_64`, but this tool is optional, and only required for UEFI extraction.
+4. Optionally install a dependency required for BIOS logo extraction:
 
 ```
 pip install -r requirements.txt
@@ -29,9 +29,9 @@ pip install -r requirements.txt
 
 ## Usage
 
-1. Create a directory, which will be called `roms` here.
+1. Create a destination directory, which will be called `roms` here.
 2. Create a `1` directory within `roms`.
-3. Place BIOS ROM images, archives, disk images, flasher executables and what have you inside the `1` directory. Subdirectories will also be checked.
+3. Place BIOS ROM images, archives, disk images, flasher executables and what have you in the `1` directory. Subdirectories will also be checked.
 4. Run the extractor, pointing it to the directory created in step 1:
 
 ```
