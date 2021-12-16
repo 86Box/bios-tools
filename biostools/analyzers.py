@@ -942,10 +942,11 @@ class AwardPowerAnalyzer(Analyzer):
 		return False
 
 	def _string(self, line, match):
-		'''-3[12357ABCDE]([A-Z0-9]{6})'''
+		'''-3[12357ABCDE][A-Z0-9]{6}'''
 
-		# PowerBIOS strings are quite fragmented. Just use the whole line with
-		# some stripping applied to it.
+		# PowerBIOS has an Award identification block similar to v4.xx,
+		# but it doesn't always contain the string. (SIMATIC M7-400 MOV450)
+		# Just detect the string heuristically and take the whole line.
 		self.string = line.strip(' -')
 
 
