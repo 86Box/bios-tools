@@ -128,7 +128,7 @@ def extract(dir_path, _, options):
 		return 2
 
 	# Check if bios_extract is there.
-	if not os.path.exists(os.path.abspath(os.path.join('bios_extract', 'src', 'bios_extract'))):
+	if not os.path.exists(os.path.abspath(os.path.join('bios_extract', 'bios_extract'))):
 		print('bios_extract binary not found, did you compile it?', file=sys.stderr)
 		return 3
 

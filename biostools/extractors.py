@@ -107,7 +107,7 @@ class BIOSExtractor(Extractor):
 		super().__init__(*args, **kwargs)
 
 		# Path to the bios_extract utility.
-		self._bios_extract_path = os.path.abspath(os.path.join('bios_extract', 'src', 'bios_extract'))
+		self._bios_extract_path = os.path.abspath(os.path.join('bios_extract', 'bios_extract'))
 		if not os.path.exists(self._bios_extract_path):
 			self._bios_extract_path = None
 
