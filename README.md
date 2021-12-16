@@ -35,7 +35,7 @@ pip install -r requirements.txt
 
 1. Create a destination directory, which will be called `roms` here.
 2. Create a `1` directory within `roms`.
-3. Place BIOS ROM images, archives, disk images, flasher executables and what have you in the `1` directory. Subdirectories will also be checked.
+3. Place BIOS ROM images, archives, disk images, flasher executables and what have you in the `1` directory. Subdirectories will also be checked. **These files will be deleted during the extraction process.**
 4. Run the extractor, pointing it to the directory created in step 1:
 
 ```
