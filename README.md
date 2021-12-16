@@ -7,7 +7,7 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 * **Linux**. Unfortunately, we rely on tools which contain non-portable code and generate filenames that are invalid for Windows, as well as GNU-specific extensions to shell commands.
 * **Python 3.5** or newer.
 * **Standard gcc toolchain** for building the essential `bios_extract` tool.
-** **7-Zip** command line utility installed as `7z`.
+* **7-Zip** command line utility installed as `7z`.
 
 ## Installation
 
