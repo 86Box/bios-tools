@@ -182,12 +182,12 @@ class NoInfoAnalyzer(Analyzer):
 		super().__init__(vendor, *args, **kwargs)
 
 	def can_handle(self, file_data, header_data):
-		has_strings = self.has_strings(file_data)
+		if not self.has_strings(file_data):
+			return False
 
-		if has_strings:
-			self.version = '?'
+		self.version = '?'
 
-		return has_strings
+		return True
 
 	def has_strings(self, file_data):
 		"""Returns True if this analyzer can handle the given file data."""
@@ -1069,16 +1069,16 @@ class CDIAnalyzer(Analyzer):
 		super().__init__('CDI', *args, **kwargs)
 
 	def can_handle(self, file_data, header_data):
-		has_string = b' COMPUTER DEVICES INC. ' in file_data
+		if b' COMPUTER DEVICES INC. ' not in file_data:
+			return False
 
-		if has_string:
-			# No version information, outside of NCR.
-			if b'NCR\'S VERSION IBM CORP. AT ROM' in file_data:
-				self.version = 'NCR'
-			else:
-				self.version = '?'
+		# No version information, outside of NCR.
+		if b'NCR\'S VERSION IBM CORP. AT ROM' in file_data:
+			self.version = 'NCR'
+		else:
+			self.version = '?'
 
-		return has_string
+		return True
 
 
 class CentralPointAnalyzer(Analyzer):
@@ -1466,13 +1466,13 @@ class OlivettiAnalyzer(Analyzer):
 		self._trap_version = False
 
 	def can_handle(self, file_data, header_data):
-		has_strings = b'COPYRIGHT (C)   OLIVETTI' in file_data and (b'No ROM BASIC available - RESET' in file_data or b'ROM BASIC Not Available,' in file_data)
+		if b'COPYRIGHT (C)   OLIVETTI' not in file_data or (b'No ROM BASIC available - RESET' not in file_data and b'ROM BASIC Not Available,' not in file_data):
+			return False
 
-		if has_strings:
-			# Start by assuming this is an unversioned BIOS.
-			self.version = '?'
+		# Start by assuming this is an unversioned BIOS.
+		self.version = '?'
 
-		return has_strings
+		return True
 
 	def _version_precheck(self, line):
 		return self._trap_version
@@ -2242,43 +2242,44 @@ class ToshibaAnalyzer(Analyzer):
 		self._string_pattern = re.compile(b'''([\\x21-\\x7F]+\s*V[\\x21-\\x7F]{1,16}\s*)TOSHIBA ''')
 
 	def can_handle(self, file_data, header_data):
-		has_strings = (b' TOSHIBA ' in file_data and b'Use Toshiba\'s BASIC.' in file_data) or b'Toshiba Corporation. & Award Software Inc.' in file_data
+		if not (b' TOSHIBA ' in file_data and b'Use Toshiba\'s BASIC.' in file_data) and b'Toshiba Corporation. & Award Software Inc.' not in file_data:
+			return False
 
-		if has_strings:
-			self.version = 'Toshiba'
+		# Identify as Toshiba-customized Award.
+		self.version = 'Toshiba'
 
-			# Extract string.
-			match = self._string_pattern.search(file_data)
-			if match:
-				# Extract 16 characters from the end to avoid preceding characters. (T3100e)
-				self.string = match.group(1)[-16:].decode('cp437', 'ignore').strip()
+		# Extract string.
+		match = self._string_pattern.search(file_data)
+		if match:
+			# Extract 16 characters from the end to avoid preceding characters. (T3100e)
+			self.string = match.group(1)[-16:].decode('cp437', 'ignore').strip()
 
-		return has_strings
+		return True
 
 class WhizproAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Whizpro', *args, **kwargs)
 
 	def can_handle(self, file_data, header_data):
-		has_strings = b'$PREPOST' in file_data and b'$BOOTBLK' in file_data
+		if b'$PREPOST' not in file_data or b'$BOOTBLK' not in file_data:
+			return False
 
-		if has_strings:
-			# Extract build date as version, as there's no actual
-			# version information to be found anywhere. (compressed?)
-			date_index = len(file_data) - 0x0b
-			self.version = util.read_string(file_data[date_index:date_index + 8])
+		# Extract build date as version, as there's no actual
+		# version information to be found anywhere. (compressed?)
+		date_index = len(file_data) - 0x0b
+		self.version = util.read_string(file_data[date_index:date_index + 8])
 
-			# Determine location of the identification block. I've only ever
-			# seen 512K BIOSes; other sizes are assumed to work the same way.
-			id_block_index = len(file_data) - 0x20110
+		# Determine location of the identification block. I've only ever
+		# seen 512K BIOSes; other sizes are assumed to work the same way.
+		id_block_index = len(file_data) - 0x20110
 
-			# Extract string.
-			self.string = util.read_string(file_data[id_block_index + 0xe0:id_block_index + 0x100]).strip()
+		# Extract string.
+		self.string = util.read_string(file_data[id_block_index + 0xe0:id_block_index + 0x100]).strip()
 
-			# Extract sign-on.
-			self.signon = util.read_string(file_data[id_block_index:id_block_index + 0x20]).strip()
+		# Extract sign-on.
+		self.signon = util.read_string(file_data[id_block_index:id_block_index + 0x20]).strip()
 
-		return has_strings
+		return True
 
 	def _signon_precheck(self, line):
 		return self._trap_signon
