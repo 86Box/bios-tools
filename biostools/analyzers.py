@@ -1612,7 +1612,7 @@ class PhoenixAnalyzer(Analyzer):
 		return self._trap_signon_nec
 
 	def _version_40rel(self, line, match):
-		'''Phoenix(MB)? ?BIOS ([0-9]\.[^\s]+ Release [0-9]\.[^\s]+)(?: (.+))?'''
+		'''Phoenix(MB)? ?BIOS ([0-9]\.[^\s]+ Release ([0-9]\.[0-9]+))(.+)?'''
 
 		# Extract version with release.
 		self.version = match.group(2)
@@ -1623,15 +1623,21 @@ class PhoenixAnalyzer(Analyzer):
 			self.version = prefix + ' ' + self.version
 
 		# Extract any additional information after the version
-		# as a sign-on, if one wasn't already found.
-		additional_info = match.group(3)
-		if additional_info and not self.signon:
-			self.signon = additional_info.rstrip()
+		# and modified version numbers as part of the sign-on.
+		additional_info = match.group(4)
+		version_num = match.group(3)
+		if version_num:
+			additional_info = version_num.rstrip() + additional_info.lstrip()
+		if additional_info:
+			if self.signon:
+				self.signon = additional_info + '\n' + self.signon
+			else:
+				self.signon = additional_info
 
 		return True
 
 	def _version_40x(self, line, match):
-		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) Version +([0-9]\.[^\s.]+)(?:[\s\.](.+))?'''
+		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) Version +([0-9]\.[0-9]+)(.+)?'''
 
 		# Extract version.
 		self.version = match.group(3)
@@ -1641,11 +1647,13 @@ class PhoenixAnalyzer(Analyzer):
 		if prefix:
 			self.version = prefix + ' ' + self.version
 
-		# Extract any additional information after the version
-		# as a sign-on, if one wasn't already found.
+		# Extract any additional information after the version.
 		additional_info = match.group(4)
-		if additional_info and not self.signon:
-			self.signon = additional_info.rstrip()
+		if additional_info:
+			if self.signon:
+				self.signon = additional_info + '\n' + self.signon
+			else:
+				self.signon = additional_info
 
 		return True
 
