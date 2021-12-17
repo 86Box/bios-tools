@@ -425,7 +425,7 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 			oroms.remove(None)
 
 		# Collect the analyzer's results.
-		fields = [((type(field) == str) and field.replace('\t', ' ').strip(' \n') or field) for field in [
+		fields = [((type(field) == str) and field.replace('\t', ' ').strip() or field) for field in [
 			scan_file_path,
 			file_analyzer.vendor,
 			file_analyzer.version,

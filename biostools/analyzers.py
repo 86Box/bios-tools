@@ -357,7 +357,7 @@ class AMIAnalyzer(Analyzer):
 					self.version = match.group(4).decode('cp437', 'ignore')
 
 			# Extract string.
-			self.string = util.read_string(file_data[id_block_index + 0x78:id_block_index + 0xa0]).strip()
+			self.string = util.read_string(file_data[id_block_index + 0x78:id_block_index + 0xa0])
 
 			# Stop if this BIOS is actually Aptio UEFI CSM.
 			if self._uefi_csm_pattern.match(self.string):
@@ -684,7 +684,7 @@ class AMIIntelAnalyzer(Analyzer):
 		# Apply the version as a sign-on if one was extracted.
 		if version:
 			self.version = 'Unknown Intel'
-			self.signon = version.decode('cp437', 'ignore').strip()
+			self.signon = version.decode('cp437', 'ignore')
 			return True
 
 		return False
@@ -855,7 +855,7 @@ class AwardAnalyzer(Analyzer):
 				# the data in the $BIF area (presumably BIOS update data).
 				match = self._gigabyte_bif_pattern.search(file_data)
 				if match:
-					self.signon = (match.group(1) + b' ' + match.group(2)).decode('cp437', 'ignore').strip()
+					self.signon = (match.group(1) + b' ' + match.group(2)).decode('cp437', 'ignore')
 			elif 'Award' not in version_string.split('\n')[0]: # "386SX Modular BIOS v3.15"
 				# Extract early Modular type as the string.
 				match = self._early_modular_prefix_pattern.match(version_string)
@@ -872,11 +872,6 @@ class AwardAnalyzer(Analyzer):
 							self.string += '\n' + post_version
 						else:
 							self.string = post_version
-
-			# Perform final clean-up.
-			self.version = self.version.strip()
-			self.string = self.string.strip()
-			self.signon = self.signon.strip()
 
 		return True
 
@@ -2260,7 +2255,7 @@ class ToshibaAnalyzer(Analyzer):
 		match = self._string_pattern.search(file_data)
 		if match:
 			# Extract 16 characters from the end to avoid preceding characters. (T3100e)
-			self.string = match.group(1)[-16:].decode('cp437', 'ignore').strip()
+			self.string = match.group(1)[-16:].decode('cp437', 'ignore')
 
 		return True
 
@@ -2282,10 +2277,10 @@ class WhizproAnalyzer(Analyzer):
 		id_block_index = len(file_data) - 0x20110
 
 		# Extract string.
-		self.string = util.read_string(file_data[id_block_index + 0xe0:id_block_index + 0x100]).strip()
+		self.string = util.read_string(file_data[id_block_index + 0xe0:id_block_index + 0x100])
 
 		# Extract sign-on.
-		self.signon = util.read_string(file_data[id_block_index:id_block_index + 0x20]).strip()
+		self.signon = util.read_string(file_data[id_block_index:id_block_index + 0x20])
 
 		return True
 
