@@ -54,7 +54,7 @@ clean_device_abbr = [
 	('Network (?:Interface )?(?:Adapter|Card|Controller)', 'NIC'),
 	('NVM Express', 'NVMe'),
 	('Parallel ATA', 'PATA'),
-	('PCI(?:-E| Express)', 'PCIe'),
+	('PCI(?:-E|[- ]Express)', 'PCIe'),
 	('([^- ]+)[- ]to[- ]([^- ]+)', '\\2-\\3'),
 	('Platform Controller Hub', 'PCH'),
 	('Processor Graphics', 'iGPU'),
