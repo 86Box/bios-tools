@@ -1261,13 +1261,13 @@ class GeneralSoftwareAnalyzer(Analyzer):
 		super().__init__('General', *args, **kwargs)
 
 		self._string_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})\(C\) [0-9]+ General Software, Inc\. ''')
-		self._version_pattern = re.compile(b'''General Software (.+)(?: \(tm\))? (?:rel\.|Revision)''')
+		self._version_pattern = re.compile(b'''General Software (?:\\x00 )?([^\\\\]+)(?:rel\.|Revision)''')
 
 	def can_handle(self, file_data, header_data):
 		# Extract version.
 		match = self._version_pattern.search(file_data)
 		if match:
-			self.version = match.group(1).decode('cp437', 'ignore').replace(' BIOS ', '').strip()
+			self.version = match.group(1).decode('cp437', 'ignore').replace('(R)', '').replace('(tm)', '').replace(' BIOS ', ' ').strip()
 		else:
 			self.version = '?'
 
