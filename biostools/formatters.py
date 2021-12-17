@@ -114,7 +114,7 @@ class XSVFormatter(Formatter):
 			link_url = self.get_url(columns)
 			if link_url:
 				link_prefix = '=' + self.hyperlink + '(""'
-				link_suffix = '""' + self.delimiter + '""\U0001F53D"")' # down arrow emoji
+				link_suffix = '""' + ';' + '""\U0001F53D"")' # down arrow emoji
 
 				# Build and output the final link, accounting for Excel's column size limit.
 				link = link_prefix + link_url[:256 - len(link_prefix) - len(link_suffix)] + link_suffix
