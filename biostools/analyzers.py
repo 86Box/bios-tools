@@ -289,6 +289,28 @@ class AcerAnalyzer(Analyzer):
 		return True
 
 
+class AcerMultitechAnalyzer(Analyzer):
+	def __init__(self, *args, **kwargs):
+		super().__init__('AcerMultitech', *args, **kwargs)
+		self.vendor = 'Acer'
+
+		self._version_pattern = re.compile(b'''Multitech Industrial Corp\..BIOS ([^\s]+ [^\s\\x00]+)''')
+
+	def can_handle(self, file_data, header_data):
+		# Look for version and date.
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
+
+		# Set static version.
+		self.version = 'Multitech'
+
+		# Extract date and version as a string.
+		self.string = match.group(1).decode('cp437', 'ignore')
+
+		return True
+
+
 class AMIAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('AMI', *args, **kwargs)
@@ -358,6 +380,11 @@ class AMIAnalyzer(Analyzer):
 
 			# Extract string.
 			self.string = util.read_string(file_data[id_block_index + 0x78:id_block_index + 0xa0])
+
+			# Add identification tag to the string if one is present.
+			id_tag = util.read_string(file_data[id_block_index + 0xec:id_block_index + 0x100])
+			if id_tag[:4] == '_TG_':
+				self.string = self.string.rstrip() + '-' + id_tag[4:].lstrip()
 
 			# Stop if this BIOS is actually Aptio UEFI CSM.
 			if self._uefi_csm_pattern.match(self.string):
@@ -1718,7 +1745,7 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_rombios(self, line, match):
-		'''(?:(?:((?:8086|8088|V20 |(?:80)?(?:[0-9]{3}))(?:/EISA)?) )?ROM BIOS (PLUS )?|^ (PLUS) )Ver(?:sion)? ([0-9]\.[A-Z0-9]{2,})\.?([^\s]*)(\s+[0-9A-Z].+)?'''
+		'''(?:(?:((?:8086|8088|V20 |(?:80)?(?:[0-9]{3}))(?:/EISA)?) )?ROM BIOS (PLUS )?|^ (PLUS) )Ver(?:sion)? ?([0-9]\.[A-Z0-9]{2,})\.?([^\s]*)(\s+[0-9A-Z].+)?'''
 
 		# Stop if this was already determined to be a Dell BIOS.
 		if self.version == 'Dell':
