@@ -802,7 +802,7 @@ class AmstradAnalyzer(NoInfoAnalyzer):
 		super().__init__('Amstrad', *args, **kwargs)
 
 	def has_strings(self, file_data):
-		return (b'AMSTRAD plc' in file_data or b'Amstrad Consumer Electronics plc' in file_data) and ((b'Veuillez mettre des piles neuves' in file_data and b'Batterie da sostituire' in file_data and b'ponga piles nuevas' in file_data and b'neue Batterien einsetzen' in file_data) or b'IBMUS NON CARBORUNDUM' in file_data)
+		return (b'AMSTRAD plc' in file_data or b'Amstrad plc' in file_data or b'Amstrad Consumer Electronics plc' in file_data) and ((b'Veuillez mettre des piles neuves' in file_data and b'Batterie da sostituire' in file_data and b'ponga piles nuevas' in file_data and b'neue Batterien einsetzen' in file_data) or b'IBMUS NON CARBORUNDUM' in file_data)
 
 
 class AwardAnalyzer(Analyzer):
