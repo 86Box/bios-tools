@@ -326,7 +326,7 @@ class AMIAnalyzer(Analyzer):
 		# Weird TGem identifier (TriGem 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\(C\)[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)''')
 		# "Date:-" might not have a space after it (Intel AMI)
-		self._precolor_date_pattern = re.compile(b'''(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}''')
+		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6)''')
 		self._precolor_chipset_pattern = re.compile(b'''(SETUP PROGRAM FOR [\\x20-\\x7F]+)|(EMI 386 CHIPSET SETUP UTILITY)|(VLSI BIOS, 286 CHIPSET)|(CHIP & TECH SETUP PROGRAM)|( 286 BIOS)|(386 BIOS, NO CHIPSET)|([234]86-BIOS \(C\))''')
 		self._precolor_signon_pattern = re.compile(b'''BIOS \(C\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
 
@@ -343,7 +343,7 @@ class AMIAnalyzer(Analyzer):
 		])
 
 	def can_handle(self, file_data, header_data):
-		if b'American Megatrends Inc' not in file_data and b'AMIBIOSC' not in file_data and b'All Rights Reserved, (C)AMI (C)AMI (C)AMI ' not in file_data and b'(C) Access Methods Inc.' not in file_data:
+		if b'American Megatrends Inc' not in file_data and b'AMIBIOSC' not in file_data and b'All Rights Reserved, (C)AMI (C)AMI (C)AMI ' not in file_data and b' Access Methods Inc.' not in file_data:
 			return False
 
 		# The decompressed body for some BIOSes on Intel's first AMI run lacks the Intel version number, so we
@@ -494,15 +494,16 @@ class AMIAnalyzer(Analyzer):
 					# doesn't appear to be valid. (Intel AMI post-Color)
 					if self.string[:10] in ('S???-0000-', 'S???-0166-') and file_data[id_block_index - 0xb9:id_block_index - 0xb7] != b'\x00\x01':
 						self.string = ''
-					else:
-						# Extract additional information after the copyright as a sign-on.
-						# (Shuttle 386SX, CDTEK 286, Flying Triumph Access Methods)
-						match = self._precolor_signon_pattern.search(file_data)
-						if match:
-							self.signon = match.group(1).decode('cp437', 'ignore')
+						return True
 
-							# Split sign-on lines. (Video Technology Info-Tech 286-BIOS)
-							self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
+				# Extract additional information after the copyright as a sign-on.
+				# (Shuttle 386SX, CDTEK 286, Flying Triumph Access Methods)
+				match = self._precolor_signon_pattern.search(file_data)
+				if match:
+					self.signon = match.group(1).decode('cp437', 'ignore')
+
+					# Split sign-on lines. (Video Technology Info-Tech 286-BIOS)
+					self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 			else:
 				# Assume this is not an AMI BIOS.
 				return False
