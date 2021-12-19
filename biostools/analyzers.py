@@ -864,19 +864,24 @@ class AwardAnalyzer(Analyzer):
 			if self.version[:3] not in ('v2.', 'v3.'):
 				self.string = util.read_string(file_data[id_block_index + 0xc71:id_block_index + 0xce0])
 
-				# bp/rom.by patches may include a new date in the "modul.tmp"
-				# patch code. If one is present, apply it to the string.
-				match = self._romby_date_pattern.search(file_data)
-				if match:
-					date_match = self._string_date_pattern.match(self.string)
-					if date_match:
-						# Apply the correct date (2-digit or 4-digit year).
-						if len(date_match.group(1)) == 2:
-							date = match.group(4)
-						else:
-							date = match.group(1) + match.group(2) + match.group(3)
-						date = date.decode('cp437', 'ignore')
-						self.string = date + self.string[len(date):]
+				# Check if the string was actually inserted.
+				# (Gateway/Swan Anigma Award v4.28/4.32)
+				if ' Award Software Inc. ' in self.string:
+					self.string = ''
+				else:
+					# bp/rom.by patches may include a new date in the "modul.tmp"
+					# patch code. If one is present, apply it to the string.
+					match = self._romby_date_pattern.search(file_data)
+					if match:
+						date_match = self._string_date_pattern.match(self.string)
+						if date_match:
+							# Apply the correct date (2-digit or 4-digit year).
+							if len(date_match.group(1)) == 2:
+								date = match.group(4)
+							else:
+								date = match.group(1) + match.group(2) + match.group(3)
+							date = date.decode('cp437', 'ignore')
+							self.string = date + self.string[len(date):]
 
 			if self.version == 'v6.00PG' and self._gigabyte_eval_pattern.match(self.signon):
 				# Reconstruct actual sign-on of a Gigabyte fork BIOS through
