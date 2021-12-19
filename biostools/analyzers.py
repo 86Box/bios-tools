@@ -1648,10 +1648,9 @@ class PhoenixAnalyzer(Analyzer):
 		# Extract any additional information after the version
 		# and modified version numbers as part of the sign-on.
 		additional_info = match.group(4)
-		version_num = match.group(3)
-		if version_num.find('.') != version_num.rfind('.'):
-			additional_info = version_num.rstrip() + additional_info.lstrip()
 		if additional_info:
+			if additional_info[0] == '.':
+				additional_info = match.group(3).rstrip() + additional_info.lstrip()
 			if self.signon:
 				self.signon = additional_info + '\n' + self.signon
 			else:
