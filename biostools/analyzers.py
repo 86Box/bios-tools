@@ -324,7 +324,7 @@ class AMIAnalyzer(Analyzer):
 		# - Can be 4-digit instead of 6-digit (Biostar)
 		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\(AAMMIIBBIIOOSS\))([0-9]{2}/[0-9]{2}/[0-9]{2})\(C\)[0-9]{4} American Megatrends,? Inc(?:\.,? All Rights Reserved|/Hewlett-Packard Company)''')
 		# Weird TGem identifier (TriGem 486-BIOS)
-		self._precolor_block_pattern = re.compile(b'''\(C\)[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)''')
+		self._precolor_block_pattern = re.compile(b'''\(C\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
 		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6)''')
 		self._precolor_chipset_pattern = re.compile(b'''(SETUP PROGRAM FOR [\\x20-\\x7F]+)|(EMI 386 CHIPSET SETUP UTILITY)|(VLSI BIOS, 286 CHIPSET)|(CHIP & TECH SETUP PROGRAM)|( 286 BIOS)|(386 BIOS, NO CHIPSET)|([234]86-BIOS \(C\))''')
@@ -411,80 +411,82 @@ class AMIAnalyzer(Analyzer):
 					# Determine location of the identification block.
 					id_block_index = match.start(0)
 
-					# Reconstruct string, starting with the setup type.
-					if b'ROM DIAGNOSTICS.(C)' in file_data:
-						self.string = 'D'
-					elif b'EXTENDED CMOS SETUP PROGRAM Ver - ' in file_data:
-						self.string = 'E'
-					else:
-						self.string = 'S'
-
-					# Add chipset. Known undetectable codes due
-					# to a lack of BIOS images or marker strings:
-					# - 307 (C&T CS8236)
-					# - GS2 (GoldStar)
-					# - INT (Intel 82335)
-					# - PAQ (Compaq)
-					# - S24 (??? Morse KP286)
-					# - SUN (Suntac)
-					# - VLX (VLSI 386?)
-					chipset = '???'
-					match = self._precolor_chipset_pattern.search(file_data)
-					if match:
-						setup_program_for = match.group(1) # "SETUP PROGRAM FOR"
-						if setup_program_for:
-							#if b' C&T ' in setup_program_for: # not necessary with fallback below
-							#	chipset = 'C&T'
-							if b' INTEL 386 ' in setup_program_for:
-								chipset = '343'
-							elif b' NEAT ' in setup_program_for:
-								if b'NEATsx Memory Controller Identifier' in file_data:
-									chipset = 'NSX'
-								else:
-									chipset = 'NET'
-							elif b' OPTI ' in setup_program_for:
-								chipset = 'OPB'
-							elif b' SCAT ' in setup_program_for:
-								chipset = 'SC2'
-							elif b' SIS ' in setup_program_for:
-								chipset = 'SIS'
-							else:
-								# Your guess is as good as mine.
-								chipset = setup_program_for[18:21].decode('cp437', 'ignore')
-								if chipset != 'C&T':
-									self.signon = 'DEBUG:UnknownSetup:' + setup_program_for.decode('cp437', 'ignore')
+					# Access Methods doesn't have the setup type and chipset.
+					if not match.group(1):
+						# Reconstruct string, starting with the setup type.
+						if b'ROM DIAGNOSTICS.(C)' in file_data:
+							self.string = 'D'
+						elif b'EXTENDED CMOS SETUP PROGRAM Ver - ' in file_data:
+							self.string = 'E'
 						else:
-							bios_id_index = match.start(5) # " 286 BIOS"
-							if bios_id_index > -1:
-								bios_id = file_data[bios_id_index - 10:bios_id_index + 1]
-								if b'ACER 1207 ' in bios_id:
-									chipset = 'AR2'
-								elif b'HT-11 ' in bios_id:
-									chipset = 'H12'
-								elif b'HT-1X ' in bios_id:
-									chipset = 'H1X'
-								elif b'NEAT ' in bios_id: # assumed; not bootable on 86Box
-									chipset = 'NET'
-								elif b'WIN ' in bios_id: # Winbond; not bootable on 86Box, source is a MAME comment
-									chipset = '286'
+							self.string = 'S'
+
+						# Add chipset. Known undetectable codes due
+						# to a lack of BIOS images or marker strings:
+						# - 307 (C&T CS8236)
+						# - GS2 (GoldStar)
+						# - INT (Intel 82335)
+						# - PAQ (Compaq)
+						# - S24 (??? Morse KP286)
+						# - SUN (Suntac)
+						# - VLX (VLSI 386?)
+						chipset = '???'
+						match = self._precolor_chipset_pattern.search(file_data)
+						if match:
+							setup_program_for = match.group(1) # "SETUP PROGRAM FOR"
+							if setup_program_for:
+								#if b' C&T ' in setup_program_for: # not necessary with fallback below
+								#	chipset = 'C&T'
+								if b' INTEL 386 ' in setup_program_for:
+									chipset = '343'
+								elif b' NEAT ' in setup_program_for:
+									if b'NEATsx Memory Controller Identifier' in file_data:
+										chipset = 'NSX'
+									else:
+										chipset = 'NET'
+								elif b' OPTI ' in setup_program_for:
+									chipset = 'OPB'
+								elif b' SCAT ' in setup_program_for:
+									chipset = 'SC2'
+								elif b' SIS ' in setup_program_for:
+									chipset = 'SIS'
 								else:
-									self.signon = 'DEBUG:UnknownChipset:' + bios_id.decode('cp437', 'ignore')
-							elif match.group(2): # "EMI 386 CHIPSET SETUP UTILITY"
-								chipset = 'EMI'
-							elif match.group(3): # "VLSI BIOS, 286 CHIPSET"
-								chipset = 'VL2'
-							elif match.group(4): # "CHIP & TECH SETUP PROGRAM"
-								chipset = 'C&T'
-							elif match.group(6): # "386 BIOS, NO CHIPSET"
-								chipset = 'INT'
+									# Your guess is as good as mine.
+									chipset = setup_program_for[18:21].decode('cp437', 'ignore')
+									if chipset != 'C&T':
+										self.signon = 'DEBUG:UnknownSetup:' + setup_program_for.decode('cp437', 'ignore')
 							else:
-								x86_bios = match.group(7) # "[234]86-BIOS (C)"
-								if x86_bios:
-									chipset = x86_bios[:3].decode('cp437', 'ignore')
-					self.string += chipset
+								bios_id_index = match.start(5) # " 286 BIOS"
+								if bios_id_index > -1:
+									bios_id = file_data[bios_id_index - 10:bios_id_index + 1]
+									if b'ACER 1207 ' in bios_id:
+										chipset = 'AR2'
+									elif b'HT-11 ' in bios_id:
+										chipset = 'H12'
+									elif b'HT-1X ' in bios_id:
+										chipset = 'H1X'
+									elif b'NEAT ' in bios_id: # assumed; not bootable on 86Box
+										chipset = 'NET'
+									elif b'WIN ' in bios_id: # Winbond; not bootable on 86Box, source is a MAME comment
+										chipset = '286'
+									else:
+										self.signon = 'DEBUG:UnknownChipset:' + bios_id.decode('cp437', 'ignore')
+								elif match.group(2): # "EMI 386 CHIPSET SETUP UTILITY"
+									chipset = 'EMI'
+								elif match.group(3): # "VLSI BIOS, 286 CHIPSET"
+									chipset = 'VL2'
+								elif match.group(4): # "CHIP & TECH SETUP PROGRAM"
+									chipset = 'C&T'
+								elif match.group(6): # "386 BIOS, NO CHIPSET"
+									chipset = 'INT'
+								else:
+									x86_bios = match.group(7) # "[234]86-BIOS (C)"
+									if x86_bios:
+										chipset = x86_bios[:3].decode('cp437', 'ignore')
+						self.string += chipset + '-'
 
 					# Add vendor ID.
-					self.string += '-' + codecs.encode(file_data[id_block_index - 0xbb:id_block_index - 0xb9], 'hex').decode('ascii', 'ignore').upper()
+					self.string += codecs.encode(file_data[id_block_index - 0xbb:id_block_index - 0xb9], 'hex').decode('ascii', 'ignore').upper()
 
 					# Add date. Use the entry point date instead of the identification block one, as it
 					# appears the entry point one is displayed on screen. (Shuttle 386SX, TriGem 486-BIOS)
