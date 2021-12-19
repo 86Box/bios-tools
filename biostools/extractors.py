@@ -905,6 +905,7 @@ class InterleaveExtractor(Extractor):
 			b' COPR. IBM 198', # IBM and Tandon
 			b'memory (parity error)',
 			b'Copyright COMPAQ Computer Corporation', # Compaq
+			b'Press any key when ready', # Access Methods
 		]
 
 		# Interleave the strings.
