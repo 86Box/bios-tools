@@ -221,8 +221,10 @@ def extract(dir_path, _, options):
 def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_names):
 	"""Process a given directory for analysis."""
 
-	# Sort file names for better predictability.
-	scan_file_names.sort()
+	# Sort file names for better predictability. The key= function forces
+	# "original.tm1" to be combined after "original.tmp" for if the Award
+	# identification data spans across both files (AOpen AX6B(+) R2.00)
+	scan_file_names.sort(key=lambda fn: (fn == 'original.tm1') and 'original.tmq' or fn)
 
 	# Set up caches.
 	files_flags = {}
