@@ -2276,7 +2276,7 @@ class ToshibaAnalyzer(Analyzer):
 		super().__init__('Toshiba', *args, **kwargs)
 		self.vendor = 'Award'
 
-		self._string_pattern = re.compile(b'''([\\x21-\\x7F]+\s*V[\\x21-\\x7F]{1,16}\s*)TOSHIBA ''')
+		self._string_pattern = re.compile(b'''(?:([\\x21-\\x7F]+\s*V[\\x21-\\x7F]{1,16}\s*)TOSHIBA |\\x00{3}BIOS[\\x00-\\xFF]{4}([\\x20-\\x7F]{16}))''')
 
 	def can_handle(self, file_data, header_data):
 		if not (b' TOSHIBA ' in file_data and b'Use Toshiba\'s BASIC.' in file_data) and b'Toshiba Corporation. & Award Software Inc.' not in file_data:
@@ -2289,7 +2289,7 @@ class ToshibaAnalyzer(Analyzer):
 		match = self._string_pattern.search(file_data)
 		if match:
 			# Extract 16 characters from the end to avoid preceding characters. (T3100e)
-			self.string = match.group(1)[-16:].decode('cp437', 'ignore')
+			self.string = (match.group(1) or match.group(2))[-16:].decode('cp437', 'ignore')
 
 		return True
 
