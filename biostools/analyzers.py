@@ -1542,7 +1542,7 @@ class PhoenixAnalyzer(Analyzer):
 		# "All Rights Reserved\r\n\r\n\r\n" (Gateway 4DX2-50V)
 		self._rombios_signon_pattern = re.compile(b'''\\x0D\\x0AAll Rights Reserved\\x0D\\x0A(?:\\x0A(?:\\x00(?:\\xF4\\x01)?)?|\\x0D\\x0A\\x0D\\x0A)''')
 		self._bcpsys_datetime_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/(?:[0-9]{2}) ''')
-		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\. NOT FOR RESALE\.\\x00([\\x00-\\xFF]+)\\x00Primary Master \\x00''')
+		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''', re.S)
 		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\.86(?:[0-9A-Z])\.(?:[0-9A-Z]{4})\.(?:[0-9A-Z]{3})\.(?:[0-9]{10})$''')
 
 		self.register_check_list([
