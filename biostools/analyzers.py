@@ -346,11 +346,10 @@ class AMIAnalyzer(Analyzer):
 		if b'American Megatrends Inc' not in file_data and b'AMIBIOSC' not in file_data and b'All Rights Reserved, (C)AMI (C)AMI (C)AMI ' not in file_data and b' Access Methods Inc.' not in file_data:
 			return False
 
-		# The decompressed body for some BIOSes on Intel's first AMI run lacks the Intel version number, so we
-		# can't determine this is an Intel first AMI run BIOS (which needs a classic date version) solely through
-		# that. Use AMIIntelAnalyzer to determine if this is an Intel BIOS, and enable classic dates in that case.
-		if header_data and AMIIntelAnalyzer.can_handle(self, file_data, header_data):
-			self._can_version_classic = True
+		# Some Intel BIOSes may fail to decompress, in which case, we have to
+		# rely on the header version data to get the Intel version sign-on.
+		if header_data:
+			AMIIntelAnalyzer.can_handle(self, file_data, header_data)
 
 		# Check post-Color identification block.
 		match = self._id_block_pattern.search(file_data)
@@ -1542,7 +1541,7 @@ class PhoenixAnalyzer(Analyzer):
 		# "All Rights Reserved\r\n\r\n\r\n" (Gateway 4DX2-50V)
 		self._rombios_signon_pattern = re.compile(b'''\\x0D\\x0AAll Rights Reserved\\x0D\\x0A(?:\\x0A(?:\\x00(?:\\xF4\\x01)?)?|\\x0D\\x0A\\x0D\\x0A)''')
 		self._bcpsys_datetime_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/(?:[0-9]{2}) ''')
-		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''', re.S)
+		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''')
 		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\.86(?:[0-9A-Z])\.(?:[0-9A-Z]{4})\.(?:[0-9A-Z]{3})\.(?:[0-9]{10})$''')
 
 		self.register_check_list([
