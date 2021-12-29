@@ -469,6 +469,7 @@ def analyze_process(queue, formatter, scan_base):
 		analyzers.DTKGoldStarAnalyzer(),
 		analyzers.GeneralSoftwareAnalyzer(),
 		analyzers.IBMAnalyzer(),
+		analyzers.ICLAnalyzer(),
 		analyzers.InsydeAnalyzer(),
 		analyzers.IntelUEFIAnalyzer(),
 		analyzers.JukoAnalyzer(),

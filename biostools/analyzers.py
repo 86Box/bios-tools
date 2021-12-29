@@ -724,7 +724,7 @@ class AMIUEFIAnalyzer(Analyzer):
 		super().__init__('AMI', *args, **kwargs)
 		self.vendor_id = 'AMIUEFI'
 
-		self._identifier_regex = re.compile(b'''Version %x\.%02x\.%04x\.|ALASKAA M I''')
+		self._identifier_pattern = re.compile(b'''Version %x\.%02x\.%04x\.|ALASKAA M I''')
 
 		self.register_check_list([
 			(self._string_csm,						RegexChecker),
@@ -747,7 +747,7 @@ class AMIUEFIAnalyzer(Analyzer):
 			return False
 
 		# Check for version format string or "ALASKA" ACPI table identifier.
-		if not self._identifier_regex.search(file_data):
+		if not self._identifier_pattern.search(file_data):
 			return False
 
 		self.version = 'UEFI'
@@ -1352,11 +1352,40 @@ class IBMAnalyzer(Analyzer):
 			return False
 
 
+class ICLAnalyzer(Analyzer):
+	def __init__(self, *args, **kwargs):
+		super().__init__('ICL', *args, **kwargs)
+
+		self._version_pattern = re.compile(b'''(?:ROM|System) BIOS (#[\\x20-\\x7E]+) Version ([\\x20-\\x7E]+)\\x0D\\x0A\\(c\\) Copyright [\\x20-\\x7E]+(?:\\x0D\\x0A\\x0A\\x00([\\x20-\\x7E]+))?''')
+
+	def can_handle(self, file_data, header_data):
+		# Update files use unknown compression.
+		if file_data[:8] == b'OKICL1\x01\x00':
+			self.version = '?'
+			return True
+
+		# Determine location of the identification block.
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
+
+		# Extract version.
+		self.version = match.group(2).decode('cp437', 'ignore')
+
+		# Extract identifier as a string.
+		self.string = match.group(1).decode('cp437', 'ignore')
+
+		# Extract sign-on if present.
+		self.signon = (match.group(3) or b'').decode('cp437', 'ignore')
+
+		return True
+
+
 class InsydeAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Insyde', *args, **kwargs)
 
-		self._identifier_regex = re.compile(b'''InsydeH2O Version ''')
+		self._version_pattern = re.compile(b'''InsydeH2O Version ''')
 
 	def can_handle(self, file_data, header_data):
 		# Only handle files sent through UEFIExtractor.
@@ -1364,7 +1393,7 @@ class InsydeAnalyzer(Analyzer):
 			return False
 
 		# Check for InsydeH2O version string.
-		if not self._identifier_regex.search(file_data):
+		if not self._version_pattern.search(file_data):
 			return False
 
 		self.version = '?'
@@ -1377,7 +1406,7 @@ class IntelUEFIAnalyzer(Analyzer):
 		super().__init__('Intel', *args, **kwargs)
 		self.vendor_id = 'IntelUEFI'
 
-		self._identifier_regex = re.compile(b'''\$(?:IBIOSI\$|FID)[0-9A-Z]{8}\.''')
+		self._identifier_pattern = re.compile(b'''\$(?:IBIOSI\$|FID)[0-9A-Z]{8}\.''')
 
 		self.register_check_list([
 			(self._signon,	RegexChecker),
@@ -1389,7 +1418,7 @@ class IntelUEFIAnalyzer(Analyzer):
 			return False
 
 		# Check for any Intel version code identifiers.
-		if not self._identifier_regex.search(file_data):
+		if not self._identifier_pattern.search(file_data):
 			return False
 
 		self.version = 'UEFI'

@@ -59,8 +59,9 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 * EPA (Award) and PCX (AMI) images are automatically converted to PNG if the aforementioned optional dependency is installed.
 * Some Intel motherboard BIOSes (particularly from the AMIBIOS 6 era) will not be extracted properly due to a different address line inversion mechanism. This is a known issue with the Intel update format concatenator which may eventually be solved.
 * Extraction of the following BIOS distribution formats is **not implemented** due to the use of unknown compression methods:
-  * Evergreen ETI (an ugly hack exists)
+  * Evergreen `.ETI` (an ugly hack exists)
   * IBM Sydex floppy self-extractor (it looks like CopyQM RLE but isn't)
+  * ICL `.LDB`
 
 ## Analysis notes
 
