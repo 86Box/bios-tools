@@ -1479,6 +1479,30 @@ class MRAnalyzer(Analyzer):
 		return True
 
 
+class MylexAnalyzer(Analyzer):
+	def __init__(self, *args, **kwargs):
+		super().__init__('Mylex', *args, **kwargs)
+
+		self._version_pattern = re.compile(b'''MYLEX ([\\x20-\\x7E]+) BIOS Version ([\\x20-\\x7E]+) ([0-9]{2}/[0-9]{2}/[0-9]{2})''')
+
+	def can_handle(self, file_data, header_data):
+		# Determine location of the identification block.
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
+
+		# Extract version.
+		self.version = match.group(2).decode('cp437', 'ignore')
+
+		# Extract date as a string.
+		self.string = match.group(3).decode('cp437', 'ignore')
+
+		# Extract board name as a sign-on.
+		self.signon = match.group(1).decode('cp437', 'ignore')
+
+		return True
+
+
 class OlivettiAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Olivetti', *args, **kwargs)

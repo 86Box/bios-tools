@@ -473,6 +473,7 @@ def analyze_process(queue, formatter, scan_base):
 		analyzers.IntelUEFIAnalyzer(),
 		analyzers.JukoAnalyzer(),
 		analyzers.MRAnalyzer(),
+		analyzers.MylexAnalyzer(),
 		analyzers.OlivettiAnalyzer(),
 		analyzers.SchneiderAnalyzer(),
 		analyzers.SystemSoftAnalyzer(),
