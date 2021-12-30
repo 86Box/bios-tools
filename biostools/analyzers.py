@@ -328,6 +328,7 @@ class AMIAnalyzer(Analyzer):
 		# "Date:-" might not have a space after it (Intel AMI)
 		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6)''')
 		self._precolor_chipset_pattern = re.compile(b'''(SETUP PROGRAM FOR [\\x20-\\x7F]+)|(EMI 386 CHIPSET SETUP UTILITY)|(VLSI BIOS, 286 CHIPSET)|(CHIP & TECH SETUP PROGRAM)|( 286 BIOS)|(386 BIOS, NO CHIPSET)|([234]86-BIOS \(C\))''')
+		self._precolor_extsetup_pattern = re.compile(b'''EXTENDED (?:CMOS )?SETUP PROGRAM''')
 		self._precolor_signon_pattern = re.compile(b'''BIOS \(C\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
 
 		self.register_check_list([
@@ -415,7 +416,7 @@ class AMIAnalyzer(Analyzer):
 						# Reconstruct string, starting with the setup type.
 						if b'ROM DIAGNOSTICS.(C)' in file_data:
 							self.string = 'D'
-						elif b'EXTENDED CMOS SETUP PROGRAM Ver - ' in file_data:
+						elif self._precolor_extsetup_pattern.search(file_data):
 							self.string = 'E'
 						else:
 							self.string = 'S'
