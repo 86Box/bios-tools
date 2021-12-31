@@ -28,18 +28,16 @@ def all_match(patterns, data):
 	# Python is smart enough to stop generation when a None is found.
 	return None not in (pattern.search(data) for pattern in patterns)
 
-def date_gt(date1, date2, pattern):
-	"""Returns True if date1 is greater than date2.
-	   Date format set by the given pattern."""
-
+def date_cmp(date1, date2, pattern):
 	# Run date regex.
 	date1_match = pattern.match(date1)
 	date2_match = pattern.match(date2)
-	if date1_match:
-		if not date2_match:
-			return True
+	if date1_match and not date2_match:
+		return 1
+	elif not date1_match and date2_match:
+		return -1
 	else:
-		return False
+		return 0
 
 	# Extract year, month and day.
 	date1_year  = int(date1_match.group('year'))
@@ -63,13 +61,23 @@ def date_gt(date1, date2, pattern):
 
 	# Perform the comparisons.
 	if date1_year != date2_year:
-		return date1_year > date2_year
+		return date1_year - date2_year
 	elif date1_month != date2_month:
-		return date1_month > date2_month
+		return date1_month - date2_month
 	elif date1_day != date2_day:
-		return date1_day > date2_day
+		return date1_day - date2_day
 	else:
-		return False
+		return 0
+
+def date_gt(date1, date2, pattern):
+	"""Returns True if date1 is greater than date2.
+	   Date format set by the given pattern."""
+	return date_cmp(date1, date2, pattern) > 0
+
+def date_lt(date1, date2, pattern):
+	"""Returns True if date1 is lesser than date2.
+	   Date format set by the given pattern."""
+	return date_cmp(date1, date2, pattern) < 0
 
 def log_traceback(*args):
 	"""Log to biostools_error.log, including any outstanding traceback."""
