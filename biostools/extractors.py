@@ -343,7 +343,7 @@ class DiscardExtractor(Extractor):
 			# executables
 			b'''(\\x7FELF)|'''
 			# reports
-			b'''CPU-Z TXT Report|\s{7}File:   A|-+\[ AIDA32 |HWiNFO64 Version |3DMARK2001 PROJECT|Report Dr. Hardware|\r\n(?:\s+(HWiNFO v)|\r\n\s+\r\n\s+Microsoft Diagnostics version )|SIV[^\s]+ - System Information Viewer V'''
+			b'''CPU-Z TXT Report|\s{7}File:   A|-+\[ AIDA32 |HWiNFO64 Version |3DMARK2001 PROJECT|Report Dr. Hardware|\r\n(?:\s+HWiNFO v|\r\n\s+\r\n\s+Microsoft Diagnostics version )|SIV[^\s]+ - System Information Viewer V'''
 		)
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
