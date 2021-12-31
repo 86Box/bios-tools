@@ -354,13 +354,6 @@ class DiscardExtractor(Extractor):
 			if match.group(1) and file_header[128:136] == b'ELFBoot\x00':
 				return False
 
-			# temp
-			if match.group(2):
-				try:
-					shutil.copy2(file_path, '/mnt/scratch/hwinfo/' + file_path.replace('/', '_'))
-				except:
-					pass
-
 			# Remove file and stop.
 			try:
 				os.remove(file_path)
