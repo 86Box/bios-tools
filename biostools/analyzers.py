@@ -1642,7 +1642,7 @@ class PhoenixAnalyzer(Analyzer):
 		offset = file_data.find(b'BCPSYS')
 		if offset > -1:
 			# Extract the build date and time as a string.
-			self.string = file_data[offset + 15:offset + 32].replace(b'\x00', b'\x20').decode('ascii', 'ignore').strip()
+			self.string = util.read_string(file_data[offset + 15:offset + 32].replace(b'\x00', b'\x20'))
 
 			# Discard if this is an invalid date/time (PHLASH.EXE)
 			if not self._bcpsys_datetime_pattern.match(self.string):
@@ -1657,8 +1657,9 @@ class PhoenixAnalyzer(Analyzer):
 			self.signon = '\n'
 
 			# Extract Dell version.
-			if file_data[offset + 0x20:offset + 0x21] == b'A':
-				self.signon += 'BIOS Version: ' + file_data[offset + 0x20:offset + 0x30].decode('ascii', 'ignore').rstrip('^\x00')
+			dell_version = util.read_string(file_data[offset + 0x20:offset + 0x23])
+			if dell_version[0:1] == 'A':
+				self.signon += 'BIOS Version: ' + dell_version
 		else:
 			# Extract sign-on from Core and some 4.0 Release 6.0 BIOSes.
 			match = self._core_signon_pattern.search(file_data)
@@ -1933,7 +1934,7 @@ class PhoenixAnalyzer(Analyzer):
 		if match.group(1): # the single captured character is a flag
 			self.signon = match.group(2) + self.signon[linebreak_index:]
 		else:
-			self.signon = self.signon[:linebreak_index + 1] + 'BIOS Version: ' + match.group(2)
+			self.signon = self.signon[:linebreak_index + 1] + 'BIOS Version: ' + match.group(2)[:3]
 
 		return True
 
