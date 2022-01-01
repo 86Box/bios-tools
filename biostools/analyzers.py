@@ -1720,10 +1720,12 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_40x(self, line, match):
-		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) Version +([0-9]\.[0-9]+)(.+)?'''
+		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) (Version +([0-9]\.[0-9]+)|4\.0[0-9])(.+)?'''
+		# Detect just 4.0x without the "Version" prefix to detect some weird
+		# OEM ones (Zenith Z-Station GT) while not causing false positives.
 
 		# Extract version.
-		self.version = match.group(3)
+		self.version = match.group(4) or match.group(3)
 
 		# Add version prefix if one was found.
 		prefix = match.group(1) or match.group(2)
@@ -1731,7 +1733,7 @@ class PhoenixAnalyzer(Analyzer):
 			self.version = prefix + ' ' + self.version
 
 		# Extract any additional information after the version.
-		additional_info = match.group(4)
+		additional_info = match.group(5)
 		if additional_info:
 			if self.signon:
 				self.signon = additional_info + '\n' + self.signon
