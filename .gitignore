@@ -13,3 +13,6 @@ bcpvpd
 efidecomp
 *.o
 *~
+
+# UEFIExtract
+UEFIExtract
