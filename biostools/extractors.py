@@ -629,6 +629,11 @@ class ImageExtractor(Extractor):
 		# Save image to destination directory.
 		image_path = os.path.join(dest_dir_0, 'image.png')
 		try:
+			# Don't save image if it's too small.
+			x, y = image.size
+			if x <= 1 or y <= 1:
+				raise Exception('too small')
+
 			image.save(image_path)
 			return True
 		except:
