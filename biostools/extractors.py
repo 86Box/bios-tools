@@ -150,19 +150,7 @@ class BIOSExtractor(Extractor):
 			return False
 
 		# Convert any BIOS logo images in-line (to the same destination directory).
-		for dest_dir_file in dest_dir_files:
-			# Read 8 bytes, which is enough to ascertain any potential logo type.
-			dest_dir_file_path = os.path.join(dest_dir_0, dest_dir_file)
-			f = open(dest_dir_file_path, 'rb')
-			dest_dir_file_header = f.read(8)
-			f.close()
-
-			# Run ImageExtractor.
-			image_dest_dir = dest_dir_file_path + ':'
-			self._image_extractor.extract(dest_dir_file_path, dest_dir_file_header, image_dest_dir, image_dest_dir)
-
-			# Remove destination directory if it was created but is empty.
-			util.rmdirs(image_dest_dir)
+		self._image_extractor.convert_inline(dest_dir_files, dest_dir_0)
 
 		# Create flag file on the destination directory for the analyzer to
 		# treat it as a big chunk of data.
@@ -391,6 +379,30 @@ class ImageExtractor(Extractor):
 			0x2d412d, 0x2d4131, 0x2d4135, 0x2d413d, 0x2d4141, 0x2d3d41, 0x2d3541, 0x2d3141, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000
 		]
 
+		# Header pattern for common format images.
+		self._pil_pattern = re.compile(
+			b'''\\x0A[\\x00-\\x05][\\x00-\\x01][\\x01\\x02\\x04\\x08]|''' # PCX
+			b'''BM|''' # BMP
+			b'''\\xFF\\xD8\\xFF|''' # JPEG
+			b'''GIF8|''' # GIF
+			b'''\\x89PNG''' # PNG
+		)
+
+	def convert_inline(self, dest_dir_files, dest_dir_0):
+		# Detect and convert image files.
+		for dest_dir_file in dest_dir_files:
+			# Read 8 bytes, which is enough to ascertain any potential logo type.
+			dest_dir_file_path = os.path.join(dest_dir_0, dest_dir_file)
+			f = open(dest_dir_file_path, 'rb')
+			dest_dir_file_header = f.read(8)
+			f.close()
+
+			# Run ImageExtractor.
+			image_dest_dir = dest_dir_file_path + ':'
+			if self.extract(dest_dir_file_path, dest_dir_file_header, image_dest_dir, image_dest_dir):
+				# Remove destination directory if it was created but is empty.
+				util.rmdirs(image_dest_dir)
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if PIL is not available or this file is too small.
 		if not PIL.Image or len(file_header) < 8:
@@ -412,11 +424,8 @@ class ImageExtractor(Extractor):
 			if os.path.getsize(file_path) == 72 + (15 * width * height):
 				func = self._convert_epav1
 			else:
-				# Determine if this is an AMI PCX.
-				if file_header[0] == 0x0a and \
-				   file_header[1] in (0x00, 0x02, 0x03, 0x04, 0x05) and \
-				   file_header[2] in (0x00, 0x01) and \
-				   file_header[3] in (0x01, 0x02, 0x04, 0x08):
+				# Determine if this is a common image format.
+				if self._pil_pattern.match(file_header):
 					func = self._convert_pil
 				else:
 					# Stop if this is not an image.
@@ -1213,6 +1222,10 @@ class UEFIExtractor(Extractor):
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
 
+		# Built-in instance of ImageExtractor for converting
+		# any extracted BIOS logo images that were found.
+		self._image_extractor = ImageExtractor()
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if UEFIExtract is not available.
 		if not self._uefiextract_path:
@@ -1285,6 +1298,9 @@ class UEFIExtractor(Extractor):
 			except:
 				pass
 			return False
+
+		# Convert any BIOS logo images in-line (to the same destination directory).
+		self._image_extractor.convert_inline(os.listdir(dest_dir_0), dest_dir_0)
 
 		# Create header file with a dummy string, to tell the analyzer
 		# this BIOS went through this extractor.
