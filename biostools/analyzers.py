@@ -1608,6 +1608,7 @@ class PhoenixAnalyzer(Analyzer):
 			(self._version_branch,									RegexChecker),
 			(self._version_core,									RegexChecker),
 			(self._version_grid,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
+			(self._version_notebios40,								RegexChecker),
 			(self._version_rombios,									RegexChecker),
 			(self._version_tandy,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			((self._date_precheck, self._string_date),				RegexChecker),
@@ -1782,6 +1783,15 @@ class PhoenixAnalyzer(Analyzer):
 			self.version = 'GRiD'
 
 		return False
+
+	def _version_notebios40(self, line, match):
+		'''^Phoenix (NoteBIOS [0-9.]+) Setup - Copyright '''
+
+		# NoteBIOS 4.04(?) and older appear to have no explicit version string.
+		if not self.version:
+			self.version = match.group(1)
+
+		return True
 
 	def _version_pentium(self, line, match):
 		'''^(?:PhoenixBIOS(?:\(TM\))? )?for ((?:486/)?Pentium)\s?\(TM\)(?: CPU)? - ([^\s]+) Version ([^-\s]+)(?:(?:-|\s)(.+))?'''
