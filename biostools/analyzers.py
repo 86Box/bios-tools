@@ -467,6 +467,8 @@ class AMIAnalyzer(Analyzer):
 										chipset = 'H1X'
 									elif b'NEAT ' in bios_id: # assumed; not bootable on 86Box
 										chipset = 'NET'
+									elif b'SCAT ' in bios_id:
+										chipset = 'SC2'
 									elif b'WIN ' in bios_id: # Winbond; not bootable on 86Box, source is a MAME comment
 										chipset = '286'
 									else:
