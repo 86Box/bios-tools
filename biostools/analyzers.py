@@ -1605,10 +1605,11 @@ class PhoenixAnalyzer(Analyzer):
 			(self._version_pentium,									RegexChecker),
 			(self._version_40rel,									RegexChecker),
 			(self._version_40x,										RegexChecker),
+			(self._version_404,										RegexChecker),
 			(self._version_branch,									RegexChecker),
 			(self._version_core,									RegexChecker),
 			(self._version_grid,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			(self._version_notebios40,								RegexChecker),
+			(self._version_notebios404,								RegexChecker),
 			(self._version_rombios,									RegexChecker),
 			(self._version_tandy,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			((self._date_precheck, self._string_date),				RegexChecker),
@@ -1743,6 +1744,16 @@ class PhoenixAnalyzer(Analyzer):
 
 		return True
 
+	def _version_404(self, line, match):
+		'''v([0-9]\.[0-9]{2}) Copyright 1985-[^\s]+ Phoenix Technologies Ltd'''
+
+		# Some v4.04 BIOSes somehow don't have enough data for
+		# _version_40x to work (partially failed extraction?)
+		if not self.version:
+			self.version = match.group(1)
+
+		return True
+
 	def _version_branch(self, line, match):
 		'''Phoenix ([A-Za-z]+(?:BIOS|Bios)) (?:Version ([0-9]\.[^\s]+)|([0-9](?:\.[0-9.]+)? Release [0-9]\.[^\s]+))(?:[\s\.](.+))?'''
 
@@ -1784,12 +1795,14 @@ class PhoenixAnalyzer(Analyzer):
 
 		return False
 
-	def _version_notebios40(self, line, match):
+	def _version_notebios404(self, line, match):
 		'''^Phoenix (NoteBIOS [0-9.]+) Setup - Copyright '''
 
-		# NoteBIOS 4.04(?) and older appear to have no explicit version string.
+		# Complement _version_404 with NoteBIOS.
 		if not self.version:
 			self.version = match.group(1)
+		elif 'NoteBIOS' not in self.version:
+			self.version = 'NoteBIOS ' + self.version
 
 		return True
 
