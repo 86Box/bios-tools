@@ -631,7 +631,7 @@ class ImageExtractor(Extractor):
 		try:
 			# Don't save image if it's too small.
 			x, y = image.size
-			if x <= 1 or y <= 1:
+			if x < 100 or y < 100:
 				raise Exception('too small')
 
 			image.save(image_path)
