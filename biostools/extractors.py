@@ -600,6 +600,11 @@ class ImageExtractor(Extractor):
 			image = PIL.Image.open(io.BytesIO(file_data))
 			if not image:
 				raise Exception('no image')
+
+			# Don't save image if it's too small.
+			x, y = image.size
+			if (x * y) < 10000:
+				raise Exception('too small')
 		except:
 			return False
 
@@ -629,11 +634,6 @@ class ImageExtractor(Extractor):
 		# Save image to destination directory.
 		image_path = os.path.join(dest_dir_0, 'image.png')
 		try:
-			# Don't save image if it's too small.
-			x, y = image.size
-			if (x < 100 and y < 100) or x < 25 or y < 25:
-				raise Exception('too small')
-
 			image.save(image_path)
 			return True
 		except:
