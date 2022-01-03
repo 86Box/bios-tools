@@ -340,7 +340,7 @@ class AMIAnalyzer(Analyzer):
 			(self._addons_hiflex,			SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._addons_new,				SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
 			(self._addons_simple,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			(self._addons_winbios,			SubstringChecker, SUBSTRING_CASE_SENSITIVE),
+			(self._addons_winbios,			SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 		])
 
 	def can_handle(self, file_data, header_data):
@@ -588,7 +588,7 @@ class AMIAnalyzer(Analyzer):
 		return True
 
 	def _addons_winbios(self, line, match):
-		'''Keystroke/Mouse Convention'''
+		''' Wait----'''
 
 		# Add setup type to add-ons.
 		self.addons.append('WinBIOS')
