@@ -8,7 +8,7 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 
 ## System requirements
 
-* **Linux**. Unfortunately, we rely on tools which contain non-portable code and generate filenames that are invalid for Windows, as well as GNU-specific extensions to shell commands. For Windows users, WSL potentially works.
+* **Linux**. Unfortunately, we rely on tools which contain non-portable code and generate filenames that are invalid for Windows, as well as GNU-specific extensions to shell commands. WSL should work for Windows users.
 * **Python 3.5** or newer.
 * **Standard gcc toolchain** for building the essential `bios_extract` tool.
 * **7-Zip** command line utility installed as `7z`.
@@ -56,11 +56,11 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 * Many common file types known not to be useful, such as images, PDFs, Office documents and hardware information tool reports, are automatically discarded.
 * Interleaved ROMs are merged through a heuristic filename and string detection, which may lead to incorrect merging if the chunks to different interleaved ROMs are present in the same directory.
 * The FAT filesystem extractor relies on assumptions which may not hold true for all disk images.
-* EPA (Award) and PCX (AMI) images are automatically converted to PNG if the aforementioned optional dependency is installed.
+* EPA (Award), PCX (AMI) and other image formats are automatically converted to PNG if the aforementioned optional dependency is installed.
 * Some Intel motherboard BIOSes (particularly from the AMIBIOS 6 era) will not be extracted properly due to a different address line inversion mechanism. This is a known issue with the Intel update format concatenator which may eventually be solved.
 * Extraction of the following BIOS distribution formats is **not implemented** due to the use of unknown compression methods:
-  * Evergreen `.ETI` (an ugly hack exists)
-  * IBM Sydex floppy self-extractor (it looks like CopyQM RLE but isn't)
+  * Evergreen `.ETI`
+  * IBM Sydex floppy self-extractor (compressed/encoded version of CopyQM RLE)
   * ICL `.LDB`
 
 ## Analysis notes
