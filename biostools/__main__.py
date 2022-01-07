@@ -547,9 +547,10 @@ def main():
 		'format': 'csv',
 		'headers': True,
 		'hyperlink': False,
+		'docker-usage': False,
 	}
 
-	args, remainder = getopt.getopt(sys.argv[1:], 'xaf:hnr', ['extract', 'analyze', 'format=', 'hyperlink', 'no-headers', 'array'])
+	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xaf:hnr', ['extract', 'analyze', 'format=', 'hyperlink', 'no-headers', 'array', 'docker-usage'])
 	for opt, arg in args:
 		if opt in ('-x', '--extract'):
 			mode = 'extract'
@@ -563,6 +564,8 @@ def main():
 			options['headers'] = False
 		elif opt in ('-r', '--array'):
 			options['array'] = True
+		elif opt == '--docker-usage':
+			options['docker-usage'] = True
 
 	if len(remainder) > 0:
 		if mode == 'extract':
@@ -570,13 +573,22 @@ def main():
 		elif mode == 'analyze':
 			return analyze(remainder[0], remainder[1:], options)
 
-	usage = '''
+	if options['docker-usage']:
+		usage = '''
+Usage: docker run -v directory:/bios biostools [-f output_format] [-h] [-n] [-r] [formatter_options]
+
+       Archives and BIOS images in the directory mounted to /bios will be
+       extracted and analyzed.
+'''
+	else:
+		usage = '''
 Usage: python3 -m biostools -x directory
        python3 -m biostools [-f output_format] [-h] [-n] [-r] -a directory [formatter_options]
 
        -x    Extract archives and BIOS images recursively in the given directory
 
-       -a    Analyze extracted BIOS images in the given directory
+       -a    Analyze extracted BIOS images in the given directory'''
+	usage += '''
        -f    Output format:
                  csv		Comma-separated values with quotes (default)
                  scsv		Semicolon-separated values with quotes

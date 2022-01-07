@@ -6,14 +6,31 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 
 **86Bot** on the [86Box Discord](https://86box.net/#social) has a BIOS analysis feature which uses BIOS Tools behind the scenes. Go to the `#bot-spam` channel and use the `!bios` command with an attached file or an URL. Other commands which work the same way and also leverage these tools are `!acpi` for extracting and decompiling ACPI tables, and `!epa` for extracting logo images.
 
-## System requirements
+## Quick usage through Docker
+
+1. Build the Docker image:
+
+```sudo docker build -t biostools https://github.com/86Box/bios-tools.git```
+
+2. Create a destination directory, which will be called `roms` here.
+3. Create a `1` directory within `roms`.
+4. Place BIOS ROM images, archives, disk images, flasher executables and what have you in the `1` directory. Subdirectories will also be checked. **These files will be deleted during the extraction process.**
+5. Run the container, binding `/bios` to the directory created in step 2:
+
+```sudo docker run --rm -v /path/to/roms:/bios biostools | tee bioslist.csv```
+
+6. Import the resulting `bioslist.csv` file to Excel, or do whatever else you want to do with it. Other output formats can be selected through arguments to the container (after `biostools`); run `sudo docker run --rm biostools` to see a full list of supported arguments.
+
+## Manual usage
+
+### System requirements
 
 * **Linux**. Unfortunately, we rely on tools which contain non-portable code and generate filenames that are invalid for Windows, as well as GNU-specific extensions to shell commands. WSL should work for Windows users.
 * **Python 3.5** or newer.
 * **Standard gcc toolchain** for building the essential `bios_extract` tool.
 * **7-Zip** command line utility installed as `7z`.
 
-## Installation
+### Installation
 
 1. Clone this repository.
 2. Build the `bios_extract` tool:
@@ -31,7 +48,7 @@ cd ..
 pip install -r requirements.txt
 ```
 
-## Usage
+### Usage
 
 1. Create a destination directory, which will be called `roms` here.
 2. Create a `1` directory within `roms`.
