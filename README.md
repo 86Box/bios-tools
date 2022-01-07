@@ -8,9 +8,9 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 
 ## Quick usage through Docker
 
-1. Build the Docker image:
+1. Build the Docker image from this repository:
 
-```sudo docker build -t biostools https://github.com/86Box/bios-tools.git```
+```sudo docker build -t biostools "https://github.com/86Box/bios-tools.git#main"```
 
 2. Create a destination directory, which will be called `roms` here.
 3. Create a `1` directory within `roms`.
