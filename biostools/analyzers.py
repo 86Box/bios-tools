@@ -644,10 +644,6 @@ class AMIDellAnalyzer(AMIAnalyzer):
 
 		return False
 
-	def _version_intel(self, line, match):
-		# Prevent the Intel version detector from working here.
-		return False
-
 	def _version_dell(self, line, match):
 		'''^BIOS Version (.+)'''
 
