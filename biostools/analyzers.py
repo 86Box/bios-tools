@@ -1724,9 +1724,10 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_40x(self, line, match):
-		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) (Version +([0-9]\.[0-9]+)|4\.0[0-9])(.+)?'''
+		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) (?:Plug and Play )?(Version +([0-9]\.[0-9]+)|4\.0[0-9])(.+)?'''
 		# Detect just 4.0x without the "Version" prefix to detect some weird
 		# OEM ones (Zenith Z-Station GT) while not causing false positives.
+		# "Plug and Play" = ALR Sequel series
 
 		# Extract version.
 		self.version = match.group(4) or match.group(3)
@@ -2103,7 +2104,7 @@ class QuadtelAnalyzer(Analyzer):
 			version_string = util.read_string(file_data[id_block_index + 0xc8:id_block_index + 0x190])
 			version_match = self._version_pattern.search(version_string) # may start with a linebreak (Phoenix-Quadtel)
 			if version_match:
-				self.version = version_match.group(2).replace(' \b', '').rstrip('.').strip() # remove trailing "." (quadt286) and space followed by backspace (ZEOS Marlin)
+				self.version = version_match.group(2).replace(' \b', '').rstrip('.').strip().rstrip('.') # remove trailing "." (first for quadt286, second for Quadtel GC113) and space followed by backspace (ZEOS Marlin)
 				if self.version[0:1] == 'Q': # flag Phoenix-Quadtel
 					self.version = self.version[1:] + ' (Phoenix)'
 

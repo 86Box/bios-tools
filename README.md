@@ -90,7 +90,7 @@ Depending on the contents of each BIOS, the following tags may be displayed on t
 
 * **ACPI**: Appears to contain an ACPI table. Does not necessarily indicate ACPI actually works.
 * **Adaptec**: Adaptec ISA or PCI SCSI option ROM.
-* **NCR3/4**: NCR PCI SCSI option ROM with SDMS version 3 or 4 (respectively).
+* **NCR3/4**: NCR/Symbios PCI SCSI option ROM with SDMS version 3 or 4 (respectively).
 * **PXE**: PXE-compliant network boot ROM, usually associated with on-board Ethernet.
 * **RPL**: Novell NetWare RPL-compliant network boot ROM, usually associated with on-board Ethernet.
 * **SLI**: NVIDIA SLI license for non-nForce motherboards.
