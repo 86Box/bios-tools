@@ -538,14 +538,15 @@ class AMIAnalyzer(Analyzer):
 		# If this is Intel's second AMI run, check if this is not a generic
 		# (86x) version string overwriting an OEM version string.
 		oem = match.group(4)
-		if not oem or oem[:2] != '86' or not self._intel_86_pattern.match(self.signon):
+		intel_version = match.group(2) or match.group(3)
+		if (not oem or oem[:2] != '86' or not self._intel_86_pattern.match(self.signon)) and intel_version not in self.signon:
 			# Extract the version string as a sign-on.
 			prefix_idx = self.signon.rfind(' ')
 			if prefix_idx > -1:
 				prefix = self.signon[:prefix_idx + 1]
 			else:
 				prefix = match.group(1) or ''
-			self.signon = prefix + (match.group(2) or match.group(3))
+			self.signon = prefix + intel_version
 
 		return True
 
