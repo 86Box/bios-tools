@@ -315,6 +315,7 @@ class AMIAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('AMI', *args, **kwargs)
 
+		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC|All Rights Reserved, \\(C\\)AMI \\(C\\)AMI \\(C\\)AMI | Access Methods Inc\\.''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
 		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-......-Chipset$''')
 		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\.86(?:[0-9A-Z])\.(?:[0-9A-Z]{4})\.(?:[0-9A-Z]{3})\.(?:[0-9]{10})$''')
@@ -323,6 +324,7 @@ class AMIAnalyzer(Analyzer):
 		# - Second digit not 0 (I forget which one had 000000)
 		# - Can be 4-digit instead of 6-digit (Biostar)
 		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\(AAMMIIBBIIOOSS\))([0-9]{2}/[0-9]{2}/[0-9]{2})\(C\)[0-9]{4} American Megatrends,? Inc(?:\.,? All Rights Reserved|/Hewlett-Packard Company)''')
+		self._precolor_8088_pattern = re.compile(b'''AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) IBM is a TM of IBM''')
 		# Weird TGem identifier (TriGem 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\(C\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
@@ -344,7 +346,8 @@ class AMIAnalyzer(Analyzer):
 		])
 
 	def can_handle(self, file_data, header_data):
-		if b'American Megatrends Inc' not in file_data and b'AMIBIOSC' not in file_data and b'All Rights Reserved, (C)AMI (C)AMI (C)AMI ' not in file_data and b' Access Methods Inc.' not in file_data:
+		check_match = self._check_pattern.search(file_data)
+		if not check_match:
 			return False
 
 		# Some Intel BIOSes may fail to decompress, in which case, we have to
@@ -499,6 +502,15 @@ class AMIAnalyzer(Analyzer):
 					if self.string[:10] in ('S???-0000-', 'S???-0166-') and file_data[id_block_index - 0xb9:id_block_index - 0xb7] != b'\x00\x01':
 						self.string = ''
 						return True
+				else:
+					# Check 8088-BIOS header.
+					match = self._precolor_8088_pattern.search(file_data)
+					if match:
+						# Extract version.					
+						self.version = match.group(1).decode('cp437', 'ignore')
+
+						# More string guesswork, but in this case, the vendor ID is nowhere to be seen.
+						self.string = '????-' + self.version.replace('/', '')
 
 				# Extract additional information after the copyright as a sign-on.
 				# (Shuttle 386SX, CDTEK 286, Flying Triumph Access Methods)
