@@ -30,13 +30,13 @@ def all_match(patterns, data):
 
 def date_cmp(date1, date2, pattern):
 	# Run date regex.
-	date1_match = pattern.match(date1)
-	date2_match = pattern.match(date2)
+	date1_match = pattern.match(date1 or '')
+	date2_match = pattern.match(date2 or '')
 	if date1_match and not date2_match:
 		return 1
 	elif not date1_match and date2_match:
 		return -1
-	else:
+	elif not date1_match and not date2_match:
 		return 0
 
 	# Extract year, month and day.
