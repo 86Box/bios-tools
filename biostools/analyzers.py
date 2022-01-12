@@ -1960,14 +1960,14 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _signon_dell(self, line, match):
-		'''^(?:(D)ell System |(?:BIOS Version(?!  =)|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version (?:[^\s]+)) )(.+)'''
+		'''^(?:(Dell System )|(?:BIOS Version(?!  =)|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version (?:[^\s]+)) )(.+)'''
 
 		# Add model or BIOS version to the sign-on.
 		linebreak_index = self.signon.find('\n')
-		if match.group(1): # the single captured character is a flag
-			self.signon = match.group(2) + self.signon[linebreak_index:]
+		if match.group(1):
+			self.signon = match.group(1) + match.group(2) + self.signon[linebreak_index:]
 		else:
-			self.signon = self.signon[:linebreak_index + 1] + 'BIOS Version: ' + match.group(2)[:3]
+			self.signon = self.signon[:linebreak_index + 1] + 'BIOS version ' + match.group(2)[:3]
 
 		return True
 
