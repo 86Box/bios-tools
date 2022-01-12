@@ -1618,6 +1618,7 @@ class PhoenixAnalyzer(Analyzer):
 			(self._version_grid,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._version_notebios404,								RegexChecker),
 			(self._version_rombios,									RegexChecker),
+			(self._version_sct,										RegexChecker),
 			(self._version_tandy,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			((self._date_precheck, self._string_date),				RegexChecker),
 			(self._signon_ast,										SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
@@ -1872,6 +1873,18 @@ class PhoenixAnalyzer(Analyzer):
 			additional_info = (match.group(5) or '') + (match.group(6) or '')
 			if additional_info and (len(additional_info) > 3 or additional_info[0] != '.'):
 				self.signon = additional_info
+
+		return True
+
+	def _version_sct(self, line, match):
+		'''Phoenix BIOS (SC-T v[^\s]+)'''
+		# (SecureCore Tiano)
+
+		# Extract version.
+		self.version = match.group(1)
+
+		# This is UEFI.
+		self.addons.append('UEFI')
 
 		return True
 
