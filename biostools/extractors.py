@@ -77,7 +77,7 @@ class ArchiveExtractor(Extractor):
 		# Do the actual extraction.
 		return self._extract_archive(file_path, dest_dir)
 
-	def _extract_archive(self, file_path, dest_dir):
+	def _extract_archive(self, file_path, dest_dir, remove=True):
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
 			return True
@@ -91,10 +91,11 @@ class ArchiveExtractor(Extractor):
 			return False
 
 		# Remove archive file.
-		try:
-			os.remove(file_path)
-		except:
-			pass
+		if remove:
+			try:
+				os.remove(file_path)
+			except:
+				pass
 
 		# Return destination directory path.
 		return dest_dir
@@ -675,7 +676,7 @@ class FATExtractor(ArchiveExtractor):
 		return self._extract_archive(file_path, dest_dir)
 
 
-class HexExtractor(ArchiveExtractor):
+class HexExtractor(Extractor):
 	"""Extract Intel HEX format ROMs."""
 
 	def __init__(self, *args, **kwargs):
@@ -737,13 +738,67 @@ class HexExtractor(ArchiveExtractor):
 class ISOExtractor(ArchiveExtractor):
 	"""Extract ISO 9660 images."""
 
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self._eltorito_pattern = re.compile(b'''\\x01\\x00\\x00\\x00[\\x00-\\xFF]{26}\\x55\\xAA\\x88\\x04[\\x00-\\xFF]{3}\\x00[\\x00-\\xFF]{2}([\\x00-\\xFF]{4})''')
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if this is not an ISO.
-		if file_header[32769:32775] != 'CD001\x01':
+		if file_header[32769:32775] != b'CD001\x01':
 			return False
 
 		# Extract this as an archive.
-		return self._extract_archive(file_path, dest_dir)
+		ret = self._extract_archive(file_path, dest_dir, False)
+
+		# Some El Torito hard disk images have an MBR (Lenovo ThinkPad UEFI updaters).
+		# 7-Zip doesn't care about MBRs and just takes the El Torito sector count field
+		# for granted, even though it may be inaccurate. Try to detect such inaccuracies.
+		if type(ret) == str:
+			# Check what 7-Zip tried to extract, if anything.
+			elt_path = os.path.join(ret, '[BOOT]', 'Boot-HardDisk.img')
+			try:
+				elt_size = os.path.getsize(elt_path)
+			except:
+				elt_size = 0
+
+			# Does the size match known bad extractions?
+			if elt_size == 512:
+				# Read file.
+				f = open(elt_path, 'rb')
+				data = f.read(512)
+				f.close()
+
+				# Check for MBR boot signature.
+				if data[-2:] == b'\x55\xAA':
+					# Read up to 16 MB of the ISO as a safety net.
+					file_header += util.read_complement(file_path, file_header)
+
+					# Look for El Torito data.
+					match = self._eltorito_pattern.search(file_header)
+					if match:
+						# Start a new El Torito extraction file.
+						f_o = open(elt_path, 'wb')
+
+						# Copy the entire ISO data starting from the boot offset.
+						# Parsing the MBR would have pitfalls of its own...
+						f_i = open(file_path, 'rb')
+						f_i.seek(struct.unpack('<I', match.group(1))[0] * 2048)
+						data = b' '
+						while data:
+							data = f_i.read(1048576)
+							f_o.write(data)
+						f_i.close()
+
+						# Finish new file.
+						f_o.close()
+
+		# Remove ISO file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		return ret
 
 
 class IntelExtractor(Extractor):
@@ -1076,6 +1131,34 @@ class InterleaveExtractor(Extractor):
 
 		# Return destination directory path.
 		return dest_dir
+
+
+class MBRSafeExtractor(ArchiveExtractor):
+	"""Extract MBR disk images which appear to have a valid MBR."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self._mbr_pattern = re.compile(b'''(?:Error loading|Missing) operating system''')
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Extract this as an archive if MBR signatures are present.
+		if file_header[510:512] == b'\x55\xAA' and self._is_mbr(file_header):
+			return self._extract_archive(file_path, dest_dir)
+
+		# No MBR found.
+		return False
+
+	def _is_mbr(self, file_header):
+		# Helper function to determine if this *really* looks like some kind of MBR.
+		return self._mbr_pattern.search(file_header[:510])
+
+
+class MBRUnsafeExtractor(MBRSafeExtractor):
+	"""Extract MBR disk images which have the MBR signature."""
+
+	def _is_mbr(self, file_header):
+		# Anything goes over here.
+		return True
 
 
 class OMFExtractor(ArchiveExtractor):

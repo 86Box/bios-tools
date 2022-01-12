@@ -99,6 +99,7 @@ def extract_process(queue, dir_number_path, next_dir_number_path):
 		extractors.ISOExtractor(),
 		extractors.PEExtractor(),
 		extractors.FATExtractor(),
+		extractors.MBRSafeExtractor(),
 		extractors.TarExtractor(),
 		extractors.ArchiveExtractor(),
 		extractors.HexExtractor(),
@@ -109,6 +110,7 @@ def extract_process(queue, dir_number_path, next_dir_number_path):
 		extractors.InterleaveExtractor(),
 		extractors.BIOSExtractor(),
 		extractors.UEFIExtractor(),
+		extractors.MBRUnsafeExtractor(),
 	]
 
 	# Receive work from the queue.
