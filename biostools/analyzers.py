@@ -1619,6 +1619,7 @@ class PhoenixAnalyzer(Analyzer):
 			(self._version_notebios404,								RegexChecker),
 			(self._version_rombios,									RegexChecker),
 			(self._version_sct,										RegexChecker),
+			(self._version_sct_preboot,								SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._version_tandy,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			((self._date_precheck, self._string_date),				RegexChecker),
 			(self._signon_ast,										SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
@@ -1882,6 +1883,18 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Extract version.
 		self.version = match.group(1)
+
+		# This is UEFI.
+		self.addons.append('UEFI')
+
+		return True
+
+	def _version_sct_preboot(self, line, match):
+		'''SecureCore Tiano (TM) Preboot Agent '''
+
+		# Extract version if a more specific one wasn't already found.
+		if not self.version:
+			self.version = 'SC-T'
 
 		# This is UEFI.
 		self.addons.append('UEFI')
