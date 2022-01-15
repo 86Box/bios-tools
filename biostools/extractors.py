@@ -792,11 +792,12 @@ class ISOExtractor(ArchiveExtractor):
 						# Finish new file.
 						f_o.close()
 
-		# Remove ISO file.
-		try:
-			os.remove(file_path)
-		except:
-			pass
+		# Remove ISO file if it was successfully extracted.
+		if ret:
+			try:
+				os.remove(file_path)
+			except:
+				pass
 
 		return ret
 
