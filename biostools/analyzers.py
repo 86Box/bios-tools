@@ -271,7 +271,7 @@ class AcerAnalyzer(Analyzer):
 		return True
 
 	def _string(self, line, match):
-		'''([A-Z]{3}[A-Z0-9]{3}00-[A-Z0-9]{3}-[0-9]{6}-[^\s]+)(?:\s+(.+))?'''
+		'''([A-Z]{3}[0-9A-F]{2}[A-Z0-9]{3}-[A-Z0-9]{3}-[0-9]{6}-[^\s]+)(?:\s+(.+))?'''
 
 		# Extract string.
 		self.string = match.group(1)
