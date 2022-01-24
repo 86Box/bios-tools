@@ -826,7 +826,7 @@ class AwardAnalyzer(Analyzer):
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \(c\) (?:[^\r]+)\r\n)?Copyright \(c\) (?:NCR \& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
-		self._version_pattern = re.compile(''' (?:v([^\s]+)|Version [^0-9]*([0-9]\.[0-9]{2}))(?:[. ]([\\x20-\\x7F]+))?''')
+		self._version_pattern = re.compile(''' (?:v([^-\s]+)|Version [^0-9]*([0-9]\.[0-9]{2}))(?:[. ]([\\x20-\\x7F]+))?''')
 
 		self.register_check_list([
 			(self._version_ast,		RegexChecker),
