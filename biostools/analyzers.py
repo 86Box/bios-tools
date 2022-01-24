@@ -1722,9 +1722,10 @@ class PhoenixAnalyzer(Analyzer):
 		additional_info = match.group(4)
 		if additional_info:
 			if additional_info[0] == '.':
-				additional_info = match.group(3).rstrip() + additional_info.lstrip()
+				additional_info = match.group(3).strip() + additional_info.strip()
 			if self.signon:
-				self.signon = additional_info + '\n' + self.signon
+				if additional_info not in self.signon:
+					self.signon = additional_info + '\n' + self.signon
 			else:
 				self.signon = additional_info
 
