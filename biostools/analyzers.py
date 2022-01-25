@@ -1121,7 +1121,6 @@ class BonusAnalyzer(Analyzer):
 						if device_id != b'\x00\x00\x00\x00' or vendor or device:
 							# Add PnP ID (endianness swapped to help the front-end in
 							# processing it), vendor name and device name to the list.
-							print(device_id)
 							self.oroms.append((struct.unpack('>I', device_id)[0], vendor, device))
 
 		# This analyzer should never return True.
