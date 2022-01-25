@@ -1009,7 +1009,7 @@ class BonusAnalyzer(Analyzer):
 		)
 		self._rpl_pattern = re.compile(b'''NetWare Ready ROM''')
 		self._sli_pattern = re.compile(b'''[0-9]{12}Genuine NVIDIA Certified SLI Ready Motherboard for ''')
-		self._vbios_pattern = re.compile(b'''IBM (?:VGA C(?:OMPATIBLE|ompatible)|COMPATIBLE PARADISE)|ATI Technologies Inc\.|SiS super VGA chip''')
+		self._vbios_pattern = re.compile(b'''IBM (?:VGA C(?:OMPAT[IA]BLE|ompatible)|COMPATIBLE PARADISE)|ATI Technologies Inc\.|SiS super VGA chip''')
 
 	def can_handle(self, file_data, header_data):
 		# PhoenixNet
