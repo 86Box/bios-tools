@@ -997,7 +997,7 @@ class BonusAnalyzer(Analyzer):
 		self._acpi_table_pattern = re.compile(b'''(?:APIC|DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})[\\x00-\\xFF]{24}[\\x00\\x20-\\x7E]{4}''')
 		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|([\\x20-\\x7E]+) BIOS )''')
 		self._ncr_pattern = re.compile(b''' SDMS \(TM\) V([0-9])''')
-		self._pci_rom_pattern = re.compile(b'''\\x55\\xAA[^\\x00][\\x00-\\xFF]{21}([\\x00-\\xFF]{2})''')
+		self._orom_pattern = re.compile(b'''\\x55\\xAA[^\\x00][\\x00-\\xFF]{21}([\\x00-\\xFF]{4})''')
 		self._phoenixnet_patterns = (
 			re.compile(b'''CPLRESELLERID'''),
 			re.compile(b'''BINCPUTBL'''),
@@ -1050,52 +1050,79 @@ class BonusAnalyzer(Analyzer):
 		if self._vbios_pattern.search(file_data):
 			self.addons.append('VGA')
 
-		# Look for PCI option ROMs.
-		for match in self._pci_rom_pattern.finditer(file_data):
-			# Move on to the next ROM if we don't have a valid PCI data structure.
-			pci_header_ptr, = struct.unpack('<H', match.group(1))
-			if pci_header_ptr < 26:
-				continue
-			pci_header_ptr += match.start()
-			if file_data[pci_header_ptr:pci_header_ptr + 4] != b'PCIR':
-				continue
-			pci_header_data = file_data[pci_header_ptr + 4:pci_header_ptr + 16]
-			if len(pci_header_data) != 12:
-				continue
+		# Look for PCI/PnP option ROMs.
+		for match in self._orom_pattern.finditer(file_data):
+			# Extract PCI and PnP data structure pointers.
+			pci_header_ptr, pnp_header_ptr = struct.unpack('<HH', match.group(1))
 
-			# Read PCI header data, and move on to the next ROM if we have a bogus vendor ID.
-			vendor_id, device_id, device_list_ptr, _, revision, progif, subclass, class_code = struct.unpack('<HHHHBBBB', pci_header_data)
-			if vendor_id in (0x0000, 0xffff):
-				continue
+			# Check for a valid PCI data structure.
+			if pci_header_ptr >= 26:
+				pci_header_ptr += match.start()
+				if file_data[pci_header_ptr:pci_header_ptr + 4] == b'PCIR':
+					pci_header_data = file_data[pci_header_ptr + 4:pci_header_ptr + 16]
+					if len(pci_header_data) == 12:
+						# Read PCI header data.
+						vendor_id, device_id, device_list_ptr, _, revision, progif, subclass, class_code = struct.unpack('<HHHHBBBB', pci_header_data)
 
-			# Flag VGA option ROMs.
-			if (class_code == 0 and subclass == 1) or (class_code == 3 and subclass in (0, 1)):
-				self.addons.append('VGA')
+						# Make sure the vendor ID is not bogus.
+						if vendor_id not in (0x0000, 0xffff):
+							# Flag VGA option ROMs.
+							if (class_code == 0 and subclass == 1) or (class_code == 3 and subclass in (0, 1)):
+								self.addons.append('VGA')
 
-			# Add IDs to the option ROM list.
-			self.oroms.append((vendor_id, device_id))
+							# Add IDs to the option ROM list.
+							self.oroms.append((vendor_id, device_id))
 
-			# Read additional IDs only if this ROM is PCI 3.0 compliant and has a valid device list pointer.
-			# The revision code is a tough one: 0 is known to be PCI <= 2.3, and 3 is known to be PCI Firmware
-			# Specification 3.1. There could be other values, but only the PCI-SIG specs ($$$) can tell.
-			if revision < 3 or device_list_ptr < 10:
-				continue
+							# Read additional IDs only if this ROM is PCI 3.0 compliant and has a valid device list pointer.
+							# The revision code is a tough one: 0 is known to be PCI <= 2.3, and 3 is known to be PCI Firmware
+							# Specification 3.1. There could be other values, but only the PCI-SIG specs ($$$) can tell.
+							if revision < 3 or device_list_ptr < 10:
+								continue
 
-			# The device list pointer is relative to the PCI header.
-			device_list_ptr += pci_header_ptr
+							# The device list pointer is relative to the PCI header.
+							device_list_ptr += pci_header_ptr
 
-			# Read device IDs.
-			while len(file_data[device_list_ptr:device_list_ptr + 2]) == 2:
-				# Read ID and stop if this is a terminator.
-				device_id, = struct.unpack('<H', file_data[device_list_ptr:device_list_ptr + 2])
-				if device_id == 0x0000:
-					break
+							# Read device IDs.
+							while len(file_data[device_list_ptr:device_list_ptr + 2]) == 2:
+								# Read ID and stop if this is a terminator.
+								device_id, = struct.unpack('<H', file_data[device_list_ptr:device_list_ptr + 2])
+								if device_id == 0x0000:
+									break
 
-				# Add the device ID and existing vendor ID to the option ROM list.
-				self.oroms.append((vendor_id, device_id))
+								# Add the device ID and existing vendor ID to the option ROM list.
+								self.oroms.append((vendor_id, device_id))
 
-				# Move on to the next ID.
-				device_list_ptr += 2
+								# Move on to the next ID.
+								device_list_ptr += 2
+
+							# Don't process the PnP data structure.
+							continue
+
+			# Check for a valid PnP data structure.
+			if pnp_header_ptr >= 26:
+				pnp_header_ptr += match.start()
+				if file_data[pnp_header_ptr:pnp_header_ptr + 4] == b'$PnP':
+					pnp_header_data = file_data[pnp_header_ptr + 4:pnp_header_ptr + 18]
+					if len(pnp_header_data) == 14:
+						# Read PnP header data.
+						_, _, _, _, _, device_id, vendor_ptr, device_ptr = struct.unpack('<BBHBB4sHH', pnp_header_data)
+
+						# Extract vendor/device name strings if they're valid.
+						if vendor_ptr >= 26:
+							vendor = util.read_string(file_data[match.start() + vendor_ptr:])
+						else:
+							vendor = None
+						if device_ptr >= 26:
+							device = util.read_string(file_data[match.start() + device_ptr:])
+						else:
+							device = None
+
+						# Take valid data only.
+						if device_id != b'\x00\x00\x00\x00' or vendor or device:
+							# Add PnP ID (endianness swapped to help the front-end in
+							# processing it), vendor name and device name to the list.
+							print(device_id)
+							self.oroms.append((struct.unpack('>I', device_id)[0], vendor, device))
 
 		# This analyzer should never return True.
 		return False
