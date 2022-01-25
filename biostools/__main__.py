@@ -428,6 +428,10 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 		while None in oroms:
 			oroms.remove(None)
 
+		# Add file name in single-file analysis.
+		if not scan_dir_path and not scan_file_path:
+			scan_file_path = os.path.basename(scan_base)
+
 		# Collect the analyzer's results.
 		fields = [((type(field) == str) and field.replace('\t', ' ').strip() or field) for field in [
 			scan_file_path,
@@ -526,9 +530,13 @@ def analyze(dir_path, formatter_args, options):
 	queue = multiprocessing.Queue(maxsize=MP_PROCESS_COUNT)
 	mp_pool = multiprocessing.Pool(MP_PROCESS_COUNT, initializer=analyze_process, initargs=(queue, formatter, dir_path))
 
-	# Scan directory structure.
-	for scan_dir_path, scan_dir_names, scan_file_names in os.walk(dir_path):
-		queue.put((scan_dir_path, scan_file_names))
+	if os.path.isdir(dir_path):
+		# Scan directory structure.
+		for scan_dir_path, scan_dir_names, scan_file_names in os.walk(dir_path):
+			queue.put((scan_dir_path, scan_file_names))
+	else:
+		# Scan single file.
+		queue.put(('', [dir_path]))
 
 	# Stop multiprocessing pool and wait for its workers to finish.
 	for _ in range(MP_PROCESS_COUNT):
@@ -585,11 +593,12 @@ Usage: docker run -v directory:/bios biostools [-f output_format] [-h] [-n] [-r]
 	else:
 		usage = '''
 Usage: python3 -m biostools -x directory
-       python3 -m biostools [-f output_format] [-h] [-n] [-r] -a directory [formatter_options]
+       python3 -m biostools [-f output_format] [-h] [-n] [-r] -a directory|single_file [formatter_options]
 
        -x    Extract archives and BIOS images recursively in the given directory
 
-       -a    Analyze extracted BIOS images in the given directory'''
+       -a    Analyze extracted BIOS images in the given directory, or a single
+             extracted file (extracting with -x first is recommended)'''
 	usage += '''
        -f    Output format:
                  csv		Comma-separated values with quotes (default)
