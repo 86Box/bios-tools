@@ -994,10 +994,10 @@ class BonusAnalyzer(Analyzer):
 		super().__init__('', *args, **kwargs)
 		self._pci_ids = {}
 
-		self._acpi_table_pattern = re.compile(b'''(?:APIC|DSDT|FACP|PSDT|RSDT|SBST|SSDT)(.{4}).{24}[\\x00\\x20-\\x7E]{4}''')
+		self._acpi_table_pattern = re.compile(b'''(?:APIC|DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})[\\x00-\\xFF]{24}[\\x00\\x20-\\x7E]{4}''')
 		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|([\\x20-\\x7E]+) BIOS )''')
 		self._ncr_pattern = re.compile(b''' SDMS \(TM\) V([0-9])''')
-		self._pci_rom_pattern = re.compile(b'''\\x55\\xAA[^\\x00].{21}(.{2})''')
+		self._pci_rom_pattern = re.compile(b'''\\x55\\xAA[^\\x00][\\x00-\\xFF]{21}([\\x00-\\xFF]{2})''')
 		self._phoenixnet_patterns = (
 			re.compile(b'''CPLRESELLERID'''),
 			re.compile(b'''BINCPUTBL'''),
