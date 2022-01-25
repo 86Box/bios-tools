@@ -396,33 +396,52 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 		# Add names to option ROMs.
 		previous_vendor = previous_device = None
 		for x in range(len(oroms)):
-			# Get vendor and device IDs and names.
-			vendor_id, device_id = oroms[x]
-			vendor, device = util.get_pci_id(vendor_id, device_id)
+			if len(oroms[x]) == 2: # PCI ROM
+				# Get vendor and device IDs and names.
+				vendor_id, device_id = oroms[x]
+				vendor, device = util.get_pci_id(vendor_id, device_id)
 
-			# Skip valid vendor IDs associated to a bogus device ID.
-			if device == '[Unknown]' and device_id == 0x0000:
-				oroms[x] = None
-				continue
+				# Skip valid vendor IDs associated to a bogus device ID.
+				if device == '[Unknown]' and device_id == 0x0000:
+					oroms[x] = None
+					continue
 
-			# Clean up IDs.
-			vendor = util.clean_vendor(vendor).strip()
-			device = util.clean_device(device, vendor).strip()
+				# Clean up IDs.
+				vendor = util.clean_vendor(vendor).strip()
+				device = util.clean_device(device, vendor).strip()
 
-			# De-duplicate vendor names.
-			if vendor == previous_vendor and vendor != '[Unknown]':
-				if device == previous_device:
-					previous_device, device = device, ''
-					previous_vendor, vendor = vendor, '\u2196' # up-left arrow
+				# De-duplicate vendor names.
+				if vendor == previous_vendor and vendor != '[Unknown]':
+					if device == previous_device:
+						previous_device, device = device, ''
+						previous_vendor, vendor = vendor, '\u2196' # up-left arrow
+					else:
+						previous_device = device
+						previous_vendor, vendor = vendor, ' ' * len(vendor)
 				else:
 					previous_device = device
-					previous_vendor, vendor = vendor, ' ' * len(vendor)
-			else:
-				previous_device = device
-				previous_vendor = vendor
+					previous_vendor = vendor
 
-			# Format string.
-			oroms[x] = '[{0:04x}:{1:04x}] {2} {3}'.format(vendor_id, device_id, vendor, device)
+				# Format string.
+				oroms[x] = '[{0:04x}:{1:04x}] {2} {3}'.format(vendor_id, device_id, vendor, device)
+			else: # PnP ROM
+				# Get PnP ID, vendor name and device name.
+				device_id, vendor, device = oroms[x]
+
+				# Extract ASCII letters from the PnP ID.
+				pnp_id = ''.join(chr(0x40 + (letter & 0x1f)) for letter in (device_id >> 26, device_id >> 21, device_id >> 16))
+
+				# Add the numeric part of the PnP ID.
+				pnp_id += format(device_id & 0xffff, '04x').upper()
+
+				# Clean up vendor and device names.
+				vendor_device = (vendor + ' ' + device).replace('\r', '')
+				vendor_device = '\n'.join(x.strip() for x in vendor_device.split('\n') if x.strip())
+				while '\n\n' in vendor_device:
+					vendor_device = vendor_device.replace('\n\n', '\n')
+
+				# Format string.
+				oroms[x] = '[{0}] {1}'.format(pnp_id, vendor_device.replace('\n', '\n' + (' ' * (len(pnp_id) + 3))))
 
 		# Remove bogus option ROM device ID entries.
 		while None in oroms:
@@ -517,7 +536,7 @@ def analyze(dir_path, formatter_args, options):
 
 	# Begin output.
 	formatter.begin()
-	formatter.output_headers(['File', 'Vendor', 'Version', 'String', 'Sign-on', 'Add-ons', 'PCI ROMs'], options.get('headers'))
+	formatter.output_headers(['File', 'Vendor', 'Version', 'String', 'Sign-on', 'Add-ons', 'ROMs'], options.get('headers'))
 
 	# Remove any trailing slash from the root path, as the output path cleanup
 	# functions rely on it not being present.
