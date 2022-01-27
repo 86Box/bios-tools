@@ -1806,25 +1806,21 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_core(self, line, match):
-		'''^Phoenix (cME|[A-Za-z]+Core)(?:\(tm\))? (?!Setup)([^\s]+)?'''
+		'''Phoenix ((?:[A-Za-z]+Core|cME).+)'''
 
-		# Extract the first word.
-		self.version = match.group(1)
+		# Skip setup headers.
+		branch = match.group(1)
+		if ' Setup' in branch:
+			return False
 
-		# Extract the second word.
-		second_word = match.group(2)
-		if second_word:
-			if second_word == 'SVR':
-				second_word = 'Server'
-			self.version += ' ' + second_word
-
-		# Mark this as a Core BIOS for sign-on extraction.
-		self._is_core = True
+		# Extract branch, while removing extraneous trademark
+		# symbols and changing the Server abbreviation.
+		self.version = branch.replace('(tm)', '').replace('SVR', 'Server')
 
 		return True
 
 	def _version_grid(self, line, match):
-		'''Copyright (C) 1987-1991, GRiD Systems Corp.All Rights Reserved'''
+		'''Copyright (C) [0-9-]+, GRiD Systems Corp.All Rights Reserved'''
 
 		# This is a GRiD BIOS.
 		if not self.version:
