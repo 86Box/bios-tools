@@ -1806,7 +1806,7 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_core(self, line, match):
-		'''Phoenix ((?:[A-Za-z]+Core|cME).+)'''
+		'''Phoenix ((?:cME )?(?:[A-Za-z]+Core|FirstBIOS [^\s]+ Pro).*)'''
 
 		# Skip setup headers.
 		branch = match.group(1)
@@ -1815,7 +1815,7 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Extract branch, while removing extraneous trademark
 		# symbols and changing the Server abbreviation.
-		self.version = branch.replace('(tm)', '').replace('SVR', 'Server')
+		self.version = branch.replace('(tm)', '')
 
 		return True
 
