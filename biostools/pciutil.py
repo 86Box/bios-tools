@@ -82,6 +82,7 @@ clean_vendor_force = {
 clean_vendor_final = {
 	'Chips and': 'C&T',
 	'Digital Equipment': 'DEC',
+	'Integrated Technology Express': 'ITE',
 	'Microchip Technology/SMSC': 'Microchip/SMSC',
 	'NVidia/SGS Thomson': 'NVIDIA/ST',
 	'S3 Graphics': 'S3',
