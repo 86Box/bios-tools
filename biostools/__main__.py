@@ -435,10 +435,8 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 				pnp_id += format(device_id & 0xffff, '04x').upper()
 
 				# Clean up vendor and device names.
-				vendor_device = (vendor + ' ' + device).replace('\r', '')
+				vendor_device = ((vendor or '') + '\n' + (device or '')).replace('\r', '')
 				vendor_device = '\n'.join(x.strip() for x in vendor_device.split('\n') if x.strip())
-				while '\n\n' in vendor_device:
-					vendor_device = vendor_device.replace('\n\n', '\n')
 
 				# Format string.
 				oroms[x] = '[{0}] {1}'.format(pnp_id, vendor_device.replace('\n', '\n' + (' ' * (len(pnp_id) + 3))))
