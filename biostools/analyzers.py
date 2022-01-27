@@ -1440,11 +1440,7 @@ class IntelUEFIAnalyzer(Analyzer):
 		super().__init__('Intel', *args, **kwargs)
 		self.vendor_id = 'IntelUEFI'
 
-		self._identifier_pattern = re.compile(b'''\$(?:IBIOSI\$|FID)[0-9A-Z]{8}\.''')
-
-		self.register_check_list([
-			(self._signon,	RegexChecker),
-		])
+		self._identifier_pattern = re.compile(b'''(?:\\$(?:IBIOSI\\$|FID|UBI)|Load Error\\x00{2}Success\\x00|S\\x00l\\x00o\\x00t\\x00 \\x00\\x30\\x00:\\x00 \\x00+)([0-9A-Z]{8}\\.[0-9A-Z]{3}(?:\\.[0-9]{4}){4})''')
 
 	def can_handle(self, file_data, header_data):
 		# Only handle files sent through UEFIExtractor.
@@ -1452,18 +1448,14 @@ class IntelUEFIAnalyzer(Analyzer):
 			return False
 
 		# Check for any Intel version code identifiers.
-		if not self._identifier_pattern.search(file_data):
+		match = self._identifier_pattern.search(file_data)
+		if not match:
 			return False
 
 		self.version = 'UEFI'
 
-		return True
-
-	def _signon(self, line, match):
-		'''^(?:\$(?:IBIOSI\$|FID))?([0-9A-Z]{8}\.([0-9A-Z]{3})(?:\.[0-9]{4}){4})'''
-
 		# Extract sign-on.
-		self.signon = match.group(1)
+		self.signon = match.group(1).decode('cp437', 'ignore')
 
 		return True
 
