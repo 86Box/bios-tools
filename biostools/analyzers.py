@@ -127,6 +127,10 @@ class Analyzer:
 					self.debug_print(callback_func.__name__, line)
 					return callback_result
 
+	def can_analyze(self):
+		"""Returns True if the given file's strings should be analyzed."""
+		return len(self._check_list) > 0
+
 	def can_handle(self, file_data, header_data):
 		"""Returns True if this analyzer can handle the given file data.
 		   header_data contains data from the :header: flag file, or

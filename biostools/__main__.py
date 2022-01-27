@@ -316,25 +316,26 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 					bonus_analyzer_oroms = analyzer.oroms
 				continue
 
-			# Run strings on the file data if required (only once).
-			if not strings:
-				try:
-					strings = subprocess.run(['strings', '-n8'], input=file_data, stdout=subprocess.PIPE).stdout.decode('ascii', 'ignore').split('\n')
-				except:
-					util.log_traceback('running strings on', os.path.join(scan_dir_path, scan_file_name))
-					continue
+			# Run strings on the file data if required (only once if requested by analyzer).
+			if analyzer.can_analyze():
+				if not strings:
+					try:
+						strings = subprocess.run(['strings', '-n8'], input=file_data, stdout=subprocess.PIPE).stdout.decode('ascii', 'ignore').split('\n')
+					except:
+						util.log_traceback('running strings on', os.path.join(scan_dir_path, scan_file_name))
+						continue
 
-			# Analyze each string.
-			try:
-				for string in strings:
-					analyzer.analyze_line(string)
-			except analyzers.AbortAnalysisError:
-				# Analysis aborted.
-				pass
-			except:
-				# Log an error.
-				util.log_traceback('analyzing', os.path.join(scan_dir_path, scan_file_name))
-				continue
+				# Analyze each string.
+				try:
+					for string in strings:
+						analyzer.analyze_line(string)
+				except analyzers.AbortAnalysisError:
+					# Analysis aborted.
+					pass
+				except:
+					# Log an error.
+					util.log_traceback('analyzing', os.path.join(scan_dir_path, scan_file_name))
+					continue
 
 			# Take this analyzer if it produced a version.
 			if analyzer.version:
