@@ -332,7 +332,7 @@ class AMIAnalyzer(Analyzer):
 		self._precolor_block_pattern = re.compile(b'''\(C\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
 		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6)''')
-		self._precolor_chipset_pattern = re.compile(b'''(SETUP PROGRAM FOR [\\x20-\\x7F]+)|(EMI 386 CHIPSET SETUP UTILITY)|(VLSI BIOS, 286 CHIPSET)|(CHIP & TECH SETUP PROGRAM)|( 286 BIOS)|(386 BIOS, NO CHIPSET)|([234]86-BIOS \(C\))''')
+		self._precolor_chipset_pattern = re.compile(b'''(SETUP PROGRAM FOR [\\x20-\\x7E]+)|(EMI 386 CHIPSET SETUP UTILITY)|(VLSI BIOS, 286 CHIPSET)|(CHIP & TECH SETUP PROGRAM)|( 286 BIOS)|(386 BIOS, NO CHIPSET)|([234]86-BIOS \(C\))''')
 		self._precolor_extsetup_pattern = re.compile(b'''EXTENDED (?:CMOS )?SETUP PROGRAM''')
 		self._precolor_signon_pattern = re.compile(b'''BIOS \(C\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
 
@@ -824,13 +824,13 @@ class AwardAnalyzer(Analyzer):
 		super().__init__('Award', *args, **kwargs)
 
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
-		self._gigabyte_bif_pattern = re.compile(b'''\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7F]+)\\x00.([\\x20-\\x7F]+)\\x00''')
+		self._gigabyte_bif_pattern = re.compile(b'''\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\([a-z0-9]{1,8}\) EVALUATION ROM - NOT FOR SALE$''')
 		self._id_block_pattern = re.compile(b'''(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}IBM COMPATIBLE ''')
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \(c\) (?:[^\r]+)\r\n)?Copyright \(c\) (?:NCR \& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
-		self._version_pattern = re.compile(''' (?:v([^-\s]+)|Version [^0-9]*([0-9]\.[0-9]{2}))(?:[. ]([\\x20-\\x7F]+))?''')
+		self._version_pattern = re.compile(''' (?:v([^-\s]+)|Version [^0-9]*([0-9]\.[0-9]{2}))(?:[. ]([\\x20-\\x7E]+))?''')
 
 		self.register_check_list([
 			(self._version_ast,		RegexChecker),
@@ -1491,7 +1491,7 @@ class MRAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('MR', *args, **kwargs)
 
-		self._signon_pattern = re.compile(b'''OEM SIGNON >>-->([\\x20-\\x7F]+)''')
+		self._signon_pattern = re.compile(b'''OEM SIGNON >>-->([\\x20-\\x7E]+)''')
 
 		self.register_check_list([
 			(self._version_newer,	RegexChecker),
@@ -2192,7 +2192,7 @@ class SchneiderAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Schneider', *args, **kwargs)
 
-		self._version_pattern = re.compile(b'''EURO PC\s+BIOS (V[\\x20-\\x7F]+)''')
+		self._version_pattern = re.compile(b'''EURO PC\s+BIOS (V[\\x20-\\x7E]+)''')
 
 	def can_handle(self, file_data, header_data):
 		if b'Schneider Rundfunkwerke AG' not in file_data:
@@ -2358,7 +2358,7 @@ class TandonAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Tandon', *args, **kwargs)
 
-		self._version_pattern = re.compile(b'''NOT COPR. IBM 1984 BIOS VERSION ([\\x20-\\x7F]+)''')
+		self._version_pattern = re.compile(b'''NOT COPR. IBM 1984 BIOS VERSION ([\\x20-\\x7E]+)''')
 
 	def can_handle(self, file_data, header_data):
 		# Locate version.
@@ -2407,7 +2407,7 @@ class ToshibaAnalyzer(Analyzer):
 		super().__init__('Toshiba', *args, **kwargs)
 		self.vendor = 'Award'
 
-		self._string_pattern = re.compile(b'''(?:([\\x21-\\x7F]+\s*V[\\x21-\\x7F]{1,16}\s*)TOSHIBA |\\x00{3}BIOS[\\x00-\\xFF]{4}([\\x20-\\x7F]{16}))''')
+		self._string_pattern = re.compile(b'''(?:([\\x21-\\x7F]+\s*V[\\x21-\\x7F]{1,16}\s*)TOSHIBA |\\x00{3}BIOS[\\x00-\\xFF]{4}([\\x20-\\x7E]{16}))''')
 
 	def can_handle(self, file_data, header_data):
 		if not (b' TOSHIBA ' in file_data and b'Use Toshiba\'s BASIC.' in file_data) and b'Toshiba Corporation. & Award Software Inc.' not in file_data:
@@ -2477,7 +2477,7 @@ class ZenithAnalyzer(Analyzer):
 		super().__init__('Zenith', *args, **kwargs)
 
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2}) \(C\)ZDS CORP''')
-		self._monitor_pattern = re.compile(b'''[\\x20-\\x7F]+ Monitor, Version [\\x20-\\x7F]+''')
+		self._monitor_pattern = re.compile(b'''[\\x20-\\x7E]+ Monitor, Version [\\x20-\\x7E]+''')
 
 	def can_handle(self, file_data, header_data):
 		# Locate date.
