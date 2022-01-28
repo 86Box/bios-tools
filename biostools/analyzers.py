@@ -2477,6 +2477,7 @@ class ZenithAnalyzer(Analyzer):
 		super().__init__('Zenith', *args, **kwargs)
 
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2}) \(C\)ZDS CORP''')
+		self._monitor_pattern = re.compile(b'''[\\x20-\\x7F]+ Monitor, Version [\\x20-\\x7F]+''')
 
 	def can_handle(self, file_data, header_data):
 		# Locate date.
@@ -2486,5 +2487,10 @@ class ZenithAnalyzer(Analyzer):
 
 		# Extract date as a version.
 		self.version = match.group(1).decode('cp437', 'ignore')
+
+		# Extract monitor banner as a sign-on.
+		match = self._monitor_pattern.search(file_data)
+		if match:
+			self.signon = match.group(0).decode('cp437', 'ignore')
 
 		return True
