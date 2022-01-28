@@ -1468,21 +1468,21 @@ class JukoAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Juko', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version,	RegexChecker),
-		])
+		self._version_pattern = re.compile(b'''Juko (.+) BIOS ver (.+)''')
 
 	def can_handle(self, file_data, header_data):
-		return b'Juko Electronics Industrial Co.,Ltd.' in file_data
+		if b'Juko Electronics Industrial Co.,Ltd.' not in file_data:
+			return False
 
-	def _version(self, line, match):
-		'''Juko (.+) BIOS ver (.+)'''
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
 
 		# Extract version.
-		self.version = match.group(2)
+		self.version = match.group(2).decode('cp437', 'ignore')
 
 		# Extract string.
-		self.string = match.group(1)
+		self.string = match.group(1).decode('cp437', 'ignore')
 
 		return True
 
@@ -2192,18 +2192,19 @@ class SchneiderAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Schneider', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version,	RegexChecker),
-		])
+		self._version_pattern = re.compile(b'''EURO PC\s+BIOS (V[\\x20-\\x7F]+)''')
 
 	def can_handle(self, file_data, header_data):
-		return b'Schneider Rundfunkwerke AG' in file_data
+		if b'Schneider Rundfunkwerke AG' not in file_data:
+			return False
 
-	def _version(self, line, match):
-		'''EURO PC(?:\s+)BIOS (V.+)'''
+		# Locate version.
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
 
 		# Extract version.
-		self.version = match.group(1)
+		self.version = match.group(1).decode('cp437', 'ignore')
 
 		return True
 
@@ -2357,18 +2358,16 @@ class TandonAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Tandon', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version,	RegexChecker),
-		])
+		self._version_pattern = re.compile(b'''NOT COPR. IBM 1984 BIOS VERSION ([\\x20-\\x7F]+)''')
 
 	def can_handle(self, file_data, header_data):
-		return b'NOT COPR. IBM 1984 BIOS VERSION ' in file_data
-
-	def _version(self, line, match):
-		'''NOT COPR. IBM 1984 BIOS VERSION (.+)'''
+		# Locate version.
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
 
 		# Extract version.
-		self.version = match.group(1)
+		self.version = match.group(1).decode('cp437', 'ignore')
 
 		return True
 
@@ -2477,15 +2476,15 @@ class ZenithAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Zenith', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version_date,	RegexChecker)
-		])
+		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2}) \(C\)ZDS CORP''')
 
 	def can_handle(self, file_data, header_data):
-		return b'(C)ZDS CORP' in file_data and b'+++ Wild Hardware Interrupt! +++' in file_data
-
-	def _version_date(self, line, match):
-		'''^([0-9]{2}/[0-9]{2}/[0-9]{2}) \(C\)ZDS CORP'''
+		# Locate date.
+		match = self._date_pattern.search(file_data)
+		if not match:
+			return False
 
 		# Extract date as a version.
-		self.version = match.group(1)
+		self.version = match.group(1).decode('cp437', 'ignore')
+
+		return True
