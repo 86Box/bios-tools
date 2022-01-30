@@ -332,7 +332,8 @@ class AMIAnalyzer(Analyzer):
 		self._precolor_block_pattern = re.compile(b'''\(C\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
 		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6)''')
-		self._precolor_chipset_pattern = re.compile(b'''(SETUP PROGRAM FOR [\\x20-\\x7E]+)|(EMI 386 CHIPSET SETUP UTILITY)|(VLSI BIOS, 286 CHIPSET)|(CHIP & TECH SETUP PROGRAM)|( 286 BIOS)|(386 BIOS, NO CHIPSET)|([234]86-BIOS \(C\))''')
+		# "286/386/386sx/486-BIOS" are known ("386sx" = TriGem), others are what-if
+		self._precolor_chipset_pattern = re.compile(b'''(SETUP PROGRAM FOR [\\x20-\\x7E]+)|(EMI 386 CHIPSET SETUP UTILITY)|(VLSI BIOS, 286 CHIPSET)|(CHIP & TECH SETUP PROGRAM)|( 286 BIOS)|(386 BIOS, NO CHIPSET)|([0-9]86(?:[DdSs][Xx]|[Ss][Ll][Cc]?)?-BIOS \(C\))''')
 		self._precolor_extsetup_pattern = re.compile(b'''EXTENDED (?:CMOS )?SETUP PROGRAM''')
 		self._precolor_signon_pattern = re.compile(b'''BIOS \(C\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
 
