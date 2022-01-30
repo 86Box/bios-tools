@@ -1742,7 +1742,7 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Extract any additional information after the version
 		# and modified version numbers as part of the sign-on.
-		additional_info = match.group(4)
+		additional_info = (match.group(4) or '').strip()
 		if additional_info:
 			if additional_info[0] == '.':
 				additional_info = match.group(3).strip() + additional_info.strip()
