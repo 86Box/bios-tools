@@ -1626,6 +1626,8 @@ class PhoenixAnalyzer(Analyzer):
 		# "All Rights Reserved\r\n\n" (ROM BIOS)
 		# "All Rights Reserved\r\n\r\n\r\n" (Gateway 4DX2-50V)
 		self._rombios_signon_pattern = re.compile(b'''\\x0D\\x0AAll Rights Reserved\\x0D\\x0A(?:\\x0A(?:\\x00(?:[\\x90\\xF4]\\x01)?)?|\\x0D\\x0A\\x0D\\x0A)''')
+		# No "All Rights Reserved" (Yangtech 2.27 / pxxt)
+		self._rombios_signon_alt_pattern = re.compile(b'''\\(R\\)eboot, other keys to continue\\x00\\xFF+''')
 		self._bcpsys_datetime_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/(?:[0-9]{2}) ''')
 		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''')
 		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\.86(?:[0-9A-Z])\.(?:[0-9A-Z]{4})\.(?:[0-9A-Z]{3})\.(?:[0-9]{10})$''')
@@ -1703,6 +1705,8 @@ class PhoenixAnalyzer(Analyzer):
 			else:
 				# Extract sign-on from Ax86 and older BIOSes.
 				match = self._rombios_signon_pattern.search(file_data)
+				if not match:
+					match = self._rombios_signon_alt_pattern.search(file_data)
 				if match:
 					end = match.end(0)
 					if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
