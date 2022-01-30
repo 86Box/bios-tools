@@ -1122,7 +1122,7 @@ class BonusAnalyzer(Analyzer):
 							device = None
 
 						# Take valid data only.
-						if device_id != b'\x00\x00\x00\x00' and (vendor or device):
+						if device_id[:2] != b'\x00\x00' and (vendor or device):
 							# Add PnP ID (endianness swapped to help the front-end in
 							# processing it), vendor name and device name to the list.
 							self.oroms.append((struct.unpack('>I', device_id)[0], vendor, device))
