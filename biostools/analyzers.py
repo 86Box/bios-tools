@@ -1618,6 +1618,8 @@ class PhoenixAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Phoenix', *args, **kwargs)
 
+		# "Phoenix ROM BIOS" (Dell Latitude CP/CPI)
+		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess''')
 		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Ax86)
 		# "All Rights Reserved\r\n\n\x00" (Commodore 386LT, Tandy 1000RSX)
 		# "All Rights Reserved\r\n\n" (ROM BIOS)
@@ -1663,8 +1665,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._found_signon_tandy = ''
 
 	def can_handle(self, file_data, header_data):
-		# "Phoenix ROM BIOS" (Dell Latitude CP/CPI)
-		if b'Phoenix Technologies Ltd' not in file_data and b'Phoenix ROM BIOS' not in file_data and b'PPhhooeenniixx  TTeecchhnnoollooggiieess' not in file_data:
+		if not self._phoenix_pattern.search(file_data):
 			return False
 
 		# Skip Windows 95 INF updates.
