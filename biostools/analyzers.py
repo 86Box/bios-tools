@@ -1445,7 +1445,11 @@ class IntelUEFIAnalyzer(Analyzer):
 		super().__init__('Intel', *args, **kwargs)
 		self.vendor_id = 'IntelUEFI'
 
-		self._identifier_pattern = re.compile(b'''(?:\\$(?:IBIOSI\\$|FID|UBI)|Load Error\\x00{2}Success\\x00|S\\x00l\\x00o\\x00t\\x00 \\x00\\x30\\x00:\\x00 \\x00+)([0-9A-Z]{8}\\.[0-9A-Z]{3}(?:\\.[0-9]{4}){4})''')
+		# The Intel version's location is not super consistent throughout the
+		# years. The second path helps here by providing a second opinion,
+		# though one that might fail if a weird version string is somehow found.
+		self._identifier_pattern = re.compile(b'''(?:\\$(?:IBIOSI\\$|FID|UBI)|Load Error\\x00{2}Success\\x00|S\\x00l\\x00o\\x00t\\x00 \\x00\\x30\\x00:\\x00 \\x00+)([0-9A-Z]{8}\\.[0-9A-Z]{3}(?:\\.[0-9]{4}){4})|'''
+											  b'''([A-Z]{2}[0-9A-Z]{3}[0-9]{2}[A-Z]\\.[0-9]{2}[A-Z](?:\\.[0-9]{4}){4})''')
 
 	def can_handle(self, file_data, header_data):
 		# Only handle files sent through UEFIExtractor.
@@ -1459,8 +1463,8 @@ class IntelUEFIAnalyzer(Analyzer):
 
 		self.version = 'UEFI'
 
-		# Extract sign-on.
-		self.signon = match.group(1).decode('cp437', 'ignore')
+		# Extract Intel version as a sign-on.
+		self.signon = (match.group(1) or match.group(2)).decode('cp437', 'ignore')
 
 		return True
 
