@@ -824,6 +824,7 @@ class AwardAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Award', *args, **kwargs)
 
+		self._award_pattern = re.compile(b'''Award (?:Software Inc\\.|Decompression Bios)''')
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
 		self._gigabyte_bif_pattern = re.compile(b'''\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\([a-zA-Z0-9]{1,8}\) EVALUATION ROM - NOT FOR SALE$''')
@@ -840,7 +841,7 @@ class AwardAnalyzer(Analyzer):
 		])
 
 	def can_handle(self, file_data, header_data):
-		if b'Award Software Inc.' not in file_data and b'Award Decompression Bios' not in file_data:
+		if not self._award_pattern.search(file_data):
 			return False
 
 		# Skip Windows 95 INF updates and Award VBIOS.
