@@ -165,7 +165,7 @@ AMI940725Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	uint32_t BootOffset;
 	int fd;
 
-	BootOffset = AMIBOffset & 0xFFFF0000;
+	BootOffset = AMIBOffset & 0xFFFE0000;
 
 	printf("0x%05X (%6d bytes) -> amiboot.rom\n", BootOffset,
 	       BIOSLength - BootOffset);
@@ -292,7 +292,7 @@ AMI941010Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	uint32_t BootOffset;
 	int fd;
 
-	BootOffset = AMIBOffset & 0xFFFF0000;
+	BootOffset = AMIBOffset & 0xFFFE0000;
 
 	printf("0x%05X (%6d bytes) -> amiboot.rom\n", BootOffset,
 	       BIOSLength - BootOffset);
