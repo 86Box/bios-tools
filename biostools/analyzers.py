@@ -1393,6 +1393,34 @@ class IBMAnalyzer(Analyzer):
 			return False
 
 
+class IBMSurePathAnalyzer(Analyzer):
+	def __init__(self, *args, **kwargs):
+		super().__init__('IBM', *args, **kwargs)
+		self.vendor_id = 'IBMSurePath'
+
+		self._ibm_pattern = re.compile(b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4  AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD''')
+		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
+
+	def can_handle(self, file_data, header_data):
+		if not self._ibm_pattern.search(file_data):
+			return False
+
+		# Determine location of the version.
+		match = self._surepath_pattern.search(file_data)
+		if not match:
+			return False
+
+		# Extract version.
+		self.version = 'SurePath ' + match.group(1).decode('cp437', 'ignore')
+
+		# Extract customization if found. (AT&T Globalyst)
+		customization = match.group(2)
+		if customization:
+			self.signon = customization.decode('cp437', 'ignore')
+
+		return True
+
+
 class ICLAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('ICL', *args, **kwargs)
