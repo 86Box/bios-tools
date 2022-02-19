@@ -1821,6 +1821,17 @@ class PhoenixAnalyzer(Analyzer):
 		if ' Setup' in branch:
 			return False
 
+		# Strip "." and ".U" (IBM/Lenovo).
+		if branch[-1:] == 'U':
+			branch = branch[:-1]
+		if branch[-1:] == '.':
+			branch = branch[:-1]
+
+		# Trim branch before "for" (IBM/Lenovo).
+		for_index = branch.find(' for ')
+		if for_index > -1:
+			branch = branch[:for_index]
+
 		# Extract branch, while removing extraneous trademark
 		# symbols and changing the Server abbreviation.
 		self.version = branch.replace('(tm)', '')
