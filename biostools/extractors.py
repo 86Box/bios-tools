@@ -38,6 +38,61 @@ class Extractor:
 		print('{0}:'.format(self.__class__.__name__), *args, file=sys.stderr)
 
 
+class ApricotExtractor(Extractor):
+	"""Extract Apricot BIOS recovery files. Only one instance of this format
+	   (Trimond Trent) has been observed, let us know if you find any other!"""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		self._apricot_pattern = re.compile(b'''@\\(#\\)Apricot ''')
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if this isn't a slightly-bigger-than-power-of-two file.
+		# The only observed file has a 2071-byte header.
+		try:
+			file_size = os.path.getsize(file_path)
+		except:
+			return False
+		pow2 = 1 << math.floor(math.log2(file_size))
+		if file_size < 4096 or file_size <= pow2 or file_size > pow2 + 4096:
+			return False
+
+		# Look for the Apricot signature as a safety net.
+		if not self._apricot_pattern.search(file_header):
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Separate file and header.
+		try:
+			# Open Apricot file.
+			in_f = open(file_path, 'rb')
+
+			# Copy header.
+			out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+			out_f.write(in_f.read(file_size - pow2))
+			out_f.close()
+
+			# Copy payload.
+			out_f = open(os.path.join(dest_dir, 'apricot.bin'), 'wb')
+			data = b' '
+			while data:
+				data = in_f.read(1048576)
+				out_f.write(data)
+			out_f.close()
+
+			# Remove Apricot file.
+			in_f.close()
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory path.
+		return dest_dir
+
 class ArchiveExtractor(Extractor):
 	"""Extract known archive types."""
 
@@ -777,20 +832,20 @@ class ISOExtractor(ArchiveExtractor):
 					match = self._eltorito_pattern.search(file_header)
 					if match:
 						# Start a new El Torito extraction file.
-						f_o = open(elt_path, 'wb')
+						out_f = open(elt_path, 'wb')
 
 						# Copy the entire ISO data starting from the boot offset.
 						# Parsing the MBR would have pitfalls of its own...
-						f_i = open(file_path, 'rb')
-						f_i.seek(struct.unpack('<I', match.group(1))[0] * 2048)
+						in_f = open(file_path, 'rb')
+						in_f.seek(struct.unpack('<I', match.group(1))[0] * 2048)
 						data = b' '
 						while data:
-							data = f_i.read(1048576)
-							f_o.write(data)
-						f_i.close()
+							data = in_f.read(1048576)
+							out_f.write(data)
+						in_f.close()
 
 						# Finish new file.
-						f_o.close()
+						out_f.close()
 
 		# Remove ISO file if it was successfully extracted.
 		if ret:
@@ -1052,18 +1107,18 @@ class InterleaveExtractor(Extractor):
 		# Deinterleave in both directions, as some pairs may contain the
 		# same interleaved string on both parts. Also save interleaved
 		# copies, as some pairs deinterleave incorrectly.
-		f_ia = open(file_path, 'rb')
-		f_ib = open(counterpart_path, 'rb')
-		f_oa = open(os.path.join(dest_dir, 'deinterleaved_a.bin'), 'wb')
-		f_ob = open(os.path.join(dest_dir, 'deinterleaved_b.bin'), 'wb')
-		f_ca = open(os.path.join(dest_dir, 'interleaved_a.bin'), 'wb')
-		f_cb = open(os.path.join(dest_dir, 'interleaved_b.bin'), 'wb')
+		in_fa = open(file_path, 'rb')
+		in_fb = open(counterpart_path, 'rb')
+		out_fa = open(os.path.join(dest_dir, 'deinterleaved_a.bin'), 'wb')
+		out_fb = open(os.path.join(dest_dir, 'deinterleaved_b.bin'), 'wb')
+		copy_fa = open(os.path.join(dest_dir, 'interleaved_a.bin'), 'wb')
+		copy_fb = open(os.path.join(dest_dir, 'interleaved_b.bin'), 'wb')
 		data = bytearray(1048576)
 		write_len = 1
 		while True:
 			# Read both parts.
-			data_a = f_ia.read(len(data))
-			data_b = f_ib.read(len(data))
+			data_a = in_fa.read(len(data))
+			data_b = in_fb.read(len(data))
 			write_len = min(len(data_a), len(data_b))
 
 			# Stop if we've read everything.
@@ -1078,22 +1133,22 @@ class InterleaveExtractor(Extractor):
 			# Write in one direction.
 			data[:data_a_slice:2] = data_a
 			data[1:data_b_slice:2] = data_b
-			f_oa.write(data[:write_len])
+			out_fa.write(data[:write_len])
 
 			# Write in the other direction.
 			data[:data_b_slice:2] = data_b
 			data[1:data_a_slice:2] = data_a
-			f_ob.write(data[:write_len])
+			out_fb.write(data[:write_len])
 
 			# Write interleaved copies.
-			f_ca.write(data_a)
-			f_cb.write(data_b)
-		f_ia.close()
-		f_ib.close()
-		f_oa.close()
-		f_ob.close()
-		f_ca.close()
-		f_cb.close()
+			copy_fa.write(data_a)
+			copy_fb.write(data_b)
+		in_fa.close()
+		in_fb.close()
+		out_fa.close()
+		out_fb.close()
+		copy_fa.close()
+		copy_fb.close()
 
 		# Remove both files.
 		try:
@@ -1323,20 +1378,20 @@ class TrimondExtractor(Extractor):
 
 		# Join both files together.
 		counterpart_path = os.path.join(dir_path, counterpart_candidate)
-		f_o = open(os.path.join(dest_dir, counterpart_candidate), 'wb')
-		f_i = open(file_path, 'rb')
+		out_f = open(os.path.join(dest_dir, counterpart_candidate), 'wb')
+		in_f = open(file_path, 'rb')
 		data = b' '
 		while data:
-			data = f_i.read(1048576)
-			f_o.write(data)
-		f_i.close()
-		f_i = open(counterpart_path, 'rb')
+			data = in_f.read(1048576)
+			out_f.write(data)
+		in_f.close()
+		in_f = open(counterpart_path, 'rb')
 		data = b' '
 		while data:
-			data = f_i.read(1048576)
-			f_o.write(data)
-		f_i.close()
-		f_o.close()
+			data = in_f.read(1048576)
+			out_f.write(data)
+		in_f.close()
+		out_f.close()
 
 		# Create dummy header file on the destination directory.
 		open(os.path.join(dest_dir, ':header:'), 'wb').close()

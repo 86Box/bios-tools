@@ -104,6 +104,7 @@ def extract_process(queue, dir_number_path, next_dir_number_path):
 		extractors.ArchiveExtractor(),
 		extractors.HexExtractor(),
 		extractors.ImageExtractor(),
+		extractors.ApricotExtractor(),
 		extractors.DellExtractor(),
 		extractors.IntelExtractor(),
 		extractors.OMFExtractor(),
