@@ -29,13 +29,15 @@ def all_match(patterns, data):
 	# Python is smart enough to stop generation when a None is found.
 	return None not in (pattern.search(data) for pattern in patterns)
 
-def alnum_key(s):
+def alnum_key(s, difference=0):
 	"""Key function which takes any number at the start of the string into
-	   consideration, similarly to the Windows filename sorting algorithm."""
+	   consideration, similarly to the Windows filename sorting algorithm.
+	   The optional difference transforms any found number such that
+	   returned = abs(num - difference)."""
 	if type(s) == str:
 		match = number_pattern.match(s)
 		if match:
-			return (int(match.group(0)), s[match.end():])
+			return (abs(int(match.group(0)) - difference), s[match.end():])
 	return (math.inf, s)
 
 def closest_prefix(base, candidates, candidate_key=lambda x: x):
@@ -62,13 +64,17 @@ def closest_prefix(base, candidates, candidate_key=lambda x: x):
 		# Remove next letter.
 		limit -= 1
 
-	# Try a backup comparison strategy if multiple candidates were found.
+	# Try a backup number-distance comparison strategy if multiple
+	# candidates were found, or stop if none were found at all.
 	if len(candidates_copy) > 1:
-		candidates_copy.sort(key=alnum_key)
+		difference, _ = alnum_key(candidate_key(base))
+		if difference == math.inf:
+			difference = 0
+		candidates_copy.sort(key=lambda x: alnum_key(candidate_key(x), difference))
 	elif len(candidates_copy) < 1:
 		return None
 
-	# Return the found candidate.
+	# Return the first/only candidate.
 	return candidates_copy[0]
 
 def date_cmp(date1, date2, pattern):
