@@ -977,7 +977,7 @@ class InterleaveExtractor(Extractor):
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if this was already deinterleaved.
-		dir_path = os.path.dirname(file_path)
+		dir_path, file_name = os.path.split(file_path)
 		if os.path.exists(os.path.join(dir_path, ':combined:')):
 			return False
 
@@ -1002,7 +1002,6 @@ class InterleaveExtractor(Extractor):
 
 		# Try to find this file's counterpart in the directory.
 		counterpart_candidates = []
-		file_name = os.path.basename(file_path)
 		file_size = os.path.getsize(file_path)
 		for file_in_dir in os.listdir(dir_path):
 			# Skip this file.
@@ -1039,32 +1038,12 @@ class InterleaveExtractor(Extractor):
 			# Add to the list of candidates.
 			counterpart_candidates.append(file_in_dir)
 
-		# Remove any file extension for comparison purposes.
-		file_name_base = util.remove_extension(file_name)
-
-		# If we have more than one candidate, try to narrow down by filename
-		# similarity, removing one letter at a time. Our ultimate goal is for
-		# the copied candidates list to be narrowed down to one candidate.
-		limit = len(file_name_base)
-		candidates_copy = counterpart_candidates # not a copy, but if we have one candidate already, this will do
-		while len(candidates_copy) != 1 and limit > 0:
-			# Copy the candidates list.
-			candidates_copy = counterpart_candidates[::]
-
-			# Compare all candidates.
-			for candidate in counterpart_candidates:
-				# Remove candidate if the file name (up to the limit) doesn't match.
-				candidate_base = util.remove_extension(candidate)
-				if candidate_base[:limit] != file_name_base[:limit]:
-					candidates_copy.remove(candidate)
-
-			# Remove next letter.
-			limit -= 1
-
-		# Stop if we have no candidates left.
-		if limit == 0 or len(candidates_copy) < 1:
+		# Find the closest counterpart candidate to this
+		# file, and stop if no counterpart was found.
+		counterpart_candidate = util.closest_prefix(file_name, counterpart_candidates, lambda x: util.remove_extension(x).lower())
+		if not counterpart_candidate:
 			return False
-		counterpart_path = os.path.join(dir_path, candidates_copy[0])
+		counterpart_path = os.path.join(dir_path, counterpart_candidate)
 
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
@@ -1292,6 +1271,87 @@ class TarExtractor(ArchiveExtractor):
 
 		# Not a tar archive.
 		return False
+
+
+class TrimondExtractor(Extractor):
+	"""Extract Trimond/Mitsubishi BIOS updates."""
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Act only on files at least 128 KB with a chunk of 8-32 KB missing, as a
+		# safety margin since only 256-minus-16 KB images have been observed so far.
+		try:
+			file_size = os.path.getsize(file_path)
+		except:
+			return False
+		if file_size < 131072:
+			return False
+		pow2 = 1 << math.ceil(math.log2(file_size))
+		if pow2 - file_size not in (8192, 16384, 32768):
+			return False
+
+		# As a second safety layer, check for Trimond's flasher files.
+		dir_path, file_name = os.path.split(file_path)
+		dir_files = os.listdir(dir_path)
+		dir_files_lower = [filename.lower() for filename in dir_files]
+		if 'aflash.exe' not in dir_files_lower or 'cnv.exe' not in dir_files_lower or 'b.bat' not in dir_files_lower:
+			return False
+
+		# Look for other counterpart candidates.
+		counterpart_candidates = []
+		for counterpart_name in dir_files:
+			if counterpart_name == file_name:
+				continue
+
+			try:
+				counterpart_size = os.path.getsize(os.path.join(dir_path, counterpart_name))
+			except:
+				continue
+
+			# Must add up to the next power of two.
+			if (file_size + counterpart_size) == pow2:
+				counterpart_candidates.append(counterpart_name)
+
+		# Find the closest counterpart candidate to this
+		# file, and stop if no counterpart was found.
+		counterpart_candidate = util.closest_prefix(file_name, counterpart_candidates, lambda x: util.remove_extension(x).lower())
+		if not counterpart_candidate:
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Join both files together.
+		counterpart_path = os.path.join(dir_path, counterpart_candidate)
+		f_o = open(os.path.join(dest_dir, counterpart_candidate), 'wb')
+		f_i = open(file_path, 'rb')
+		data = b' '
+		while data:
+			data = f_i.read(1048576)
+			f_o.write(data)
+		f_i.close()
+		f_i = open(counterpart_path, 'rb')
+		data = b' '
+		while data:
+			data = f_i.read(1048576)
+			f_o.write(data)
+		f_i.close()
+		f_o.close()
+
+		# Create dummy header file on the destination directory.
+		open(os.path.join(dest_dir, ':header:'), 'wb').close()
+
+		# Remove files.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+		try:
+			os.remove(counterpart_path)
+		except:
+			pass
+
+		return dest_dir
 
 
 class UEFIExtractor(Extractor):

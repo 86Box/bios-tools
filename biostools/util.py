@@ -15,10 +15,11 @@
 #
 #                Copyright 2021 RichardG.
 #
-import multiprocessing, os, re, traceback, urllib.request
+import multiprocessing, os, math, re, traceback, urllib.request
 from biostools.pciutil import *
 
 date_pattern_mmddyy = re.compile('''(?P<month>[0-9]{2})/(?P<day>[0-9]{2})/(?P<year>[0-9]{2,4})''')
+number_pattern = re.compile('''[0-9]+''')
 
 _error_log_lock = multiprocessing.Lock()
 
@@ -28,7 +29,52 @@ def all_match(patterns, data):
 	# Python is smart enough to stop generation when a None is found.
 	return None not in (pattern.search(data) for pattern in patterns)
 
+def alnum_key(s):
+	"""Key function which takes any number at the start of the string into
+	   consideration, similarly to the Windows filename sorting algorithm."""
+	if type(s) == str:
+		match = number_pattern.match(s)
+		if match:
+			return (int(match.group(0)), s[match.end():])
+	return (math.inf, s)
+
+def closest_prefix(base, candidates, candidate_key=lambda x: x):
+	"""Finds the closest prefix counterpart to base in candidates.
+	   Returns None if no good match was found."""
+
+	# Apply key function to the base.
+	base = candidate_key(base)
+
+	# Narrow down by removing one letter at a time.
+	limit = len(base)
+	candidates_copy = candidates # not a copy, but if we have one candidate already, this will do
+	while len(candidates_copy) != 1 and limit > 0:
+		# Copy the candidates list.
+		candidates_copy = candidates[::]
+
+		# Compare all candidates.
+		for candidate in candidates:
+			# Remove candidate if the file name (applying the key function, up to the limit) doesn't match.
+			candidate_base = candidate_key(candidate)
+			if candidate_base[:limit] != base[:limit]:
+				candidates_copy.remove(candidate)
+
+		# Remove next letter.
+		limit -= 1
+
+	# Try a backup comparison strategy if multiple candidates were found.
+	if len(candidates_copy) > 1:
+		candidates_copy.sort(key=alnum_key)
+	elif len(candidates_copy) < 1:
+		return None
+
+	# Return the found candidate.
+	return candidates_copy[0]
+
 def date_cmp(date1, date2, pattern):
+	"""Returns the comparison difference between date1 and date2.
+	   Date format set by the given pattern."""
+
 	# Run date regex.
 	date1_match = pattern.match(date1 or '')
 	date2_match = pattern.match(date2 or '')

@@ -107,6 +107,7 @@ def extract_process(queue, dir_number_path, next_dir_number_path):
 		extractors.DellExtractor(),
 		extractors.IntelExtractor(),
 		extractors.OMFExtractor(),
+		extractors.TrimondExtractor(),
 		extractors.InterleaveExtractor(),
 		extractors.BIOSExtractor(),
 		extractors.UEFIExtractor(),
