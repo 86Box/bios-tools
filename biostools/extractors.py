@@ -100,17 +100,17 @@ class ArchiveExtractor(Extractor):
 		super().__init__(*args, **kwargs)
 
 		# Known signatures for archive files.
-		self._archive_signatures = [
-			b'PK\x03\x04', # zip
-			b'Rar!\x1A\x07', # rar
-			b'7z\xBC\xAF\x27\x1C', # 7z
-			b'MSCF', # cab
-			b'\x1F\x8B', # gzip
-			b'BZh', # bzip2
-			b'\xFD7zXZ\x00', # xz
-			b'LHA\x20', # lha
-			b'ZOO', # zoo
-		]
+		self._signature_pattern = re.compile(
+			b'''PK\\x03\\x04|''' # zip
+			b'''Rar!\\x1A\\x07|''' # rar
+			b'''7z\\xBC\\xAF\\x27\\x1C|''' # 7z
+			b'''MSCF|''' # cab
+			b'''\\x1F\\x8B|''' # gzip
+			b'''BZh|''' # bzip2
+			b'''\\xFD7zXZ\\x00|''' # xz
+			b'''LHA\\x20|''' # lha
+			b'''ZOO''' # zoo
+		)
 
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
@@ -118,15 +118,8 @@ class ArchiveExtractor(Extractor):
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract an archive."""
 
-		# Determine if this is an archive through file signatures.
-		is_archive = False
-		for signature in self._archive_signatures:
-			if file_header[:len(signature)] == signature:
-				is_archive = True
-				break
-
 		# Stop if this is apparently not an archive.
-		if not is_archive:
+		if not self._signature_pattern.match(file_header):
 			return False
 
 		# Do the actual extraction.
@@ -1196,7 +1189,7 @@ class MBRUnsafeExtractor(MBRSafeExtractor):
 		return True
 
 
-class OMFExtractor(ArchiveExtractor):
+class OMFExtractor(Extractor):
 	"""Extract Fujitsu/ICL OMF BIOS files."""
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
@@ -1312,17 +1305,20 @@ class PEExtractor(ArchiveExtractor):
 class TarExtractor(ArchiveExtractor):
 	"""Extract tar archives."""
 
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		# 00 00 00 = POSIX tar
+		# 20 20 00 = GNU tar
+		# 00 30 30 = some other form of tar?
+		self._signature_pattern = re.compile(b'''ustar(?:\\x00(?:\\x00\\x00|\\x30\\x30)|\\x20\\x20\\x00)''')
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Determine if this is a tar archive.
 		for offset in (0, 257):
-			for pattern in (
-				b'ustar\x00\x00\x00', # POSIX tar
-				b'ustar\x20\x20\x00', # GNU tar
-				b'ustar\x00\x30\x30', # some other form of tar?
-			):
-				if file_header[offset:offset + len(pattern)] == pattern:
-					# Extract this as an archive.
-					return self._extract_archive(file_path, dest_dir)
+			if self._signature_pattern.match(file_header[offset:offset + 8]):
+				# Extract this as an archive.
+				return self._extract_archive(file_path, dest_dir)
 
 		# Not a tar archive.
 		return False
