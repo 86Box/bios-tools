@@ -54,8 +54,10 @@ class ApricotExtractor(Extractor):
 			file_size = os.path.getsize(file_path)
 		except:
 			return False
+		if file_size < 4096:
+			return False
 		pow2 = 1 << math.floor(math.log2(file_size))
-		if file_size < 4096 or file_size <= pow2 or file_size > pow2 + 4096:
+		if file_size <= pow2 or file_size > pow2 + 4096:
 			return False
 
 		# Look for the Apricot signature as a safety net.
