@@ -1400,6 +1400,7 @@ class IBMSurePathAnalyzer(Analyzer):
 
 		self._ibm_pattern = re.compile(b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4  AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD''')
 		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
+		self._apricot_pattern = re.compile(b'''@\\(#\\)Apricot .+ BIOS [\\x20-\\x7E]+''')
 
 	def can_handle(self, file_data, header_data):
 		if not self._ibm_pattern.search(file_data):
@@ -1407,16 +1408,26 @@ class IBMSurePathAnalyzer(Analyzer):
 
 		# Determine location of the version.
 		match = self._surepath_pattern.search(file_data)
-		if not match:
-			return False
+		if match:
+			# Extract version.
+			self.version = 'SurePath ' + match.group(1).decode('cp437', 'ignore').strip()
 
-		# Extract version.
-		self.version = 'SurePath ' + match.group(1).decode('cp437', 'ignore')
+			# Extract customization as a sign-on if found. (AT&T Globalyst)
+			customization = match.group(2)
+			if customization:
+				self.signon = customization.decode('cp437', 'ignore')
+		else:
+			# Special case for Apricot-licensed SurePath.
+			match = self._apricot_pattern.search(file_data)
+			if match:
+				# There appears to be a real SurePath version number hidden
+				# in there (2.0) but it must be inside a compressed body.
+				self.version = 'SurePath'
 
-		# Extract customization if found. (AT&T Globalyst)
-		customization = match.group(2)
-		if customization:
-			self.signon = customization.decode('cp437', 'ignore')
+				# Extract Apricot customization as a sign-on.
+				self.signon = match.group(0).decode('cp437', 'ignore')[4:]
+			else:
+				return False
 
 		return True
 
