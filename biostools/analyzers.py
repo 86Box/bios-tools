@@ -1871,10 +1871,10 @@ class PhoenixAnalyzer(Analyzer):
 		if ' Setup' in branch:
 			return False
 
-		# Strip "." and ".U" (IBM/Lenovo).
-		if branch[-1:] == 'U':
-			branch = branch[:-1]
-		if branch[-1:] == '.':
+		# Strip ".", ".U" (IBM/Lenovo) and ".S" (MSI K9ND Speedster2).
+		if branch[-2] == '.':
+			branch = branch[:-2]
+		elif branch[-1] == '.':
 			branch = branch[:-1]
 
 		# Trim branch before "for" (IBM/Lenovo).
