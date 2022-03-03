@@ -2283,7 +2283,7 @@ class SystemSoftAnalyzer(Analyzer):
 
 		self._systemsoft_pattern = re.compile(b'''(?:SystemSoft|Insyde Software Presto) BIOS ''')
 		self._version_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x7E]+) Vers(?:\\.|ion) 0?([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
-		self._version_mobilepro_pattern = re.compile(b'''SystemSoft (MobilePRO) BIOS Version ([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
+		self._version_mobilepro_pattern = re.compile(b'''(Insyde Software Presto|SystemSoft MobilePRO) BIOS Version ([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
 		self._string_for_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x27\\x29-\\x7E]+)\\(''')
 		self._string_scu_pattern = re.compile(b''' SCU [Ff]or ([\\x20-\\x7E]+) [Cc]hipset''')
 		self._signon_pattern = re.compile(b'''(?:\\x0D\\x0A){1,}\\x00\\x08\\x00([\\x20-\\x7E]+)''')
@@ -2311,11 +2311,11 @@ class SystemSoftAnalyzer(Analyzer):
 			if additional_info:
 				self.string = self.string.strip() + ' ' + additional_info.decode('cp437', 'ignore').strip()
 
-		# Look for the MobilePRO version string.
+		# Look for the MobilePRO/Presto version string.
 		mp_match = self._version_mobilepro_pattern.search(file_data)
 		if mp_match:
 			# Extract version.
-			self.version = (mp_match.group(1) + b' ' + mp_match.group(2)).decode('cp437', 'ignore')
+			self.version = (mp_match.group(1).split(b' ')[-1] + b' ' + mp_match.group(2)).decode('cp437', 'ignore')
 
 			# Extract any additional information after the version into the string.
 			additional_info = mp_match.group(3)
