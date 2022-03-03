@@ -906,7 +906,7 @@ class AwardAnalyzer(Analyzer):
 				match = self._gigabyte_bif_pattern.search(file_data)
 				if match:
 					self.signon = (match.group(1) + b' ' + match.group(2)).decode('cp437', 'ignore')
-			elif 'Award' not in version_string.split('\n')[0]: # "386SX Modular BIOS v3.15"
+			elif 'Award' not in version_string.split('\n')[0] or '8088 Modular' in version_string: # "386SX Modular BIOS v3.15", "i-8088 Modular BIOS Version 3.0F"
 				# Extract early Modular type as the string.
 				match = self._early_modular_prefix_pattern.match(version_string)
 				if match:
