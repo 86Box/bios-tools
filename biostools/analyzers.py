@@ -1401,7 +1401,8 @@ class IBMSurePathAnalyzer(Analyzer):
 		self._ibm_pattern = re.compile(b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4  AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD''')
 		self._ibm_later_pattern = re.compile(b''' Partnum \\(C\\) COPYRIGHT IBM CORPORATION 1981, 1998 ALL RIGHTS RESERVED \\x00{10}''')
 		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
-		self._apricot_pattern = re.compile(b'''@\\(#\\)Apricot .+ BIOS [\\x20-\\x7E]+''')
+		self._apricot_pattern = re.compile(b'''@\\(#\\)Apricot .* BIOS [\\x20-\\x7E]+''')
+		self._apricot_version_pattern = re.compile(b'''@\\(#\\)Version [\\x20-\\x7E]+''')
 
 	def can_handle(self, file_data, header_data):
 		if not self._ibm_pattern.search(file_data):
@@ -1432,6 +1433,9 @@ class IBMSurePathAnalyzer(Analyzer):
 
 				# Extract Apricot customization as a sign-on.
 				self.signon = match.group(0).decode('cp437', 'ignore')[4:]
+				match = self._apricot_version_pattern.search(file_data)
+				if match:
+					self.signon = self.signon.strip() + '\n' + match.group(0).decode('cp437', 'ignore')[4:].strip()
 			else:
 				return False
 
