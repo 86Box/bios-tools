@@ -186,14 +186,14 @@ class BIOSExtractor(Extractor):
 			# Bad data can cause infinite loops.
 			pass
 
-		# Assume failure if nothing was extracted. A lone amiboot.bin also counts as a failure, since
-		# the AMI extractor writes the boot block before attempting to extract any actual BIOS modules.
+		# Assume failure if nothing was extracted. A lone boot block file also counts as a failure,
+		# as the extractors produce them before attempting to extract any actual BIOS modules.
 		dest_dir_files = os.listdir(dest_dir_0)
 		num_files_extracted = len(dest_dir_files)
 		if num_files_extracted < 1:
 			return False
 		elif num_files_extracted == 1 and dest_dir_files[0] in ('amiboot.rom', 'ssboot.rom'):
-			# Remove amiboot so that the destination directory can be rmdir'd later.
+			# Remove boot block file so that the destination directory can be rmdir'd later.
 			try:
 				os.remove(os.path.join(dest_dir_0, dest_dir_files[0]))
 			except:

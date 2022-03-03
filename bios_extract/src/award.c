@@ -39,6 +39,7 @@ AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	unsigned int BufferSize, PackedSize;
 	char *filename;
 	unsigned short crc;
+	Bool First = TRUE;
 
 	printf("Found Award BIOS.\n");
 
@@ -48,6 +49,25 @@ AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		if (!p)
 			break;
 		p -= 2;
+
+		if (First) {
+			First = FALSE;
+			BufferSize = p - BIOSImage;
+			if (BufferSize > 0) {
+				filename = "awardboot.rom";
+				printf("0x00000 (%6d bytes)    ->    %s\n",
+				       BufferSize, filename);
+
+				Buffer = MMapOutputFile(filename, BufferSize);
+				if (!Buffer)
+					return FALSE;
+
+				memcpy(Buffer, BIOSImage, BufferSize);
+
+				munmap(Buffer, BufferSize);
+			}
+		}
+
 		HeaderSize = LH5HeaderParse(p, BIOSLength - (p - BIOSImage),
 					    &BufferSize, &PackedSize, &filename,
 					    &crc);
@@ -69,5 +89,5 @@ AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		p += HeaderSize + PackedSize;
 	}
 
-	return TRUE;
+	return !First;
 }
