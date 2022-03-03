@@ -76,8 +76,9 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 * EPA (Award), PCX (AMI) and other image formats are automatically converted to PNG if the aforementioned optional dependency is installed.
 * Some Intel motherboard BIOSes (particularly from the AMIBIOS 6 era) will not be extracted properly due to a different address line inversion mechanism. This is a known issue with the Intel update format concatenator which may eventually be solved.
 * Extraction of the following BIOS distribution formats is **not implemented** due to the use of unknown compression methods:
+  * Disk eXPress (DXP) floppy self-extractor, used by HP
   * Evergreen `.ETI`
-  * IBM Sydex floppy self-extractor (compressed/encoded version of CopyQM RLE)
+  * Sydex floppy self-extractor (compressed/encoded version of CopyQM RLE), used by IBM
   * ICL `.LDB`
 
 ## Analysis notes
@@ -100,6 +101,10 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 
 * Identification is **not perfect**, as the location of identification data varies from version to version, and a lot of OEMs mess with it.
 * Phoenix has no concept of a string. Any date or time found in the BIOS is interpreted as the string.
+
+### SystemSoft
+
+* Insyde-compressed modules (identified by magic bytes `FF 88`) cannot be decompressed, limiting the analyzer's ability to identify Insyde-branded SystemSoft BIOSes.
 
 ## Add-on reference
 
