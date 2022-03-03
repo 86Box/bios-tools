@@ -828,11 +828,12 @@ class AwardAnalyzer(Analyzer):
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
 		self._gigabyte_bif_pattern = re.compile(b'''\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\([a-zA-Z0-9]{1,8}\) EVALUATION ROM - NOT FOR SALE$''')
-		self._id_block_pattern = re.compile(b'''(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}IBM COMPATIBLE ''')
+		# "Hyosung Computer" (Samtron 88S)
+		self._id_block_pattern = re.compile(b'''(?:(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}IBM COMPATIBLE |IBM COMPATIBLE 88 BIOS COPYRIGHT Award Software Inc\\.)''')
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \(c\) (?:[^\r]+)\r\n)?Copyright \(c\) (?:NCR \& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
-		self._version_pattern = re.compile(''' (?:v([^-\s]+)|Version [^0-9]*([0-9]\.[0-9]{2}))(?:[. ]([\\x20-\\x7E]+))?''')
+		self._version_pattern = re.compile(''' (?:v([^-\\s]+)|Version [^0-9]*([0-9]\\.(?:[0-9]{2}|[0-9][A-Z])))(?:[. ]([\\x20-\\x7E]+))?''')
 
 		self.register_check_list([
 			(self._version_ast,		RegexChecker),
