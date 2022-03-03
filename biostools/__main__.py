@@ -97,6 +97,7 @@ def extract_process(queue, dir_number_path, next_dir_number_path):
 	file_extractors = [
 		extractors.DiscardExtractor(),
 		extractors.ISOExtractor(),
+		extractors.VMExtractor(),
 		extractors.PEExtractor(),
 		extractors.FATExtractor(),
 		extractors.MBRSafeExtractor(),

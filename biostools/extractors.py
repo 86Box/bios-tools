@@ -1522,3 +1522,117 @@ class UEFIExtractor(Extractor):
 
 		# Return destination directory path.
 		return dest_dir_0
+
+
+class VMExtractor(ArchiveExtractor):
+	"""Extract files which must be executed in a virtual machine."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		# Known executable signatures.
+		self._signature_pattern = re.compile(
+			b''', Sydex, Inc\\. All Rights Reserved\\.|''' # IBM Sydex
+			b'''Disk eXPress Self-Extracting Diskette Image''' # HP DXP
+		)
+
+		# /dev/null handle for suppressing output.
+		self._devnull = open(os.devnull, 'wb')
+
+		# Path to QEMU.
+		self._qemu_path = None
+		for path in ('qemu-system-i386', 'qemu-system-x86_64'):
+			try:
+				subprocess.run([path, '-version'], stdout=self._devnull, stderr=subprocess.STDOUT).check_returncode()
+				self._qemu_path = path
+				break
+			except:
+				pass
+
+		# Check for other dependencies.
+		self._dep_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(util.__file__))), 'vm')
+		self._dep_hashes = {}
+		for dep in ('floppy.144', 'freedos.img'):
+			if not os.path.exists(os.path.join(self._dep_dir, dep)):
+				self._qemu_path = None
+				break
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if QEMU or other dependencies are not available.
+		if not self._qemu_path:
+			return False
+
+		# Stop if this isn't a file we should handle.
+		# All signatures should be within the first 32 KB.
+		if file_header[:2] != b'MZ' or not self._signature_pattern.search(file_header):
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Only support 1.44 MB floppies for now.
+		floppy_media = 'floppy.144'
+
+		# Copy dependencies to the destination directory.
+		deps = (
+			(os.path.join(self._dep_dir, floppy_media), '\\.img'), # DOS-invalid filename on purpose, avoids conflicts
+			(os.path.join(self._dep_dir, 'freedos.img'), 'freedos.img'),
+			(file_path, 'target.exe')
+		)
+		for dep_src, dep_dest in deps:
+			try:
+				shutil.copy2(dep_src, os.path.join(dest_dir, dep_dest))
+			except:
+				try:
+					shutil.rmtree(dest_dir)
+				except:
+					pass
+				return False
+
+		# Sanitize destination directory path for passing to QEMU.
+		dest_dir_sanitized = dest_dir.replace(',', ',,')
+
+		# Run QEMU.
+		try:
+			subprocess.run([
+				self._qemu_path,
+				'-nographic',
+				'-m', '32',
+				'-boot', 'c',
+				'-drive', 'if=ide,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[1][1]),
+				'-drive', 'if=ide,driver=vvfat,rw=on,dir=' + dest_dir_sanitized, # regular vvfat syntax can't handle : in path
+				'-drive', 'if=floppy,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[0][1])
+			], timeout=30, stdout=self._devnull, stderr=None)
+		except:
+			pass
+
+		# Remove dependencies, except for the image.
+		for dep_src, dep_dest in deps[1:]:
+			try:
+				os.remove(os.path.join(dest_dir, dep_dest))
+			except:
+				pass
+
+		# Extract image as an archive.
+		image_path = os.path.join(dest_dir, deps[0][1])
+		ret = self._extract_archive(image_path, dest_dir, False)
+		if type(ret) == str and len(os.listdir(dest_dir)) > 1:
+			# Remove original file.
+			try:
+				os.remove(file_path)
+			except:
+				pass
+
+			# Flag success.
+			ret = dest_dir
+		else:
+			ret = True
+
+		# Remove image.
+		try:
+			os.remove(image_path)
+		except:
+			pass
+
+		return ret
