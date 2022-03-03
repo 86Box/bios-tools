@@ -36,6 +36,7 @@
 
 /* bios_extract.c */
 unsigned char *MMapOutputFile(char *filename, int size);
+int main(int argc, char *argv[]);
 
 /* ami.c */
 Bool AMI940725Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
@@ -44,6 +45,8 @@ Bool AMI941010Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		      uint32_t Offset1, uint32_t Offset2);
 Bool AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		  uint32_t Offset1, uint32_t Offset2);
+Bool AFUDOSExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
+		   uint32_t Offset1, uint32_t Offset2);
 
 /* phoenix.c */
 Bool PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,

@@ -619,3 +619,34 @@ NotCompressed:
 
 	return TRUE;
 }
+
+/*
+ *
+ */
+Bool
+AFUDOSExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
+	      uint32_t AFUDOSOffset, uint32_t ROMOffset)
+{
+	struct hdr {
+		uint32_t ROMSize;
+		uint32_t ExpSize;
+		unsigned char Data[];
+	} *hdr = (struct hdr *) (BIOSImage + ROMOffset + 16);
+
+	unsigned char *Buffer = MMapOutputFile("afudos.bin", hdr->ExpSize);
+	if (!Buffer)
+		return FALSE;
+
+	if (LH5Decode(hdr->Data, hdr->ROMSize, Buffer, hdr->ExpSize) == -1) {
+		munmap(Buffer, hdr->ExpSize);
+		return FALSE;
+	}
+
+	munmap(Buffer, hdr->ExpSize);
+
+	char *argv[] = {"", "afudos.bin"};
+	int ret = main(2, argv);
+	unlink("afudos.bin");
+
+	return !ret;
+}

@@ -113,6 +113,7 @@ static struct {
 	"AMIBIOSC07", NULL, AMI95Extract}, {
 	"AMIBIOSC08", NULL, AMI95Extract}, {
 	"AMIBIOSC09", NULL, AMI95Extract}, { /* Hyper-V legacy BIOS */
+	"AMI Flash Utility for DOS Command mode.", "@ROM", AFUDOSExtract}, {
 	"= Award Decompression Bios =", NULL, AwardExtract}, {
 	"awardext.rom", NULL, AwardExtract}, {
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
