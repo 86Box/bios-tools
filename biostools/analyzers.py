@@ -2281,143 +2281,84 @@ class SystemSoftAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('SystemSoft', *args, **kwargs)
 
-		self._lowbyte_pattern = re.compile(b'''[\x00-\x09\x0B-\x0F]''')
-		self._branch_pattern = re.compile('''(?:^|\s)[Ff]or ([^\s]+)''')
-
-		self.register_check_list([
-			((self._signon_precheck, self._signon),	AlwaysRunChecker),
-			(self._version,							RegexChecker),
-			(self._version_mobilepro,				RegexChecker),
-			(self._string_for,						RegexChecker),
-			(self._string_scu,						RegexChecker),
-			(self._string_440bx,					RegexChecker),
-			(self._signon_trigger,					RegexChecker),
-		])
-
-	def reset(self):
-		super().reset()
-
-		self._version_prefix = ''
-		self._version_number = ''
-		self._string_branch = ''
-		self._string_branch_decisive = ''
-		self._string_additional = ''
-
-		self._trap_signon = False
+		self._systemsoft_pattern = re.compile(b'''(?:SystemSoft|Insyde Software Presto) BIOS ''')
+		self._version_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x7E]+) Vers(?:\\.|ion) 0?([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
+		self._version_mobilepro_pattern = re.compile(b'''SystemSoft (MobilePRO) BIOS Version ([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
+		self._string_for_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x27\\x29-\\x7E]+)\\(''')
+		self._string_scu_pattern = re.compile(b''' SCU [Ff]or ([\\x20-\\x7E]+) [Cc]hipset''')
+		self._signon_pattern = re.compile(b'''(?:\\x0D\\x0A){1,}\\x00\\x08\\x00([\\x20-\\x7E]+)''')
+		self._signon_old_pattern = re.compile(b'''(?:[\\x0D\\x0A\\x20-\\x7E]+\\x00){1,}\\x00+([\\x0D\\x0A\\x20-\\x7E]+)''')
 
 	def can_handle(self, file_data, header_data):
-		return b'SystemSoft BIOS' in file_data
+		if not self._systemsoft_pattern.search(file_data):
+			return False
 
-	def _update_version_string(self):
-		self.version = (self._version_prefix.strip() + ' ' + self._version_number.strip()).strip()
-		self.string = self._string_branch_decisive or self._string_branch
-		if self._string_additional:
-			self.string += ' (' + self._string_additional.lstrip(' (').rstrip(' )') + ')'
+		# Look for the all-in-one version + chipset string.
+		aio_match = self._version_pattern.search(file_data)
+		if aio_match:
+			# Extract version.
+			self.version = aio_match.group(2).decode('cp437', 'ignore')
 
-	def _signon_precheck(self, line):
-		return self._trap_signon
+			# Unknown version. (NCR Notepad 3130)
+			if len(self.version) <= 2:
+				self.version = '?'
 
-	def _version(self, line, match):
-		'''^SystemSoft BIOS for (.+) Vers(?:\.|ion) 0?([^\s]+)(?: (.+))?'''
+			# Extract chipset as a string.
+			self.string = aio_match.group(1).decode('cp437', 'ignore')
 
-		# Extract version number if valid.
-		version = match.group(2)
-		if '.' in version:
-			self._version_number = version
+			# Extract any additional information after the version into the string.
+			additional_info = aio_match.group(3)
+			if additional_info:
+				self.string = self.string.strip() + ' ' + additional_info.decode('cp437', 'ignore').strip()
 
-		# Extract branch as the string.
-		self._string_branch_decisive = (match.group(1) or '').rstrip(' .,') # strip dot and comma (NCR 3xxx series)
+		# Look for the MobilePRO version string.
+		mp_match = self._version_mobilepro_pattern.search(file_data)
+		if mp_match:
+			# Extract version.
+			self.version = (mp_match.group(1) + b' ' + mp_match.group(2)).decode('cp437', 'ignore')
 
-		# Extract model information after the branch (NCR 3315) as a sign-on.
-		onthe_split = self._string_branch_decisive.split(' on the ')
-		if len(onthe_split) == 2:
-			self._string_branch_decisive, self.signon = onthe_split
+			# Extract any additional information after the version into the string.
+			additional_info = mp_match.group(3)
+			if additional_info:
+				self.string = self.string.strip() + ' ' + additional_info.decode('cp437', 'ignore').strip()
 
-		# Add any additional information after the version to the string.
-		additional_info = match.group(3)
-		if additional_info:
-			self._string_additional = additional_info
+		# Stop if we haven't found a version.
+		if not self.version:
+			return False
 
-		# Update version and string.
-		self._update_version_string()
+		# Look for the BIOS and SCU chipset strings if no chipset identifiers have been found.
+		if not aio_match:
+			# The SCU string is more precise; a bunch of chipsets including
+			# 440BX/ZX and SiS 630 identify as "430TX" on the other one.
+			match = self._string_scu_pattern.search(file_data)
+			if not match:
+				match = self._string_for_pattern.search(file_data)
+			if match:
+				# Prepend chipset into the string if not already found.
+				chipset = match.group(1).decode('cp437', 'ignore')
+				if self.string[:len(chipset)] != chipset:
+					self.string = chipset.strip() + ' ' + self.string.strip()
 
-		return True
+		# Extract sign-on after the version string.
+		first_match = True
+		match = mp_match or aio_match
+		while match:
+			end = match.end(0)
+			file_data = file_data[end:]
+			match = self._signon_pattern.search(file_data)
+			if first_match:
+				# Skip SystemSoft copyright line.
+				first_match = False
+			elif match:
+				signon_line = match.group(1)
+				if signon_line:
+					self.signon += '\n' + signon_line.decode('cp437', 'ignore')
 
-	def _version_mobilepro(self, line, match):
-		'''^SystemSoft (MobilePRO) BIOS Version ([^\s]+)(?: (.+))?'''
-
-		# Set prefix.
-		self._version_prefix = match.group(1)
-
-		# Set version number.
-		self._version_number = match.group(2)
-
-		# Add any additional information after the version to the string.
-		additional_info = match.group(3)
-		if additional_info:
-			self._string_additional = additional_info
-
-		# Update version and string.
-		self._update_version_string()
-
-		return True
-
-	def _string_440bx(self, line, match):
-		'''^(Intel )?(440BX(?:/ZX)?)'''
-
-		# Extract branch as decisive, so it doesn't get overwritten by 430TX.
-		self._string_branch_decisive = (match.group(1) or 'Intel ') + match.group(2)
-
-		# Update string.
-		self._update_version_string()
-
-		return True
-
-	def _string_for(self, line, match):
-		'''SystemSoft BIOS [Ff]or ([^\(]+)'''
-		
-		# Extract branch.
-		self._string_branch = match.group(1)
-
-		# Update string.
-		self._update_version_string()
-
-		return True
-
-	def _string_scu(self, line, match):
-		'''SystemSoft SCU [Ff]or (.+) [Cc]hipset'''
-
-		# Extract branch.
-		self._string_branch = match.group(1)
-
-		# Update string.
-		self._update_version_string()
-
-		return True
-
-	def _signon_trigger(self, line, match):
-		'''^Copyright (?:.+ SystemSoft Corp(?:oration|\.)?|SystemSoft Corp(?:oration|\.) .+\.)\s+All Rights Reserved'''
-
-		# Read sign-on on the next line.
-		self.signon = ''
-		self._trap_signon = True
-
-		return True
-
-	def _signon(self, line, match):
-		# Add line to sign-on if it's valid.
-		if '. All Rights Reserved' not in line[-22:]:
-			if line not in (' 9 9 9 9', 'ICICIC9CW') and line[:27] != 'OEM-CONFIGURABLE MESSAGE # ':
-				# " 9 9 9 9" (Kapok 8x00C/P)
-				# "ICICIC9CW" (Systemax sndbk105)
-				# ". All Rights Reserved" (Dual/Smile mic6903/mic6907)
-				if self.signon:
-					self.signon += '\n'
-				self.signon = line
-
-			# Disarm trap if there's no additional sign-on line up next.
-			if line != 'TriGem Computer, Inc.':
-				self._trap_signon = False
+		# Special sign-on case for very old BIOSes. (NCR Notepad 3130)
+		if not self.signon and aio_match:
+			match = self._signon_old_pattern.match(file_data)
+			if match:
+				self.signon = match.group(1).decode('cp437', 'ignore')
 
 		return True
 

@@ -117,6 +117,7 @@ static struct {
 	"awardext.rom", NULL, AwardExtract}, {
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
 	"\xEE\x88SYSBIOS", "\xEE\x88", SystemSoftExtract}, {
+	"\xEE\x88\x42IOS SCU", "\xEE\x88", SystemSoftExtract}, {
 	"\xFF\x88SYSBIOS", "\xFF\x88", SystemSoftExtract}, { /* Insyde */
 NULL, NULL, NULL},};
 
