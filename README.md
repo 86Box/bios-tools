@@ -29,6 +29,7 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 * **Python 3.5** or newer.
 * **Standard gcc toolchain** for building the essential `bios_extract` tool.
 * **7-Zip** command line utility installed as `7z`.
+* **QEMU** (`qemu-system-i386`) for optionally extracting files which need to be executed.
 
 ### Installation
 
@@ -76,9 +77,7 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 * EPA (Award), PCX (AMI) and other image formats are automatically converted to PNG if the aforementioned optional dependency is installed.
 * Some Intel motherboard BIOSes (particularly from the AMIBIOS 6 era) will not be extracted properly due to a different address line inversion mechanism. This is a known issue with the Intel update format concatenator which may eventually be solved.
 * Extraction of the following BIOS distribution formats is **not implemented** due to the use of unknown compression methods:
-  * Disk eXPress (DXP) floppy self-extractor, used by HP
   * Evergreen `.ETI`
-  * Sydex floppy self-extractor (compressed/encoded version of CopyQM RLE), used by IBM
   * ICL `.LDB`
 
 ## Analysis notes
