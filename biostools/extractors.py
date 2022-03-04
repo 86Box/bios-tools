@@ -1612,7 +1612,7 @@ class VMExtractor(ArchiveExtractor):
 		dest_dir_sanitized = dest_dir.replace(',', ',,')
 		args = [
 			self._qemu_path,
-			#'-nographic',
+			'-nographic',
 			'-m', '32'
 		]
 		if hdd != None:
