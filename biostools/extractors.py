@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import array, codecs, io, math, os, re, shutil, struct, subprocess
+import array, codecs, datetime, io, math, os, re, shutil, struct, subprocess
 try:
 	import PIL.Image
 except ImportError:
@@ -1530,11 +1530,15 @@ class VMExtractor(ArchiveExtractor):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
-		# Known executable signatures.
-		self._signature_pattern = re.compile(
+		# Known signatures.
+		self._floppy_pattern = re.compile(
 			b''', Sydex, Inc\\. All Rights Reserved\\.|''' # IBM Sydex
 			b'''Disk eXPress Self-Extracting Diskette Image''' # HP DXP
 		)
+		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
+
+		# Filename sanitization pattern.
+		self._dos_fn_pattern = re.compile('''[\\/:]''')
 
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
@@ -1552,7 +1556,7 @@ class VMExtractor(ArchiveExtractor):
 		# Check for other dependencies.
 		self._dep_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(util.__file__))), 'vm')
 		self._dep_hashes = {}
-		for dep in ('floppy.144', 'freedos.img'):
+		for dep in ('floppy.144', 'freedos.img', 'INSTL2O.EXE'):
 			if not os.path.exists(os.path.join(self._dep_dir, dep)):
 				self._qemu_path = None
 				break
@@ -1562,27 +1566,41 @@ class VMExtractor(ArchiveExtractor):
 		if not self._qemu_path:
 			return False
 
-		# Stop if this isn't a file we should handle.
-		# All signatures should be within the first 32 KB.
-		if file_header[:2] != b'MZ' or not self._signature_pattern.search(file_header):
+		# Check for cases which require this extractor.
+		# All signatures should be within the first 32 KB or so.
+		extractor = None
+		if file_header[:2] == b'MZ' and self._floppy_pattern.search(file_header):
+			extractor = self._extract_floppy
+		elif self._eti_pattern.match(file_header):
+			extractor = self._extract_eti
+
+		# Stop if no case was found.
+		if not extractor:
 			return False
 
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
 			return True
 
-		# Only support 1.44 MB floppies for now.
-		floppy_media = 'floppy.144'
+		# Run extractor.
+		return extractor(file_path, file_header, dest_dir, dest_dir_0)
 
-		# Copy dependencies to the destination directory.
-		deps = (
-			(os.path.join(self._dep_dir, floppy_media), '\\.img'), # DOS-invalid filename on purpose, avoids conflicts
-			(os.path.join(self._dep_dir, 'freedos.img'), 'freedos.img'),
-			(file_path, 'target.exe')
-		)
+	def _run_qemu(self, dest_dir, deps, hdd=None, floppy=None):
+		# Copy dependencies.
 		for dep_src, dep_dest in deps:
 			try:
-				shutil.copy2(dep_src, os.path.join(dest_dir, dep_dest))
+				dep_dest_path = os.path.join(dest_dir, dep_dest)
+				if dep_dest == 'freedos.img' and floppy == None:
+					# Patch the "dir a:" command out when no floppy image
+					# is called for. This could be done in a better way.
+					f = open(dep_src, 'rb')
+					data = f.read()
+					f.close()
+					f = open(dep_dest_path, 'wb')
+					f.write(data.replace(b'dir a:\r\n', b'rem a:\r\n'))
+					f.close()
+				else:
+					shutil.copy2(dep_src, dep_dest_path)
 			except:
 				try:
 					shutil.rmtree(dest_dir)
@@ -1590,29 +1608,53 @@ class VMExtractor(ArchiveExtractor):
 					pass
 				return False
 
-		# Sanitize destination directory path for passing to QEMU.
+		# Build QEMU arguments.
 		dest_dir_sanitized = dest_dir.replace(',', ',,')
+		args = [
+			self._qemu_path,
+			#'-nographic',
+			'-m', '32'
+		]
+		if hdd != None:
+			args += ['-boot', 'c']
+			args += ['-drive', 'if=ide,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[hdd][1])]
+		args += ['-drive', 'if=ide,driver=vvfat,rw=on,dir=' + dest_dir_sanitized] # regular vvfat syntax can't handle : in path
+		if floppy != None:
+			args += ['-drive', 'if=floppy,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[floppy][1])]
 
 		# Run QEMU.
 		try:
-			subprocess.run([
-				self._qemu_path,
-				'-nographic',
-				'-m', '32',
-				'-boot', 'c',
-				'-drive', 'if=ide,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[1][1]),
-				'-drive', 'if=ide,driver=vvfat,rw=on,dir=' + dest_dir_sanitized, # regular vvfat syntax can't handle : in path
-				'-drive', 'if=floppy,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[0][1])
-			], timeout=30, stdout=self._devnull, stderr=None)
+			subprocess.run(args, timeout=30, input=None, stdout=self._devnull, stderr=None)
 		except:
 			pass
 
-		# Remove dependencies, except for the image.
-		for dep_src, dep_dest in deps[1:]:
+		# Remove dependencies, except for the floppy image if present.
+		for i in range(len(deps)):
+			if i == floppy:
+				continue
 			try:
-				os.remove(os.path.join(dest_dir, dep_dest))
+				os.remove(os.path.join(dest_dir, deps[i][1]))
 			except:
 				pass
+
+		return True
+
+	def _extract_floppy(self, file_path, file_header, dest_dir, dest_dir_0):
+		"""Extract DOS-based floppy self-extractors."""
+
+		# Only support 1.44 MB floppies for now.
+		floppy_media = 'floppy.144'
+
+		# Establish dependencies.
+		deps = (
+			(os.path.join(self._dep_dir, floppy_media), '\\.img'), # DOS-invalid filename on purpose, avoids conflicts
+			(os.path.join(self._dep_dir, 'freedos.img'), 'freedos.img'),
+			(file_path, 'target.exe')
+		)
+
+		# Run QEMU and stop if it failed.
+		if not self._run_qemu(dest_dir, deps, hdd=1, floppy=0):
+			return True
 
 		# Extract image as an archive.
 		image_path = os.path.join(dest_dir, deps[0][1])
@@ -1636,3 +1678,109 @@ class VMExtractor(ArchiveExtractor):
 			pass
 
 		return ret
+
+	def _extract_eti(self, file_path, file_header, dest_dir, dest_dir_0):
+		"""Extract Evergreen ETI files."""
+
+		# Read ETI header.
+		in_f = open(file_path, 'rb')
+		header = in_f.read(0x1f)
+
+		# Parse creation date and time.
+		try:
+			date = header[10:18].decode('cp437', 'ignore')
+			time = header[20:28].decode('cp437', 'ignore')
+			dt = datetime.datetime.strptime(date + ' ' + time, '%m/%d/%y %H:%M:%S')
+			ctime = (dt - datetime.datetime(1970, 1, 1)).total_seconds()
+		except:
+			ctime = 0
+
+		# Start the extraction batch file.
+		bat_f = open(os.path.join(dest_dir, 'TARGET.BAT'), 'wb')
+		bat_f.write(b'D:\r\n')
+
+		# Extract files into individual ETIs.
+		etis = []
+		while True:
+				# Parse file header.
+				fn = in_f.read(12) # filename
+				if fn == None:
+					break
+				idx = fn.find(b'\x00')
+				if idx > -1:
+					fn = fn[:idx]
+				if len(fn) == 0:
+					break
+				fn = fn.decode('cp437', 'ignore')
+				in_f.read(5) # rest of header
+				size = struct.unpack('<I', in_f.read(4))[0] # size
+
+				# Sanitize filename to not overwrite ourselves.
+				eti_name = 'X{0:07}.ETI'.format(len(etis))
+				etis.append(eti_name)
+				if fn.upper() in ['TARGET.BAT', 'INSTL2O.EXE', 'FREEDOS.IMG', 'CONTACT.ETI'] + etis:
+					fn = fn[:-1] + '_'
+				fn = self._dos_fn_pattern.sub('_', fn)
+
+				# Add individual ETI to the batch file.
+				bat_f.write(b'del CONTACT.ETI CONTACT.TXT PREVLANG.DAT\r\n') # remove old files
+				bat_f.write(b'c:move /y ' + eti_name.encode('cp437', 'ignore') + b' CONTACT.ETI\r\n') # insert ourselves
+				bat_f.write(b'INSTL2O.EXE\r\n') # run hacked executable
+				bat_f.write(b'c:move /y CONTACT.TXT ' + fn.encode('cp437', 'ignore') + b'\r\n') # rename decompressed file
+
+				# Write individual ETI.
+				out_f = open(os.path.join(dest_dir, eti_name), 'wb')
+				out_f.write(header) # file header
+				out_f.write(b'\x00\x00\x00\xB3\xD2\x40\xC6') # single-file header
+				out_f.write(b'\xFF\xFF\xFF\x00') # unpacked size (unknown, assume 16 MB at most)
+				while size > 0:
+					data = in_f.read(min(size, 1048576))
+					out_f.write(data) # data
+					size -= len(data)
+				out_f.close()
+
+		# Finish the batch file.
+		bat_f.write(b'C:\r\n')
+		bat_f.close()
+
+		# Establish dependencies.
+		deps = (
+			(os.path.join(self._dep_dir, 'INSTL2O.EXE'), 'INSTL2O.EXE'), # DOS-invalid filename on purpose, avoids conflicts
+			(os.path.join(self._dep_dir, 'freedos.img'), 'freedos.img')
+		)
+
+		# Run QEMU and stop if it failed.
+		if not self._run_qemu(dest_dir, deps, hdd=1, floppy=None):
+			return True
+
+		# Remove leftover files.
+		for fn in ['CONTACT.ETI', 'CONTACT.TXT', 'PREVLANG.DAT', 'TARGET.BAT'] + etis:
+			try:
+				os.remove(os.path.join(dest_dir, fn))
+			except:
+				pass
+			try:
+				os.remove(os.path.join(dest_dir, fn.lower()))
+			except:
+				pass
+
+		# Check if anything was extracted.
+		dest_dir_files = os.listdir(dest_dir)
+		if len(dest_dir_files) > 0:
+			# Remove original file.
+			try:
+				os.remove(file_path)
+			except:
+				pass
+
+			# Set timestamps if applicable.
+			if ctime > 0:
+				for fn in dest_dir_files:
+					try:
+						os.utime(os.path.join(dest_dir, fn), (mtime, mtime))
+					except:
+						pass
+
+			return dest_dir
+		else:
+			return True
