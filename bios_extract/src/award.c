@@ -55,8 +55,8 @@ AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 			BufferSize = p - BIOSImage;
 			if (BufferSize > 0) {
 				filename = "awardboot.rom";
-				printf("0x00000 (%6d bytes)    ->    %s\n",
-				       BufferSize, filename);
+				printf("0x%05X (%6d bytes)    ->    %s\n",
+				       0, BufferSize, filename);
 
 				Buffer = MMapOutputFile(filename, BufferSize);
 				if (!Buffer)
