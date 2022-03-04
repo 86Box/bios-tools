@@ -1677,6 +1677,8 @@ class PhoenixAnalyzer(Analyzer):
 
 		# "Phoenix ROM BIOS" (Dell Latitude CP/CPI)
 		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess''')
+		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved''')
+		self._hp_signon_pattern = re.compile(b'''Version +[\\x21-\\x7E]+ +HP [\\x20-\\x7E]+''')
 		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Ax86)
 		# "All Rights Reserved\r\n\n\x00" (Commodore 386LT, Tandy 1000RSX)
 		# "All Rights Reserved\r\n\n" (ROM BIOS)
@@ -1754,24 +1756,37 @@ class PhoenixAnalyzer(Analyzer):
 			if dell_version[0:1] == 'A':
 				self.signon += 'BIOS Version: ' + dell_version
 		else:
-			# Extract sign-on from Core and some 4.0 Release 6.0 BIOSes.
-			match = self._core_signon_pattern.search(file_data)
+			# Determine if this is some sort of HP Vectra BIOS.
+			match = self._hp_pattern.search(file_data)
 			if match:
-				self.signon = match.group(1).decode('cp437', 'ignore')
-			else:
-				# Extract sign-on from Ax86 and older BIOSes.
-				match = self._rombios_signon_pattern.search(file_data)
-				if not match:
-					match = self._rombios_signon_alt_pattern.search(file_data)
-				if match:
-					end = match.end(0)
-					if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
-						self.signon = util.read_string(file_data[end:end + 256])
+				self.version = 'HP'
 
-			# Split sign-on lines.
-			if self.signon:
-				self.signon = self.signon.replace('\r', '\n').replace('\x00', ' ')
-				self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
+				# Extract code as a string.
+				self.string = match.group(1).decode('cp437', 'ignore')
+
+				# Extract the version number as a sign-on.
+				match = self._hp_signon_pattern.search(file_data)
+				if match:
+					self.signon = match.group(0).decode('cp437', 'ignore')
+			else:
+				# Extract sign-on from Core and some 4.0 Release 6.0 BIOSes.
+				match = self._core_signon_pattern.search(file_data)
+				if match:
+					self.signon = match.group(1).decode('cp437', 'ignore')
+				else:
+					# Extract sign-on from Ax86 and older BIOSes.
+					match = self._rombios_signon_pattern.search(file_data)
+					if not match:
+						match = self._rombios_signon_alt_pattern.search(file_data)
+					if match:
+						end = match.end(0)
+						if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
+							self.signon = util.read_string(file_data[end:end + 256])
+
+				# Split sign-on lines.
+				if self.signon:
+					self.signon = self.signon.replace('\r', '\n').replace('\x00', ' ')
+					self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 
 		return True
 
