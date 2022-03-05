@@ -1538,7 +1538,7 @@ class VMExtractor(ArchiveExtractor):
 		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
 
 		# Filename sanitization pattern.
-		self._dos_fn_pattern = re.compile('''[\\/:]''')
+		self._dos_fn_pattern = re.compile('''[\\x00-\\x1F\\x7F-\\xFF\\\\/:\\*\\?"<>\\|]''')
 
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
@@ -1745,7 +1745,7 @@ class VMExtractor(ArchiveExtractor):
 
 		# Establish dependencies.
 		deps = (
-			(os.path.join(self._dep_dir, 'INSTL2O.EXE'), 'INSTL2O.EXE'), # DOS-invalid filename on purpose, avoids conflicts
+			(os.path.join(self._dep_dir, 'INSTL2O.EXE'), 'INSTL2O.EXE'),
 			(os.path.join(self._dep_dir, 'freedos.img'), 'freedos.img')
 		)
 
