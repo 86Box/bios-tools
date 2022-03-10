@@ -169,6 +169,21 @@ class BIOSExtractor(Extractor):
 		# any extracted BIOS logo images that were found.
 		self._image_extractor = ImageExtractor()
 
+		fn = b'''[^\\x01-\\x1F\\x7F-\\xFF\\\\/:\\*\\?"<>\\|]'''
+		self._phoenixnet_workaround_pattern = re.compile(
+			fn + b'''(?:\\x00{7}|''' +
+			fn + b'''(?:\\x00{6}|''' +
+			fn + b'''(?:\\x00{5}|''' +
+			fn + b'''(?:\\x00{4}|''' +
+			fn + b'''(?:\\x00{3}|''' +
+			fn + b'''(?:\\x00{2}|''' +
+			fn + b'''(?:\\x00{1}|''' +
+			fn + b''')))))))''' +
+			fn + b'''(?:\\x00{2}|''' +
+			fn + b'''(?:\\x00{1}|''' +
+			fn + b'''))'''
+		)
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if bios_extract is not available.
 		if not self._bios_extract_path:
@@ -181,10 +196,10 @@ class BIOSExtractor(Extractor):
 		# Start bios_extract process.
 		file_path_abs = os.path.abspath(file_path)
 		try:
-			subprocess.run([self._bios_extract_path, file_path_abs], timeout=30, stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir_0)
+			proc = subprocess.run([self._bios_extract_path, file_path_abs], timeout=30, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=dest_dir_0)
 		except:
 			# Bad data can cause infinite loops.
-			pass
+			proc = None
 
 		# Assume failure if nothing was extracted. A lone boot block file also counts as a failure,
 		# as the extractors produce them before attempting to extract any actual BIOS modules.
@@ -199,6 +214,59 @@ class BIOSExtractor(Extractor):
 			except:
 				pass
 			return False
+
+		# Extract Award BIOS PhoenixNet ROS filesystem.
+		if not proc or b'Found Award BIOS.' in proc.stdout:
+			for dest_dir_file in dest_dir_files:
+				# Read and check for ROS header.
+				dest_dir_file_path = os.path.join(dest_dir_0, dest_dir_file)
+				in_f = open(dest_dir_file_path, 'rb')
+				dest_dir_file_header = in_f.read(3)
+
+				if dest_dir_file_header == b'ROS':
+					# Create new destination directory for the expanded ROS.
+					dest_dir_ros = os.path.join(dest_dir_0, dest_dir_file + ':')
+					if util.try_makedirs(dest_dir_ros):
+						# Skip initial header.
+						in_f.seek(32)
+
+						# Parse file entries.
+						while True:
+							# Read file entry header.
+							header = in_f.read(32)
+							if len(header) != 32:
+								break
+							file_size, = struct.unpack('<H', header[10:12])
+
+							# Read data.
+							if header[28] & 0x10:
+								# Workaround for an annoying entry type where the size field is wrong (compressed?)
+								pos = in_f.tell()
+								data = in_f.read(65536 + 32)
+								match = self._phoenixnet_workaround_pattern.search(data)
+								file_size = match.start(0) - 17
+								in_f.seek(pos + file_size)
+								data = data[:file_size]
+							else:
+								data = in_f.read(file_size)
+
+							# Generate a file name.
+							file_name = (util.read_string(header[17:25]) + '.' + util.read_string(header[25:28])).replace('/', '\\')
+
+							# Write data.
+							if len(file_name) > 1:
+								out_f = open(os.path.join(dest_dir_ros, file_name), 'wb')
+								out_f.write(data)
+								out_f.close()
+
+						# Run image converter on the desstination directory.
+						self._image_extractor.convert_inline(os.listdir(dest_dir_ros), dest_dir_ros)
+
+						# Don't remove ROS as the analyzer uses it for PhoenixNet detection.
+						# Just remove the destination directory if it's empty.
+						util.rmdirs(dest_dir_ros)
+
+				in_f.close()
 
 		# Convert any BIOS logo images in-line (to the same destination directory).
 		self._image_extractor.convert_inline(dest_dir_files, dest_dir_0)
@@ -445,7 +513,7 @@ class ImageExtractor(Extractor):
 			# Read 8 bytes, which is enough to ascertain any potential logo type.
 			dest_dir_file_path = os.path.join(dest_dir_0, dest_dir_file)
 			f = open(dest_dir_file_path, 'rb')
-			dest_dir_file_header = f.read(8)
+			dest_dir_file_header = f.read(16)
 			f.close()
 
 			# Run ImageExtractor.
@@ -456,10 +524,11 @@ class ImageExtractor(Extractor):
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if PIL is not available or this file is too small.
-		if not PIL.Image or len(file_header) < 8:
+		if not PIL.Image or len(file_header) < 16:
 			return False
 
 		# Determine if this is an image, and which type it is.
+		func = None
 		if file_header[:4] == b'AWBM':
 			# Get width and height for a v2 EPA.
 			width, height = struct.unpack('<HH', file_header[4:8])
@@ -469,7 +538,30 @@ class ImageExtractor(Extractor):
 				func = self._convert_epav2_8b
 			else:
 				func = self._convert_epav2_4b
-		else:
+		elif file_header[:2] == b'PG':
+			# Get width and height for a Phoenix Graphics image.
+			width, height = struct.unpack('<HH', file_header[10:14])
+
+			# Check if the file is actually paletted, as some
+			# images (PhoenixNet) are incorrectly set as paletted.
+			paletted = file_header[3] != 0
+			payload_size = math.ceil((width * height) / 2)
+			if paletted:
+				file_size = os.path.getsize(file_path)
+				if file_size > 18 + payload_size:
+					palette_size, = struct.unpack('<H', file_header[10:12])
+					file_header += util.read_complement(file_path, file_header, max_size=len(file_header) + (4 * palette_size))
+					post_palette = file_header[12 + (4 * palette_size):16 + (4 * palette_size)]
+					if len(post_palette) == 4:
+						width, height = struct.unpack('<HH', post_palette)
+						payload_size = math.ceil((width * height) / 2)
+						if file_size >= 20 + (4 * palette_size) + payload_size:
+							# Special marker that the palette should be read.
+							width = -width
+
+			if width != 0 and height != 0:
+				func = self._convert_pgx
+		if not func:
 			# Determine if this file is the right size for a v1 EPA.
 			width, height = struct.unpack('BB', file_header[:2])
 			if os.path.getsize(file_path) == 72 + (15 * width * height):
@@ -641,6 +733,76 @@ class ImageExtractor(Extractor):
 				color = palette[pixel]
 				image.putpixel((x, y),
 							 ((color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff))
+
+		# Save output image.
+		return self._save_image(image, dest_dir_0)
+
+	def _convert_pgx(self, file_data, width, height, dest_dir_0):
+		# Read palette if the file contains one, while
+		# writing the file type as a header accordingly.
+		if width < 0:
+			# Normalize width.
+			width = -width
+
+			# Read palette.
+			palette_size, = struct.unpack('<H', file_data[10:12])
+			palette = self._vga_palette[::] # start with standard EGA palette
+			palette_index = 0
+			index = 12
+			while palette_index < palette_size:
+				palette_color = file_data[index:index + 4]
+				if len(palette_color) != 4:
+					break
+				palette[palette_index], = struct.unpack('>I', palette_color) # shortcut to parse _RGB value
+				palette_index += 1
+				index += 4
+
+			self._write_type(dest_dir_0, 'PGX (with {0}-color palette)'.format(palette_size))
+		else:
+			# Use standard EGA palette.
+			palette = self._vga_palette
+
+			self._write_type(dest_dir_0, 'PGX (without palette)')
+
+		# Create output image.
+		image = PIL.Image.new('RGB', (width, height))
+
+		# Read image data. This looks a lot like EPA v2 4-bit but it's slightly different.
+		index = 18
+		bitmap_width = math.ceil(width / 8)
+		bitmap_size = height * bitmap_width
+		for y in range(height):
+			for x in range(bitmap_width):
+				# Stop column processing if the file is truncated.
+				if index + x + (bitmap_size * 3) >= len(file_data):
+					index = 0
+					break
+
+				for cx in range(8):
+					# Skip this pixel if it's outside the image width.
+					output_x = (x * 8) + cx
+					if output_x >= width:
+						continue
+
+					# Read color values. Each bit is stored in a separate bitmap.
+					pixel  =  (file_data[index + x]                     >> (7 - cx)) & 1
+					pixel |= ((file_data[index + x + bitmap_size]       >> (7 - cx)) & 1) << 1
+					pixel |= ((file_data[index + x + (bitmap_size * 2)] >> (7 - cx)) & 1) << 2
+					pixel |= ((file_data[index + x + (bitmap_size * 3)] >> (7 - cx)) & 1) << 3
+
+					# Determine palette color and write pixel.
+					if pixel > len(palette):
+						pixel = len(palette) - 1
+					color = palette[pixel]
+					image.putpixel((output_x, y),
+								 ((color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff))
+
+			# Stop row processing if the file is truncated.
+			if index == 0:
+				break
+
+			# Move on to the next line in the 4 bitmaps.
+			index += bitmap_width
 
 		# Save output image.
 		return self._save_image(image, dest_dir_0)
@@ -1590,7 +1752,7 @@ class VMExtractor(ArchiveExtractor):
 		for dep_src, dep_dest in deps:
 			try:
 				dep_dest_path = os.path.join(dest_dir, dep_dest)
-				if dep_dest == 'freedos.img' and floppy == None:
+				if os.path.basename(dep_src) == 'freedos.img' and floppy == None:
 					# Patch the "dir a:" command out when no floppy image
 					# is called for. This could be done in a better way.
 					f = open(dep_src, 'rb')
@@ -1647,8 +1809,8 @@ class VMExtractor(ArchiveExtractor):
 
 		# Establish dependencies.
 		deps = (
-			(os.path.join(self._dep_dir, floppy_media), '\\.img'), # DOS-invalid filename on purpose, avoids conflicts
-			(os.path.join(self._dep_dir, 'freedos.img'), 'freedos.img'),
+			(os.path.join(self._dep_dir, floppy_media), '\\.img'), # DOS-invalid filenames on purpose, avoids conflicts
+			(os.path.join(self._dep_dir, 'freedos.img'), '\\\\.img'),
 			(file_path, 'target.exe')
 		)
 
