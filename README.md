@@ -83,13 +83,12 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 
 ### AMI
 
-* **Pre-Color** (1990 and older) BIOSes have a dynamically-generated string that is not easily extractable; the analyzer will attempt to reconstruct it around the limited data contained in the ROM in a best-effort basis.
-* The string on **UEFI** is a hidden string located within the AMIBIOS 8-based Compatibility Support Module (CSM). A missing string may indicate a lack of CSM.
+* The string on **UEFI** is a hidden string located within the AMIBIOS 8-based Compatibility Support Module (CSM). A missing string may indicate a missing CSM.
 
 ### Award
 
 * The core version can be followed by `(Phoenix)` on BIOSes which identify as **Phoenix AwardBIOS**, or `(Workstation)` on ones which identify as **Award WorkstationBIOS**.
-* OEM modifications which interfere with detection: **Sukjung** (string)
+* OEM modifications which may interfere with detection: **Sukjung** (string)
 
 ### IBM
 
