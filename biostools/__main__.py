@@ -276,8 +276,11 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 	# Prepare combined-mode analysis.
 	if combined:
 		# Set interleaved flag on de-interleaved blobs.
-		if scan_file_names == [':combined:', 'deinterleaved_a.bin', 'deinterleaved_b.bin', 'interleaved_a.bin', 'interleaved_b.bin']:
-			combined = 'interleaved'
+		flag_size = os.path.getsize(os.path.join(scan_dir_path, ':combined:'))
+		if flag_size >= 2:
+			combined = 'Interleaved'
+			if flag_size > 2:
+				combined += str(flag_size)
 
 		# Commit to only analyzing the large blob.
 		scan_file_names = ['']
@@ -361,8 +364,8 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 				continue
 
 		# Add interleaved flag to add-ons.
-		if combined == 'interleaved':
-			bonus_analyzer_addons.append('Interleaved')
+		if type(combined) == str:
+			bonus_analyzer_addons.append(combined)
 
 		# Clean up the file path.
 		scan_file_path_full = os.path.join(scan_dir_path, scan_file_name)

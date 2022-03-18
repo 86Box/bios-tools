@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import array, codecs, datetime, io, math, os, re, shutil, struct, subprocess
+import array, codecs, datetime, io, itertools, math, os, re, shutil, struct, subprocess
 try:
 	import PIL.Image
 except ImportError:
@@ -1186,6 +1186,10 @@ class InterleaveExtractor(Extractor):
 		# Interleave the strings.
 		self._interleaved_odd = [string[1::2] for string in self._deinterleaved_strings]
 		self._interleaved_even = [string[::2] for string in self._deinterleaved_strings]
+		self._interleaved_q3 = [string[3::4] for string in self._deinterleaved_strings]
+		self._interleaved_q2 = [string[2::4] for string in self._deinterleaved_strings]
+		self._interleaved_q1 = [string[1::4] for string in self._deinterleaved_strings]
+		self._interleaved_q0 = [string[::4] for string in self._deinterleaved_strings]
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if this was already deinterleaved.
@@ -1197,129 +1201,143 @@ class InterleaveExtractor(Extractor):
 		file_header += util.read_complement(file_path, file_header, max_size=131072)
 
 		# Check for interleaved strings.
-		interleaved = 0
-		for string in self._interleaved_odd:
-			if string in file_header:
-				interleaved = 1
-				break
-		if not interleaved:
-			for string in self._interleaved_even:
-				if string in file_header:
-					interleaved = 2
+		counterpart_string_sets = part_order = None
+		sets_2 = [self._interleaved_odd, self._interleaved_even]
+		sets_4 = [self._interleaved_q0, self._interleaved_q2, self._interleaved_q2, self._interleaved_q3]
+		for part_set in (sets_2, sets_4):
+			# Go through base index numbers.
+			for base_index in range(len(part_set)):
+				# Remove base index from the list.
+				counterpart_string_sets_candidate = [counterpart_set for counterpart_set in part_set if counterpart_set != part_set[base_index]]
+
+				# Go through sets.
+				for counterpart_set in counterpart_string_sets_candidate:
+					# Go through strings.
+					for string in counterpart_set:
+						# Check if the string is present.
+						if string in file_header:
+							counterpart_string_sets = counterpart_string_sets_candidate
+							this_part_order = part_order
+							break
+
+					# Stop if a set was found.
+					if counterpart_string_sets:
+						break
+				if counterpart_string_sets:
 					break
+			if counterpart_string_sets:
+				break
 
-		# Stop if not interleaved.
-		if not interleaved:
+		# Stop if no interleaved strings could be found.
+		if not counterpart_string_sets:
 			return False
 
-		# Try to find this file's counterpart in the directory.
-		counterpart_candidates = []
-		file_size = os.path.getsize(file_path)
-		for file_in_dir in os.listdir(dir_path):
-			# Skip this file.
-			if file_in_dir == file_name:
-				continue
+		# Create temporary interleaved data array.
+		part_size = min(os.path.getsize(file_path), 16777216)
+		data = []
 
-			# Skip any files which differ in size.
-			file_in_dir_path = os.path.join(dir_path, file_in_dir)
-			if os.path.getsize(file_in_dir_path) != file_size:
-				continue
+		# Look for each counterpart.
+		counterpart_paths = [file_path]
+		for counterpart_string_set in counterpart_string_sets:
+			# Try to find this file's counterpart in the directory.
+			counterpart_candidates = []
+			file_size = os.path.getsize(file_path)
+			for file_in_dir in os.listdir(dir_path):
+				# Skip seen files.
+				file_in_dir_path = os.path.join(dir_path, file_in_dir)
+				if file_in_dir_path in counterpart_paths:
+					continue
 
-			# Read up to 128 KB.
-			file_in_dir_data = util.read_complement(file_in_dir_path, max_size=131072)
-			if not file_in_dir_data:
-				continue
+				# Skip any files which differ in size.
+				if os.path.getsize(file_in_dir_path) != file_size:
+					continue
 
-			# Determine if this is a counterpart.
-			counterpart = False
-			if interleaved == 1:
-				for string in self._interleaved_even:
+				# Read up to 128 KB.
+				file_in_dir_data = util.read_complement(file_in_dir_path, max_size=131072)
+				if not file_in_dir_data:
+					continue
+
+				# Determine if this is a counterpart.
+				counterpart = False
+				for string in counterpart_string_set:
 					if string in file_in_dir_data:
 						counterpart = True
 						break
-			elif interleaved == 2:
-				for string in self._interleaved_odd:
-					if string in file_in_dir_data:
-						counterpart = True
-						break
 
-			# Move on if this is not a counterpart.
-			if not counterpart:
-				continue
+				# Move on if this is not a counterpart.
+				if not counterpart:
+					continue
 
-			# Add to the list of candidates.
-			counterpart_candidates.append(file_in_dir)
+				# Add to the list of candidates.
+				counterpart_candidates.append(file_in_dir)
 
-		# Find the closest counterpart candidate to this
-		# file, and stop if no counterpart was found.
-		counterpart_candidate = util.closest_prefix(file_name, counterpart_candidates, lambda x: util.remove_extension(x).lower())
-		if not counterpart_candidate:
-			return False
-		counterpart_path = os.path.join(dir_path, counterpart_candidate)
+			# Find the closest counterpart candidate to this
+			# file, and stop if no counterpart was found.
+			counterpart_candidate = util.closest_prefix(file_name, counterpart_candidates, lambda x: util.remove_extension(x).lower())
+			if not counterpart_candidate:
+				return False
+			counterpart_path = os.path.join(dir_path, counterpart_candidate)
+			counterpart_paths.append(counterpart_path)
+
+			# Read into the data array.
+			f = open(counterpart_path, 'rb')
+			data.append(f.read(part_size))
+			f.close()
 
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
 			return True
 
-		# Deinterleave in both directions, as some pairs may contain the
-		# same interleaved string on both parts. Also save interleaved
-		# copies, as some pairs deinterleave incorrectly.
-		in_fa = open(file_path, 'rb')
-		in_fb = open(counterpart_path, 'rb')
-		out_fa = open(os.path.join(dest_dir, 'deinterleaved_a.bin'), 'wb')
-		out_fb = open(os.path.join(dest_dir, 'deinterleaved_b.bin'), 'wb')
-		copy_fa = open(os.path.join(dest_dir, 'interleaved_a.bin'), 'wb')
-		copy_fb = open(os.path.join(dest_dir, 'interleaved_b.bin'), 'wb')
-		data = bytearray(1048576)
-		write_len = 1
-		while True:
-			# Read both parts.
-			data_a = in_fa.read(len(data))
-			data_b = in_fb.read(len(data))
-			write_len = min(len(data_a), len(data_b))
+		# Read this file into the data array.
+		f = open(file_path, 'rb')
+		data.insert(0, f.read(part_size))
+		f.close()
 
-			# Stop if we've read everything.
-			if not write_len:
-				break
+		# Write all deinterleaved permutations, as some sets may
+		# contain the same interleaved string on more than one part.
+		alphanumeric = '0123456789abcdefghijklmn'
+		file_counter = 0
+		part_count = len(data)
+		buf = bytearray(part_size * part_count)
+		for permutation in itertools.permutations(range(part_count)):
+			# Deinterleave from the array into the buffer.
+			data_offset = 0
+			for data_index in permutation:
+				buf[data_offset::part_count] = data[data_index]
+				data_offset += 1
 
-			# Set slice lengths.
-			data_a_slice = len(data_a) * 2
-			data_b_slice = len(data_b) * 2
-			write_len *= 2
+			# Write deinterleaved file.
+			f = open(os.path.join(dest_dir, 'deinterleaved_' + alphanumeric[file_counter] + '.bin'), 'wb')
+			f.write(buf)
+			f.close()
+			file_counter += 1
 
-			# Write in one direction.
-			data[:data_a_slice:2] = data_a
-			data[1:data_b_slice:2] = data_b
-			out_fa.write(data[:write_len])
+		# Save some memory. Might be placebo, but it doesn't hurt.
+		del buf
+		del data
 
-			# Write in the other direction.
-			data[:data_b_slice:2] = data_b
-			data[1:data_a_slice:2] = data_a
-			out_fb.write(data[:write_len])
+		# Move interleaved files to preserve them,
+		# as some sets may deinterleave incorrectly.
+		file_counter = 0
+		for counterpart_path in counterpart_paths:
+			# Move original file.
+			try:
+				shutil.move(counterpart_path, os.path.join(dest_dir, 'interleaved_' + alphanumeric[file_counter] + '.bin'))
+			except:
+				pass
+			file_counter += 1
 
-			# Write interleaved copies.
-			copy_fa.write(data_a)
-			copy_fb.write(data_b)
-		in_fa.close()
-		in_fb.close()
-		out_fa.close()
-		out_fb.close()
-		copy_fa.close()
-		copy_fb.close()
+			# Remove the original file in case moving failed.
+			try:
+				os.remove(counterpart_path)
+			except:
+				pass
 
-		# Remove both files.
-		try:
-			os.remove(file_path)
-		except:
-			pass
-		try:
-			os.remove(counterpart_path)
-		except:
-			pass
-
-		# Create flag file on the destination directory for the analyzer to
-		# treat it as a big chunk of data, combining both deinterleave directions.
-		open(os.path.join(dest_dir, ':combined:'), 'wb').close()
+		# Create flag file on the destination directory for the analyzer
+		# to treat it as a big chunk of data, combining all permutations.
+		f = open(os.path.join(dest_dir, ':combined:'), 'wb')
+		f.write(b'\x00' * part_count)
+		f.close()
 
 		# Return destination directory path.
 		return dest_dir
