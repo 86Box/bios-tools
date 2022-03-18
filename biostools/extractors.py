@@ -1205,24 +1205,18 @@ class InterleaveExtractor(Extractor):
 		sets_2 = [self._interleaved_odd, self._interleaved_even]
 		sets_4 = [self._interleaved_q0, self._interleaved_q2, self._interleaved_q2, self._interleaved_q3]
 		for part_set in (sets_2, sets_4):
-			# Go through base index numbers.
-			for base_index in range(len(part_set)):
-				# Remove base index from the list.
-				counterpart_string_sets_candidate = [counterpart_set for counterpart_set in part_set if counterpart_set != part_set[base_index]]
-
-				# Go through sets.
-				for counterpart_set in counterpart_string_sets_candidate:
-					# Go through strings.
-					for string in counterpart_set:
-						# Check if the string is present.
-						if string in file_header:
-							counterpart_string_sets = counterpart_string_sets_candidate
-							this_part_order = part_order
-							break
-
-					# Stop if a set was found.
-					if counterpart_string_sets:
+			# Go through sets.
+			for counterpart_set in part_set:
+				# Go through strings.
+				for string in counterpart_set:
+					# Check if the string is present.
+					if string in file_header:
+						# Generate new string set list without this set.
+						counterpart_string_sets = [new_set for new_set in part_set if new_set != counterpart_set]
+						this_part_order = part_order
 						break
+
+				# Stop if a set was found.
 				if counterpart_string_sets:
 					break
 			if counterpart_string_sets:
