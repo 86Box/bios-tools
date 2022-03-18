@@ -103,6 +103,7 @@ def extract_process(queue, dir_number_path, next_dir_number_path):
 		extractors.MBRSafeExtractor(),
 		extractors.TarExtractor(),
 		extractors.ArchiveExtractor(),
+		extractors.CPUZExtractor(),
 		extractors.HexExtractor(),
 		extractors.ImageExtractor(),
 		extractors.ApricotExtractor(),

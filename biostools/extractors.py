@@ -292,6 +292,49 @@ class BIOSExtractor(Extractor):
 		return dest_dir_0
 
 
+class CPUZExtractor(Extractor):
+	"""Extract CPU-Z BIOS dump reports."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		self._cpuz_pattern = re.compile(b'''CPU-Z version\\t+([^\\r\\n]+)''')
+		self._hex_pattern = re.compile(b'''[0-9A-F]+\\t((?:[0-9A-F]{2} ){16})\\t''')
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if this is not a CPU-Z dump.
+		cpuz_match = self._cpuz_pattern.search(file_header)
+		if not cpuz_match:
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Read up to 16 MB as a safety net.
+		file_header += util.read_complement(file_path, file_header)
+
+		# Convert hex back to binary.
+		f = open(os.path.join(dest_dir, 'cpuz.bin'), 'wb')
+		for match in self._hex_pattern.finditer(file_header):
+			f.write(codecs.decode(match.group(1).replace(b' ', b''), 'hex'))
+		f.close()
+
+		# Create header file with the CPU-Z version string.
+		f = open(os.path.join(dest_dir, ':header:'), 'wb')
+		f.write(cpuz_match.group(1))
+		f.close()
+
+		# Remove report file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory path.
+		return dest_dir
+
+
 class DellExtractor(Extractor):
 	"""Extract Dell/Phoenix ROM BIOS PLUS images.
 	   Based on dell_inspiron_1100_unpacker.py"""
