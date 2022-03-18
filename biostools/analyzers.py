@@ -825,6 +825,9 @@ class AwardAnalyzer(Analyzer):
 				self.version = 'v' + (version_match.group(1) or version_match.group(2))
 			elif version_string == 'Award Modular BIOS Version ': # Award version removed (Intel YM430TX)
 				self.version = 'Intel'
+			elif version_string[:19] == 'Award Modular BIOS/': # Award version removed (Packard Bell PB810)
+				self.version = 'Packard Bell'
+				self.signon = version_string[19:] + '\n'
 
 			# Add Phoenix-Award and WorkstationBIOS indicators.
 			if 'Phoenix' in version_string:
@@ -834,7 +837,7 @@ class AwardAnalyzer(Analyzer):
 
 			# Extract sign-on.
 			# Vertical tab characters may be employed (??? reported by BurnedPinguin)
-			self.signon = util.read_string(file_data[id_block_index + 0xc1:id_block_index + 0x10f]).replace('\r', '').replace('\v', '\n')
+			self.signon += util.read_string(file_data[id_block_index + 0xc1:id_block_index + 0x10f]).replace('\r', '').replace('\v', '\n')
 
 			# Split sign-on lines.
 			self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
