@@ -423,17 +423,27 @@ class AMIAnalyzer(Analyzer):
 					match = self._precolor_string_pattern.search(file_data)
 					if match:
 						# Extract string.
-						self.string = ''
-						for c in match.group(1):
+						buf = []
+						for c in file_data[match.start(1):]:
 							c = ~c & 0xff
-							c = ((c << 5) | (c >> 3)) & 0x7f
-							self.string += chr(c)
+							c = (c << 5) | (c >> 3)
+							buf.append(c & 0x7f)
+							if c & 0x80: # MSB termination
+								break
+						self.string = bytes(buf).decode('cp437', 'ignore')
+
+						# Remove "-K" KBC suffix.
+						# Note: K without preceding - is possible (Atari PC5)
+						if self.string[-1:] == 'K':
+							self.string = self.string[:-1]
+							if self.string[-1:] == '-':
+								self.string = self.string[:-1]
 					else:
 						# Fallback if we can't find the encoded string.
-						self.string = '????-'
+						self.string = '????'
 
 						# Add vendor ID.
-						self.string += codecs.encode(file_data[id_block_index - 0xbb:id_block_index - 0xb9], 'hex').decode('ascii', 'ignore').upper()
+						self.string += '-' + codecs.encode(file_data[id_block_index - 0xbb:id_block_index - 0xb9], 'hex').decode('ascii', 'ignore').upper()
 
 						# Add date.
 						self.string += '-' + util.read_string(file_data[id_block_index + 0x9c:id_block_index + 0xa4]).replace('/', '').strip()
@@ -451,11 +461,12 @@ class AMIAnalyzer(Analyzer):
 					match = self._8088_string_pattern.search(file_data)
 					if match:
 						# Extract string.
-						self.string = ''
+						buf = []
 						for c in match.group(1):
 							c = -c & 0xff
-							c = ((c << 1) | (c >> 7)) & 0x7f
-							self.string += chr(c)
+							c = (c << 1) | (c >> 7)
+							buf.append(c & 0x7f)
+						self.string = bytes(buf).decode('cp437', 'ignore')
 					else:
 						# Fallback if we can't find the encoded string.
 						self.string = '????-' + self.version.replace('/', '')
