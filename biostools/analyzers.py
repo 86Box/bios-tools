@@ -1814,9 +1814,9 @@ class PhoenixAnalyzer(Analyzer):
 		additional_info = match.group(5)
 		if additional_info:
 			if self.signon:
-				self.signon = additional_info + '\n' + self.signon
+				self.signon = additional_info.strip() + '\n' + self.signon
 			else:
-				self.signon = additional_info
+				self.signon = additional_info.strip()
 
 		return True
 
