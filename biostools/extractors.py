@@ -1231,12 +1231,14 @@ class InterleaveExtractor(Extractor):
 		data = []
 
 		# Look for each counterpart.
+		dir_files = os.listdir(dir_path)
+		dir_files.sort()
 		counterpart_paths = [file_path]
 		for counterpart_string_set in counterpart_string_sets:
 			# Try to find this file's counterpart in the directory.
 			counterpart_candidates = []
 			file_size = os.path.getsize(file_path)
-			for file_in_dir in os.listdir(dir_path):
+			for file_in_dir in dir_files:
 				# Skip seen files.
 				file_in_dir_path = os.path.join(dir_path, file_in_dir)
 				if file_in_dir_path in counterpart_paths:
