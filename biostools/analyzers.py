@@ -319,7 +319,7 @@ class AMIAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('AMI', *args, **kwargs)
 
-		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC| Access Methods Inc\\.|AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) IBM is a TM of IBM''')
+		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC| Access Methods Inc\\.|AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) (?:IBM is a TM of IBM|[\\x00-\\xFF]{2}   AMI-[^-]+-BIOS )''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
 		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-......-Chipset$''')
 		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\.86(?:[0-9A-Z])\.(?:[0-9A-Z]{4})\.(?:[0-9A-Z]{3})\.(?:[0-9]{10})$''')
@@ -444,7 +444,7 @@ class AMIAnalyzer(Analyzer):
 							self.string = ''
 							return True
 				elif check_match.group(1): # 8088-BIOS header
-					# Extract version.					
+					# Extract version.
 					self.version = check_match.group(1).decode('cp437', 'ignore')
 
 					# Locate the encoded string.
