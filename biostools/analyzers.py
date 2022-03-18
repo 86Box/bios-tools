@@ -285,7 +285,7 @@ class AcerAnalyzer(Analyzer):
 		if signon:
 			if self.signon:
 				self.signon += '\n'
-			self.signon = signon
+			self.signon = signon.strip()
 
 		# Read version on the next line.
 		self._trap_version = True
