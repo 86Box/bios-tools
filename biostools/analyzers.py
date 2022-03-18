@@ -2183,6 +2183,26 @@ class PhoenixAnalyzer(Analyzer):
 			self.signon = self._found_signon_tandy
 
 
+class PromagAnalyzer(Analyzer):
+	def __init__(self, *args, **kwargs):
+		super().__init__('Promag', *args, **kwargs)
+
+		self._version_pattern = re.compile(b'''\\(C\\) PROMAG SYSTEM BOARD VER\\. ([^ ]+) [^\\n]+\\n([\\r\\n\\x20-\\x7E]+)''')
+
+	def can_handle(self, file_data, header_data):
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
+
+		# Extract version.
+		self.version = match.group(1).decode('cp437', 'ignore')
+
+		# Extract sign-on.
+		self.signon = match.group(2).decode('cp437', 'ignore').replace('\r', '')
+
+		return True
+
+
 class QuadtelAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Quadtel', *args, **kwargs)
