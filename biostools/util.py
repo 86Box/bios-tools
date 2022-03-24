@@ -149,17 +149,19 @@ def log_traceback(*args):
 def read_complement(file_path, file_header=None, max_size=16777216):
 	"""Read up to max_size from file_path starting at the end of file_header.
 	   Usage: file_header += read_complement(file_path, file_header)"""
-	try:
-		f = open(file_path, 'rb')
-		if file_header:
-			f.seek(len(file_header))
-			ret = f.read(max_size - len(file_header))
-		else:
-			ret = f.read(max_size)
-		f.close()
-		return ret
-	except:
-		return b''
+	if not file_header or len(file_header) < max_size:
+		try:
+			f = open(file_path, 'rb')
+			if file_header:
+				f.seek(len(file_header))
+				ret = f.read(max_size - len(file_header))
+			else:
+				ret = f.read(max_size)
+			f.close()
+			return ret
+		except:
+			pass
+	return b''
 
 def read_string(data, terminator=b'\x00'):
 	"""Read a terminated string (by NUL by default) from a bytes."""
