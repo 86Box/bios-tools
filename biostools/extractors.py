@@ -244,9 +244,12 @@ class BIOSExtractor(Extractor):
 								pos = in_f.tell()
 								data = in_f.read(65536 + 32)
 								match = self._phoenixnet_workaround_pattern.search(data)
-								file_size = match.start(0) - 17
-								in_f.seek(pos + file_size)
-								data = data[:file_size]
+								if match:
+									file_size = match.start(0) - 17
+									in_f.seek(pos + file_size)
+									data = data[:file_size]
+								else:
+									in_f.seek(0, 2)
 							else:
 								data = in_f.read(file_size)
 
