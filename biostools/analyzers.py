@@ -331,11 +331,14 @@ class AMIAnalyzer(Analyzer):
 		# Weird TGem identifier (TriGem 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\(C\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
-		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6)''')
+		# "\xFF\xFF\xFF\xFFFLASH-" (Everex EISA 386-BIOS)
+		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6|\\xFF{4}FLASH-[0-9]{6})''')
 		# Variable gap between sync bytes (first bytes of the ROM) and the date.
-		self._precolor_core_date_pattern = re.compile(b'''\\xAA\\x55[\\x00-\\xFF]{1,16}([0-9]{2}/[0-9]{2}/[0-9]{2})''')
-		# Decoded: "\xFE([^-]{4}-(?:[^-]{4}-)?[^-]{6})"
-		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6})''')
+		# "\xFF\xFF\xFF\xFFFLASH-" (Everex EISA 386-BIOS)
+		self._precolor_core_date_pattern = re.compile(b'''\\xAA\\x55[\\x00-\\xFF]{1,16}([0-9]{2}/[0-9]{2}/[0-9]{2})|\\xFF{4}FLASH-([0-9]{2})([0-9]{2})([0-9]{2})''')
+		# Decoded: "\xFE([^-]{4}-(?:[^-]{4}-)?[^-]{6}|Ref\. [\x00-\xFF]{1,64})"
+		# "Ref. " (Everex EISA 386-BIOS) - let the code handle termination
+		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6}|\\x6D\\xD4\\xCC\\x8E\\xFE[\\x00-\\xFF]{1,64})''')
 		self._precolor_signon_pattern = re.compile(b'''BIOS \(C\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
 		# Decoded: "\(C\)AMI, \(([^\)]{11})\)"
 		self._8088_string_pattern = re.compile(b'''\\xEC\\x5F\\x6C\\x60\\x5A\\x5C\\xEA\\xF0\\xEC([\\x00-\\x6B\\x6D-\\xFF]{11})\\x6C''')
@@ -415,7 +418,7 @@ class AMIAnalyzer(Analyzer):
 				match = self._date_pattern.search(file_data)
 			if match:
 				# Extract date as the version.
-				self.version = match.group(1).decode('cp437', 'ignore')
+				self.version = (match.group(1) or (match.group(2) + b'/' + match.group(3) + b'/' + match.group(4))).decode('cp437', 'ignore')
 				date_start = match.start(0)
 
 				# Check pre-Color identification block.
@@ -441,8 +444,9 @@ class AMIAnalyzer(Analyzer):
 						# Note: K without preceding - is possible (Atari PC5)
 						if self.string[-1:] == 'K':
 							self.string = self.string[:-1]
-							if self.string[-1:] == '-':
-								self.string = self.string[:-1]
+
+						if self.string[-1:] == '-':
+							self.string = self.string[:-1]
 					else:
 						# Fallback if we can't find the encoded string.
 						self.string = '????'
