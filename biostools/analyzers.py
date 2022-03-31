@@ -444,9 +444,8 @@ class AMIAnalyzer(Analyzer):
 						# Note: K without preceding - is possible (Atari PC5)
 						if self.string[-1:] == 'K':
 							self.string = self.string[:-1]
-
-						if self.string[-1:] == '-':
-							self.string = self.string[:-1]
+							if self.string[-1:] == '-':
+								self.string = self.string[:-1]
 					else:
 						# Fallback if we can't find the encoded string.
 						self.string = '????'
