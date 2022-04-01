@@ -1517,6 +1517,7 @@ class MRAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('MR', *args, **kwargs)
 
+		self._check_pattern = re.compile(b'''(?:MR BIOS| ALARIS) \\(r\\)  V''')
 		self._signon_pattern = re.compile(b'''OEM SIGNON >>-->([\\x20-\\x7E]+)''')
 
 		self.register_check_list([
@@ -1526,7 +1527,7 @@ class MRAnalyzer(Analyzer):
 
 	def can_handle(self, file_data, header_data):
 		# Skip readme false positives.
-		if len(file_data) < 2048 or b'MR BIOS (r)  V' not in file_data:
+		if len(file_data) < 2048 or not self._check_pattern.search(file_data):
 			return False
 
 		# Extract custom OEM sign-on.
@@ -1540,7 +1541,7 @@ class MRAnalyzer(Analyzer):
 		return True
 
 	def _version_newer(self, line, match):
-		'''^MR BIOS \(r\)  (V(?:[^\s]+))(?: (.+))?$'''
+		'''^(?:MR BIOS| ALARIS) \\(r\\)  (V(?:[^ ]+))(?: (.+))?$'''
 
 		# Extract version.
 		self.version = match.group(1)
