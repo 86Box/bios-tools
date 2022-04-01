@@ -1517,7 +1517,7 @@ class MRAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('MR', *args, **kwargs)
 
-		self._check_pattern = re.compile(b'''(?:MR BIOS| ALARIS) \\(r\\)  V''')
+		self._check_pattern = re.compile(b'''[A-Z ]{7} \\(r\\)  V''')
 		self._signon_pattern = re.compile(b'''OEM SIGNON >>-->([\\x20-\\x7E]+)''')
 
 		self.register_check_list([
@@ -1541,7 +1541,7 @@ class MRAnalyzer(Analyzer):
 		return True
 
 	def _version_newer(self, line, match):
-		'''^(?:MR BIOS| ALARIS) \\(r\\)  (V(?:[^ ]+))(?: (.+))?$'''
+		'''^[A-Z ]{7} \\(r\\)  (V(?:[^ ]+))(?: (.+))?$'''
 
 		# Extract version.
 		self.version = match.group(1)
