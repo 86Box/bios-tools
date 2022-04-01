@@ -790,7 +790,8 @@ class AwardAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Award', *args, **kwargs)
 
-		self._award_pattern = re.compile(b'''Award (?:Software Inc\\.|Decompression Bios)''')
+		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|Award Decompression Bios''')
+		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}A w a r d Software Inc\\.[\\x00-\\xFF]{82}''')
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
 		self._gigabyte_bif_pattern = re.compile(b'''\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\([a-zA-Z0-9]{1,8}\) EVALUATION ROM - NOT FOR SALE$''')
@@ -802,7 +803,6 @@ class AwardAnalyzer(Analyzer):
 		self._version_pattern = re.compile(''' (?:v([^-\\s]+)|Version [^0-9]*([0-9]\\.(?:[0-9]{2}|[0-9][A-Z])))(?:[. ]([\\x20-\\x7E]+))?''')
 
 		self.register_check_list([
-			(self._version_ast,		RegexChecker),
 			(self._version_pcxt,	RegexChecker),
 			(self._addons_uefi,		SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 		])
@@ -891,17 +891,15 @@ class AwardAnalyzer(Analyzer):
 							self.string += '\n' + post_version
 						else:
 							self.string = post_version
+		else:
+			# Handle AST modified Award.
+			match = self._ast_pattern.search(file_data)
+			if match:
+				# Set static version.
+				self.version = 'AST'
 
-		return True
-
-	def _version_ast(self, line, match):
-		'''^.AST ((?:.+) BIOS Rel\. (?:.+))'''
-
-		# This is an AST BIOS.
-		self.version = 'AST'
-
-		# Extract model and version as a sign-on.
-		self.signon = match.group(1)
+				# Extract AST string as a sign-on.
+				self.signon = util.read_string(file_data[match.end(0):match.end(0) + 0x80])
 
 		return True
 
