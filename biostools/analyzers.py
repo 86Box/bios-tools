@@ -1323,8 +1323,8 @@ class IBMAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('IBM', *args, **kwargs)
 
-		self._header_pattern = re.compile(b'''([0-9]{2}[A-Z0-9][0-9]{4}) (COPR\. IBM|\(C\) COPYRIGHT IBM CORPORATION) 19[89][0-9]''')
-		self._interleaved_header_pattern = re.compile(b'''(([0-9])\\2([0-9])\\3([A-Z0-9])\\4(?:[0-9]{8}))  (CCOOPPRR\.\.  IIBBMM|\(\(CC\)\)  CCOOPPYYRRIIGGHHTT  IIBBMM  CCOORRPPOORRAATTIIOONN)  1199([89])\\6([0-9])\\7''')
+		self._header_pattern = re.compile(b'''([0-9]{2}[A-Z0-9][0-9]{4})  ?(COPR\\. IBM|\\(C\\) COPYRIGHT IBM CORPORATION) 19[89][0-9]''')
+		self._interleaved_header_pattern = re.compile(b'''(([0-9])\\2([0-9])\\3([A-Z0-9])\\4(?:[0-9]{8}))  (CCOOPPRR\\.\\.  IIBBMM|\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  IIBBMM  CCOORRPPOORRAATTIIOONN)  1199([89])\\6([0-9])\\7''')
 
 	def can_handle(self, file_data, header_data):
 		# Extract IBM part number/copyright headers.
