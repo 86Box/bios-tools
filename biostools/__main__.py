@@ -52,7 +52,7 @@ def extract_dir(file_extractors, dir_number_path, next_dir_number_path, scan_dir
 		# Read header.
 		try:
 			f = open(file_path, 'rb')
-			file_data = f.read(32775) # upper limit set by ISOExtractor
+			file_data = f.read(32782) # upper limit set by ISOExtractor
 			f.close()
 		except:
 			# Permission issues or after-the-fact removal of other files by

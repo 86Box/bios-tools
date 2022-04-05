@@ -1033,7 +1033,7 @@ class ISOExtractor(ArchiveExtractor):
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if this is not an ISO.
-		if file_header[32769:32775] != b'CD001\x01':
+		if file_header[32769:32774] != b'CD001' or file_header[32777:32782] != b'CDROM':
 			return False
 
 		# Extract this as an archive.
