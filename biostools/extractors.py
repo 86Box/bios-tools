@@ -45,6 +45,7 @@ class ApricotExtractor(Extractor):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
+		# Apricot version signature.
 		self._apricot_pattern = re.compile(b'''@\\(#\\)Apricot ''')
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
@@ -157,18 +158,22 @@ class BIOSExtractor(Extractor):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
-		# Path to the bios_extract utility.
-		self._bios_extract_path = os.path.abspath(os.path.join('bios_extract', 'bios_extract'))
-		if not os.path.exists(self._bios_extract_path):
-			self._bios_extract_path = None
+		# Signature for a common entry point jump instruction (fast search).
+		self._entrypoint_pattern = re.compile(b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0''')
 
-		# /dev/null handle for suppressing output.
-		self._devnull = open(os.devnull, 'wb')
+		# Fallback BIOS signatures (slower search), based on bios_extract.c
+		self._signature_pattern = re.compile(
+			b'''AMI(?:BIOS(?: \\(C\\)1993 American Megatrends Inc.,| W 0[45]|C0[6789])|BOOT ROM|EBBLK| Flash Utility for DOS Command mode\\.)|'''
+			b'''SUPER   ROM|'''
+			b'''\\$ASUSAMI\\$|'''
+			b'''= Award Decompression Bios =|'''
+			b'''awardext.rom|'''
+			b'''Phoenix Technologies|'''
+			b'''[\\xEE\\xFF]\\x88SYSBIOS|'''
+			b'''\\xEE\\x88\\x42IOS SCU'''
+		)
 
-		# Built-in instance of ImageExtractor for converting
-		# any extracted BIOS logo images that were found.
-		self._image_extractor = ImageExtractor()
-
+		# Workaround for an annoying PhoenixNet entry type where the size field is wrong (compressed?)
 		fn = b'''[^\\x01-\\x1F\\x7F-\\xFF\\\\/:\\*\\?"<>\\|]'''
 		self._phoenixnet_workaround_pattern = re.compile(
 			fn + b'''(?:\\x00{7}|''' +
@@ -184,9 +189,28 @@ class BIOSExtractor(Extractor):
 			fn + b'''))'''
 		)
 
+		# Path to the bios_extract utility.
+		self._bios_extract_path = os.path.abspath(os.path.join('bios_extract', 'bios_extract'))
+		if not os.path.exists(self._bios_extract_path):
+			self._bios_extract_path = None
+
+		# /dev/null handle for suppressing output.
+		self._devnull = open(os.devnull, 'wb')
+
+		# Built-in instance of ImageExtractor for converting
+		# any extracted BIOS logo images that were found.
+		self._image_extractor = ImageExtractor()
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if bios_extract is not available.
 		if not self._bios_extract_path:
+			return False
+
+		# Read up to 16 MB as a safety net.
+		file_header += util.read_complement(file_path, file_header)
+
+		# Stop if no BIOS signatures are found.
+		if not self._entrypoint_pattern.match(file_header[-16:]) and not self._signature_pattern.search(file_header):
 			return False
 
 		# Create destination directory and stop if it couldn't be created.
@@ -301,6 +325,7 @@ class CPUZExtractor(Extractor):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
+		# Patterns for parsing a report hex dump.
 		self._cpuz_pattern = re.compile(b'''CPU-Z version\\t+([^\\r\\n]+)''')
 		self._hex_pattern = re.compile(b'''[0-9A-F]+\\t((?:[0-9A-F]{2} ){16})\\t''')
 
@@ -558,6 +583,8 @@ class ImageExtractor(Extractor):
 		for dest_dir_file in dest_dir_files:
 			# Read 8 bytes, which is enough to ascertain any potential logo type.
 			dest_dir_file_path = os.path.join(dest_dir_0, dest_dir_file)
+			if os.path.isdir(dest_dir_file_path):
+				continue
 			f = open(dest_dir_file_path, 'rb')
 			dest_dir_file_header = f.read(16)
 			f.close()
@@ -939,6 +966,8 @@ class HexExtractor(Extractor):
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
+
+		# Signatures for parsing a HEX.
 		self._hex_start_pattern = re.compile(b''':(?:[0-9A-F]{2}){1,}\\r?\\n''')
 		self._hex_eof_pattern = re.compile(b''':00[0-9A-F]{4}01[0-9A-F]{2}\\r?\\n?$''')
 		self._hex_data_pattern = re.compile(b''':([0-9A-F]{2})([0-9A-F]{4})00([0-9A-F]{2,})\\r?\\n''')
@@ -998,6 +1027,8 @@ class ISOExtractor(ArchiveExtractor):
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
+
+		# Signature for identifying El Torito header data.
 		self._eltorito_pattern = re.compile(b'''\\x01\\x00\\x00\\x00[\\x00-\\xFF]{26}\\x55\\xAA\\x88\\x04[\\x00-\\xFF]{3}\\x00[\\x00-\\xFF]{2}([\\x00-\\xFF]{4})''')
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
@@ -1390,6 +1421,8 @@ class MBRSafeExtractor(ArchiveExtractor):
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
+
+		# Signature for identifying typical MBRs.
 		self._mbr_pattern = re.compile(b'''(?:Error loading|Missing) operating system''')
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
@@ -1635,6 +1668,9 @@ class UEFIExtractor(Extractor):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
+		# Known UEFI signatures.
+		self._signature_pattern = re.compile(b'''EFI_|D(?:xe|XE)|P(?:ei|EI)''')
+
 		# Ignore padding and microcode files.
 		self._invalid_file_pattern = re.compile('''(?:Padding|Microcode)_''')
 
@@ -1653,6 +1689,13 @@ class UEFIExtractor(Extractor):
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if UEFIExtract is not available.
 		if not self._uefiextract_path:
+			return False
+
+		# Read up to 16 MB as a safety net.
+		file_header += util.read_complement(file_path, file_header)
+
+		# Stop if no UEFI signatures are found.
+		if not self._signature_pattern.search(file_header):
 			return False
 
 		# Start UEFIExtract process.
@@ -1832,11 +1875,7 @@ class VMExtractor(ArchiveExtractor):
 
 		# Build QEMU arguments.
 		dest_dir_sanitized = dest_dir.replace(',', ',,')
-		args = [
-			self._qemu_path,
-			'-nographic',
-			'-m', '32'
-		]
+		args = [self._qemu_path, '-nographic', '-m', '32']
 		if hdd != None:
 			args += ['-boot', 'c']
 			args += ['-drive', 'if=ide,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[hdd][1])]

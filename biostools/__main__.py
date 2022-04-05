@@ -89,7 +89,6 @@ def extract_dir(file_extractors, dir_number_path, next_dir_number_path, scan_dir
 	# Remove this directory if it ends up empty.
 	util.rmdirs(scan_dir_path)
 
-
 def extract_process(queue, dir_number_path, next_dir_number_path):
 	"""Main loop for the extraction multiprocessing pool."""
 
@@ -107,6 +106,7 @@ def extract_process(queue, dir_number_path, next_dir_number_path):
 		extractors.HexExtractor(),
 		extractors.ImageExtractor(),
 		extractors.ApricotExtractor(),
+		# extractors from here on down read more than the header
 		extractors.DellExtractor(),
 		extractors.IntelExtractor(),
 		extractors.OMFExtractor(),
