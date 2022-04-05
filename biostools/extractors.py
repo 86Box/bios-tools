@@ -515,7 +515,11 @@ class DiscardExtractor(Extractor):
 		# File signatures to discard.
 		self._signature_pattern = re.compile(
 			# images
-			b'''\\xFF\\xD8\\xFF|GIF8|\\x89PNG|'''
+			b'''\\x0A[\\x00-\\x05][\\x00-\\x01][\\x01\\x02\\x04\\x08]|''' # PCX
+			b'''BM|''' # BMP
+			b'''\\xFF\\xD8\\xFF|''' # JPEG
+			b'''GIF8|''' # GIF
+			b'''\\x89PNG|''' # PNG
 			# documents (a cursory check for HTML ought not to upset anyone)
 			b'''%PDF|\\xD0\\xCF\\x11\\xE0\\xA1\\xB1\\x1A\\xE1|\\x3F\\x5F\\x03\\x00|<(?:\![Dd][Oo][Cc][Tt][Yy][Pp][Ee]|[Hh][Tt][Mm][Ll])[ >]|'''
 			# executables
