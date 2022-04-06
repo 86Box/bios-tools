@@ -96,6 +96,7 @@ class ApricotExtractor(Extractor):
 		# Return destination directory path.
 		return dest_dir
 
+
 class ArchiveExtractor(Extractor):
 	"""Extract known archive types."""
 
@@ -108,9 +109,9 @@ class ArchiveExtractor(Extractor):
 			b'''Rar!\\x1A\\x07|''' # rar
 			b'''7z\\xBC\\xAF\\x27\\x1C|''' # 7z
 			b'''MSCF|''' # cab
-			b'''\\x1F\\x8B|''' # gzip
+			b'''(\\x1F\\x8B|''' # gzip
 			b'''BZh|''' # bzip2
-			b'''\\xFD7zXZ\\x00|''' # xz
+			b'''\\xFD7zXZ\\x00)|''' # xz
 			b'''LHA\\x20|''' # lha
 			b'''ZOO''' # zoo
 		)
@@ -178,13 +179,14 @@ class ArchiveExtractor(Extractor):
 		"""Extract an archive."""
 
 		# Stop if this is apparently not an archive.
-		if not self._signature_pattern.match(file_header):
+		match = self._signature_pattern.match(file_header)
+		if not match:
 			return False
 
 		# Do the actual extraction.
-		return self._extract_archive(file_path, dest_dir)
+		return self._extract_archive(file_path, dest_dir, rename=bool(match.group(1)))
 
-	def _extract_archive(self, file_path, dest_dir, remove=True):
+	def _extract_archive(self, file_path, dest_dir, remove=True, rename=False):
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
 			return True
@@ -221,8 +223,16 @@ class ArchiveExtractor(Extractor):
 					break
 
 		# Assume failure if nothing was extracted.
-		if len(os.listdir(dest_dir)) < 1:
+		files_extracted = os.listdir(dest_dir)
+		if len(files_extracted) < 1:
 			return False
+
+		# Rename single file if requested.
+		if rename and len(files_extracted) == 1:
+			try:
+				shutil.move(os.path.join(dest_dir, files_extracted[0]), os.path.join(dest_dir, os.path.splitext(os.path.basename(file_path))[0]))
+			except:
+				pass
 
 		# Remove archive file.
 		if remove:
@@ -1124,7 +1134,7 @@ class ISOExtractor(ArchiveExtractor):
 			return False
 
 		# Extract this as an archive.
-		ret = self._extract_archive(file_path, dest_dir, False)
+		ret = self._extract_archive(file_path, dest_dir, remove=False)
 
 		# Some El Torito hard disk images have an MBR (Lenovo ThinkPad UEFI updaters).
 		# 7-Zip doesn't care about MBRs and just takes the El Torito sector count field
@@ -2006,7 +2016,7 @@ class VMExtractor(ArchiveExtractor):
 
 		# Extract image as an archive.
 		image_path = os.path.join(dest_dir, deps[0][1])
-		ret = self._extract_archive(image_path, dest_dir, False)
+		ret = self._extract_archive(image_path, dest_dir, remove=False)
 		if type(ret) == str and len(os.listdir(dest_dir)) > 1:
 			# Remove original file.
 			try:
