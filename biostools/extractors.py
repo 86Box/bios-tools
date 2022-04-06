@@ -159,13 +159,11 @@ class ArchiveExtractor(Extractor):
 			# Test symlink creation.
 			link_path = os.path.join(dir_path, temp_file_name)
 			try:
-				# Create symlink.
+				# Create symlink and check if it was actually created.
 				os.symlink(my_file_path, link_path)
-				if not os.path.islink(link_path):
-					raise Exception()
-
-				# Test passed, add to temporary path list.
-				self._temp_paths.append(link_path)
+				if os.readlink(link_path) == my_file_path:
+					# Test passed, add to temporary path list.
+					self._temp_paths.append(link_path)
 			except:
 				pass
 
@@ -193,17 +191,17 @@ class ArchiveExtractor(Extractor):
 
 		# Try creating temporary symlink with the archive's extension.
 		file_path_abs = os.path.abspath(file_path)
-		basename, ext = os.path.splitext(file_path_abs)
+		_, ext = os.path.splitext(file_path_abs)
 		link_path = file_path_abs
 		for temp_path in self._temp_paths:
 			temp_path_ext = temp_path + ext
 			try:
 				os.symlink(file_path_abs, temp_path_ext)
+				if os.readlink(temp_path_ext) == file_path_abs:
+					link_path = temp_path_ext
+					break
 			except:
 				pass
-			if os.path.islink(temp_path_ext):
-				link_path = temp_path_ext
-				break
 
 		# Run 7z command to extract the archive.
 		# The dummy password prevents any password prompts from stalling 7z.
