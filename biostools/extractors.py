@@ -196,10 +196,15 @@ class ArchiveExtractor(Extractor):
 		for temp_path in self._temp_paths:
 			temp_path_ext = temp_path + ext
 			try:
+				# Create symlink and check if it was actually created.
 				os.symlink(file_path_abs, temp_path_ext)
 				if os.readlink(temp_path_ext) == file_path_abs:
+					# Test passed, make this link the new path.
 					link_path = temp_path_ext
 					break
+				else:
+					# Remove link if it was created.
+					os.remove(temp_path_ext)
 			except:
 				pass
 
