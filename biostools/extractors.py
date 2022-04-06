@@ -118,6 +118,64 @@ class ArchiveExtractor(Extractor):
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
 
+		# 7-Zip has this annoying quirk where it scans the archive's parent
+		# directory structure before extracting the archive itself. This
+		# takes a very long time if any of the parent directories has a lot
+		# of files. Therefore, we try to find a location as close to / as
+		# possible, so we can symlink the archive there and make that parent
+		# scan as quick as possible. Igor recognizes this is an inefficiency
+		# in p7zip, but even the native Linux 7-Zip 21.07 still has it...?
+		dirs = []
+		my_file_path = os.path.abspath(__file__)
+		for dir_path in (os.path.dirname(my_file_path), os.getcwd(), '/tmp', '/run/user/' + str(hasattr(os, 'getuid') and os.getuid() or 0)):
+			# Get file count for all levels of the path.
+			levels = []
+			while True:
+				try:
+					list_len = len(os.listdir(dir_path))
+				except:
+					list_len = 2 ** 32
+				levels.append((dir_path, list_len))
+				parent_dir_path = os.path.dirname(dir_path)
+				if parent_dir_path == dir_path:
+					break
+				dir_path = parent_dir_path
+
+			# Go through levels in ascending (therefore closest to /) order.
+			levels.sort()
+			total_count = 0
+			for level_dir, level_count in levels:
+				total_count += level_count
+				dirs.append((level_dir, total_count))
+
+		# Remove duplicates and sort by total children count.
+		dirs = list(set(dirs))
+		dirs.sort(key=lambda x: (x[1], x[0]))
+		
+		# See where we can create a symlink.
+		temp_file_name = 'biostools_{0}_{1}'.format(hex(os.getpid())[2:], hex(id(self))[2:])
+		self._temp_paths = []
+		for dir_path, dir_children in dirs:
+			# Test symlink creation.
+			link_path = os.path.join(dir_path, temp_file_name)
+			try:
+				# Create symlink.
+				os.symlink(my_file_path, link_path)
+				if not os.path.islink(link_path):
+					raise Exception()
+
+				# Test passed, add to temporary path list.
+				self._temp_paths.append(link_path)
+			except:
+				pass
+
+			# Remove any created symlink.
+			while os.path.islink(link_path):
+				try:
+					os.remove(link_path)
+				except:
+					break
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract an archive."""
 
@@ -133,9 +191,31 @@ class ArchiveExtractor(Extractor):
 		if not util.try_makedirs(dest_dir):
 			return True
 
+		# Try creating temporary symlink with the archive's extension.
+		file_path_abs = os.path.abspath(file_path)
+		basename, ext = os.path.splitext(file_path_abs)
+		link_path = file_path_abs
+		for temp_path in self._temp_paths:
+			temp_path_ext = temp_path + ext
+			try:
+				os.symlink(file_path_abs, temp_path_ext)
+			except:
+				pass
+			if os.path.islink(temp_path_ext):
+				link_path = temp_path_ext
+				break
+
 		# Run 7z command to extract the archive.
 		# The dummy password prevents any password prompts from stalling 7z.
-		subprocess.run(['7z', 'x', '-y', '-ppassword', '--', os.path.abspath(file_path)], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+		subprocess.run(['7z', 'x', '-y', '-ppassword', '--', link_path], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+
+		# Remove temporary symlink.
+		if link_path != file_path_abs:
+			while os.path.islink(link_path):
+				try:
+					os.remove(link_path)
+				except:
+					break
 
 		# Assume failure if nothing was extracted.
 		if len(os.listdir(dest_dir)) < 1:
