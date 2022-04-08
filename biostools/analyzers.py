@@ -899,7 +899,8 @@ class AwardAnalyzer(Analyzer):
 				self.version = 'AST'
 
 				# Extract AST string as a sign-on.
-				self.signon = util.read_string(file_data[match.end(0):match.end(0) + 0x80])
+				self.signon = util.read_string(file_data[match.end(0):match.end(0) + 0x80]).replace('\r', '\n')
+				self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 
 		return True
 
@@ -1788,7 +1789,7 @@ class PhoenixAnalyzer(Analyzer):
 		# and modified version numbers as part of the sign-on.
 		additional_info = (match.group(4) or '').strip()
 		if additional_info:
-			if additional_info[0] == '.':
+			if additional_info.lstrip() == additional_info:
 				additional_info = match.group(3).strip() + additional_info.strip()
 			if self.signon:
 				if additional_info not in self.signon:
@@ -1812,9 +1813,12 @@ class PhoenixAnalyzer(Analyzer):
 		if prefix:
 			self.version = prefix + ' ' + self.version
 
-		# Extract any additional information after the version.
+		# Extract any additional information after the version
+		# and modified version numbers as part of the sign-on.
 		additional_info = match.group(5)
 		if additional_info:
+			if additional_info.lstrip() == additional_info:
+				additional_info = self.version + additional_info
 			if self.signon:
 				self.signon = additional_info.strip() + '\n' + self.signon
 			else:
@@ -1823,7 +1827,7 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_404(self, line, match):
-		'''v([0-9]\.[0-9]{2}) Copyright 1985-[^\s]+ Phoenix Technologies Ltd'''
+		'''v([0-9]\.[0-9]{2}) Copyright 1985-[^ ]+ Phoenix Technologies Ltd'''
 
 		# Some v4.04 BIOSes somehow don't have enough data for
 		# _version_40x to work (partially failed extraction?)

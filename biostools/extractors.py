@@ -1411,7 +1411,15 @@ class InterleaveExtractor(Extractor):
 		for counterpart_string_set in counterpart_string_sets:
 			# Try to find this file's counterpart in the directory.
 			counterpart_candidates = []
-			file_size = os.path.getsize(file_path)
+			file_size = None
+			for _ in range(10):
+				try:
+					file_size = os.path.getsize(file_path)
+					break
+				except:
+					pass
+			if file_size == None:
+				raise Exception('file somehow missing')
 			for file_in_dir in dir_files:
 				# Skip seen files.
 				file_in_dir_path = os.path.join(dir_path, file_in_dir)
