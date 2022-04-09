@@ -329,17 +329,18 @@ class AMIAnalyzer(Analyzer):
 		# - Can be 4-digit instead of 6-digit (Biostar)
 		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\(AAMMIIBBIIOOSS\))([0-9]{2}/[0-9]{2}/[0-9]{2})\(C\)[0-9]{4} American Megatrends,? Inc(?:\.,? All Rights Reserved|/Hewlett-Packard Company)''')
 		# Weird TGem identifier (TriGem 486-BIOS)
-		self._precolor_block_pattern = re.compile(b'''\(C\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\.))''')
+		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
 		# "\xFF\xFF\xFF\xFFFLASH-" (Everex EISA 386-BIOS)
-		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6|\\xFF{4}FLASH-[0-9]{6})''')
+		# Encoded "EVALUATION COPY" as a backup ("ami2939", possibly others without a date)
+		self._precolor_date_pattern = re.compile(b'''(?:(?: Date:- ?|AMI- )[0-9]{2}/[0-9]{2}/[0-9]{2}|DDaattee(?:::|  )--(?:  )?([0-9])\\1([0-9])\\2//([0-9])\\3([0-9])\\4//([0-9])\\5([0-9])\\6|\\xFF{4}FLASH-[0-9]{6})|\\xFE\\xD5\\x4D\\xF5\\x9D\\x55\\xF5\\x5D\\xB5\\x85\\x8D\\xFE\\xE5\\x85\\x7D\\x35\\x9E\\xFE\\x8D\\x85\\x5D\\xFE\\xCD\\x85\\x6D\\xFE\\x65\\xF5\\x9D\\xD5''')
 		# Variable gap between sync bytes (first bytes of the ROM) and the date.
 		# "\xFF\xFF\xFF\xFFFLASH-" (Everex EISA 386-BIOS)
 		self._precolor_core_date_pattern = re.compile(b'''\\xAA\\x55[\\x00-\\xFF]{1,16}([0-9]{2}/[0-9]{2}/[0-9]{2})|\\xFF{4}FLASH-([0-9]{2})([0-9]{2})([0-9]{2})''')
 		# Decoded: "\xFE([^-]{4}-(?:[^-]{4}-)?[^-]{6}|Ref\. [\x00-\xFF]{1,64})"
 		# "Ref. " (Everex EISA 386-BIOS) - let the code handle termination
 		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6}|\\x6D\\xD4\\xCC\\x8E\\xFE[\\x00-\\xFF]{1,64})''')
-		self._precolor_signon_pattern = re.compile(b'''BIOS \(C\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
+		self._precolor_signon_pattern = re.compile(b'''BIOS \\(C\\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
 		# Decoded: "\(C\)AMI, \(([^\)]{11})\)"
 		self._8088_string_pattern = re.compile(b'''\\xEC\\x5F\\x6C\\x60\\x5A\\x5C\\xEA\\xF0\\xEC([\\x00-\\x6B\\x6D-\\xFF]{11})\\x6C''')
 
@@ -414,12 +415,14 @@ class AMIAnalyzer(Analyzer):
 		elif self._precolor_date_pattern.search(file_data):
 			# Check date, using a different pattern to differentiate core date from build date.
 			match = self._precolor_core_date_pattern.search(file_data)
-			if not match:
+			if match:
+				date_start = match.start(0)
+			else:
 				match = self._date_pattern.search(file_data)
+				date_start = 0
 			if match:
 				# Extract date as the version.
 				self.version = (match.group(1) or (match.group(2) + b'/' + match.group(3) + b'/' + match.group(4))).decode('cp437', 'ignore')
-				date_start = match.start(0)
 
 				# Check pre-Color identification block.
 				match = self._precolor_block_pattern.search(file_data)
