@@ -820,8 +820,7 @@ class AwardAnalyzer(Analyzer):
 			return False
 
 		# The bulk of Award identification data has remained in one place for the longest time.
-		match = self._id_block_pattern.search(file_data)
-		if match:
+		for match in self._id_block_pattern.finditer(file_data):
 			# Determine location of the identification block.
 			id_block_index = match.start(0)
 
@@ -852,6 +851,12 @@ class AwardAnalyzer(Analyzer):
 			# Extract string, unless the version is known to be too old to have a string.
 			if self.version[:3] not in ('v2.', 'v3.'):
 				self.string = util.read_string(file_data[id_block_index + 0xc71:id_block_index + 0xce0])
+
+				# Move on to the next block if the string is too short.
+				# (PC Partner 440BX with remains of 1992 BIOS in Y segment)
+				if len(self.string) <= 11 and self.string[-1:] == '-':
+					self.signon = ''
+					continue
 
 				# Check if no string was inserted where it should
 				# have been. (Gateway/Swan Anigma Award v4.28/4.32)
@@ -895,18 +900,20 @@ class AwardAnalyzer(Analyzer):
 							self.string += '\n' + post_version
 						else:
 							self.string = post_version
-		else:
-			# Handle AST modified Award.
-			match = self._ast_pattern.search(file_data)
-			if match:
-				# Set static version.
-				self.version = 'AST'
 
-				# Extract AST string as a sign-on.
-				self.signon = util.read_string(file_data[match.end(0):match.end(0) + 0x80]).replace('\r', '\n')
+			return True
 
-				# Split sign-on lines.
-				self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
+		# Handle AST modified Award.
+		match = self._ast_pattern.search(file_data)
+		if match:
+			# Set static version.
+			self.version = 'AST'
+
+			# Extract AST string as a sign-on.
+			self.signon = util.read_string(file_data[match.end(0):match.end(0) + 0x80]).replace('\r', '\n')
+
+			# Split sign-on lines.
+			self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 
 		return True
 
