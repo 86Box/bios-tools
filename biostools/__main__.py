@@ -490,6 +490,7 @@ def analyze_process(queue, formatter, scan_base):
 		# less common BIOSes with no dependencies on the common part begin here #
 		analyzers.AcerAnalyzer(),
 		analyzers.AcerMultitechAnalyzer(),
+		analyzers.AmproAnalyzer(),
 		analyzers.AmstradAnalyzer(),
 		analyzers.CDIAnalyzer(),
 		analyzers.CentralPointAnalyzer(),

@@ -1355,6 +1355,7 @@ class InterleaveExtractor(Extractor):
 			b'memory (parity error)',
 			b'Copyright COMPAQ Computer Corporation', # Compaq
 			b'Press any key when ready', # Access Methods
+			b'AMPRO ', # AMPRO
 		]
 
 		# Interleave the strings.

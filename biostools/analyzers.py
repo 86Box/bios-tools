@@ -781,6 +781,26 @@ class AMIUEFIAnalyzer(Analyzer):
 		return True
 
 
+class AmproAnalyzer(Analyzer):
+	def __init__(self, *args, **kwargs):
+		super().__init__('AMPRO', *args, **kwargs)
+
+		self._version_pattern = re.compile(b'''AMPRO (.+) Rom-Bios[^\\n]+\\nVersion ([^ ]+)''')
+
+	def can_handle(self, file_data, header_data):
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
+
+		# Extract version.
+		self.version = match.group(2).decode('cp437', 'ignore')
+
+		# Extract board type as a sign-on.
+		self.signon = match.group(1).decode('cp437', 'ignore')
+
+		return True
+
+
 class AmstradAnalyzer(NoInfoAnalyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Amstrad', *args, **kwargs)
