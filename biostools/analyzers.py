@@ -862,7 +862,7 @@ class AwardAnalyzer(Analyzer):
 
 			# Extract sign-on.
 			signon = util.read_string(file_data[id_block_index + 0xc1:id_block_index + 0x10f])
-			if ' BUSINESS MACHINES CORP.' in signon: # alternative location (Acer 01/01/1988)
+			if ' BUSINESS MACHINES CORP.' in signon: # alternative location (Acer 01/01/1988, Commodore PC 40)
 				signon = util.read_string(file_data[id_block_index + 0x71a:id_block_index + 0x81a])
 
 			# Split sign-on lines.
