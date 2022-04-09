@@ -904,6 +904,8 @@ class AwardAnalyzer(Analyzer):
 
 				# Extract AST string as a sign-on.
 				self.signon = util.read_string(file_data[match.end(0):match.end(0) + 0x80]).replace('\r', '\n')
+
+				# Split sign-on lines.
 				self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 
 		return True
@@ -2356,25 +2358,27 @@ class SystemSoftAnalyzer(Analyzer):
 					self.string = chipset.strip() + ' ' + self.string.strip()
 
 		# Extract sign-on after the version string.
-		first_match = True
 		match = mp_match or aio_match
 		while match:
 			end = match.end(0)
 			file_data = file_data[end:]
 			match = self._signon_pattern.search(file_data)
-			if first_match:
-				# Skip SystemSoft copyright line.
-				first_match = False
-			elif match:
+			if match:
 				signon_line = match.group(1)
-				if signon_line:
+				if signon_line[:9] == 'Copyright' and ('SystemSoft' in signon_line or 'Insyde' in signon_line):
+					# Skip SystemSoft copyright line.
+					pass
+				elif signon_line:
 					self.signon += '\n' + signon_line.decode('cp437', 'ignore')
 
 		# Special sign-on case for very old BIOSes. (NCR Notepad 3130)
 		if not self.signon and aio_match:
 			match = self._signon_old_pattern.match(file_data)
 			if match:
-				self.signon = match.group(1).decode('cp437', 'ignore')
+				self.signon = match.group(1).decode('cp437', 'ignore').replace('\r', '\n')
+
+				# Split sign-on lines.
+				self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip() and (x[:9] != 'Copyright' or 'SystemSoft' not in x)).strip('\n')
 
 		return True
 
