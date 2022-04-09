@@ -798,8 +798,7 @@ class AwardAnalyzer(Analyzer):
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
 		self._gigabyte_bif_pattern = re.compile(b'''\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\([a-zA-Z0-9]{1,8}\) EVALUATION ROM - NOT FOR SALE$''')
-		# "Hyosung Computer" (Samtron 88S)
-		self._id_block_pattern = re.compile(b'''(?:(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}IBM COMPATIBLE |IBM COMPATIBLE 88 BIOS COPYRIGHT Award Software Inc\\.)''')
+		self._id_block_pattern = re.compile(b'''(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}IBM COMPATIBLE |(?:[0-9]{2}/[0-9]{2}/[0-9]{4} {4})IBM COMPATIBLE [0-9]+ BIOS COPYRIGHT Award Software Inc\\.''')
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \(c\) (?:[^\r]+)\r\n)?Copyright \(c\) (?:NCR \& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
@@ -842,21 +841,17 @@ class AwardAnalyzer(Analyzer):
 				self.version += ' (Workstation)'
 
 			# Extract sign-on.
-			# Vertical tab characters may be employed (??? reported by BurnedPinguin)
-			self.signon += util.read_string(file_data[id_block_index + 0xc1:id_block_index + 0x10f]).replace('\r', '').replace('\v', '\n')
+			signon = util.read_string(file_data[id_block_index + 0xc1:id_block_index + 0x10f])
+			if ' BUSINESS MACHINES CORP.' in signon: # alternative location (Acer 01/01/1988)
+				signon = util.read_string(file_data[id_block_index + 0x71a:id_block_index + 0x81a])
 
 			# Split sign-on lines.
-			self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
+			# Vertical tab characters may be employed. (??? reported by BurnedPinguin)
+			self.signon = '\n'.join(x.strip() for x in signon.replace('\r', '\n').replace('\v', '\n').split('\n') if x.strip()).strip('\n')
 
 			# Extract string, unless the version is known to be too old to have a string.
 			if self.version[:3] not in ('v2.', 'v3.'):
 				self.string = util.read_string(file_data[id_block_index + 0xc71:id_block_index + 0xce0])
-
-				# Move on to the next block if the string is too short.
-				# (PC Partner 440BX with remains of 1992 BIOS in Y segment)
-				if len(self.string) <= 11 and self.string[-1:] == '-':
-					self.signon = ''
-					continue
 
 				# Check if no string was inserted where it should
 				# have been. (Gateway/Swan Anigma Award v4.28/4.32)
@@ -877,6 +872,12 @@ class AwardAnalyzer(Analyzer):
 								date = match.group(1) + match.group(2) + match.group(3)
 							date = date.decode('cp437', 'ignore')
 							self.string = date + self.string[len(date):]
+
+				# Move on to the next block if the string is too short.
+				# (PC Partner 440BX with remains of 1992 BIOS in Y segment)
+				if len(self.string) <= 11 and self.string[-1:] == '-':
+					self.signon = ''
+					continue
 
 			if self.version == 'v6.00PG' and self._gigabyte_eval_pattern.match(self.signon):
 				# Reconstruct actual sign-on of a Gigabyte fork BIOS through
