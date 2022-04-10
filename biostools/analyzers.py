@@ -322,14 +322,15 @@ class AMIAnalyzer(Analyzer):
 		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC| Access Methods Inc\\.|AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) (?:IBM is a TM of IBM|[\\x00-\\xFF]{2}   AMI-[^-]+-BIOS )''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
 		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-......-Chipset$''')
-		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\.86(?:[0-9A-Z])\.(?:[0-9A-Z]{4})\.(?:[0-9A-Z]{3})\.(?:[0-9]{10})$''')
+		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\\.86(?:[0-9A-Z])\\.(?:[0-9A-Z]{4})\\.(?:[0-9A-Z]{3})\\.(?:[0-9]{10})$''')
 		# The "All Rights Reserved" is important to not catch the same header on other files.
+		# "All<Rights Reserved" (Tatung TCS-9850 9600x9, corrupted during production?)
 		# AMIBIOS 6+ version corner cases:
 		# - Second digit not 0 (I forget which one had 000000)
 		# - Can be 4-digit instead of 6-digit (Biostar)
-		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\(AAMMIIBBIIOOSS\))([0-9]{2}/[0-9]{2}/[0-9]{2})\(C\)[0-9]{4} American Megatrends,? Inc(?:\.,? All Rights Reserved|/Hewlett-Packard Company)''')
+		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))([0-9]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)''')
 		# Weird TGem identifier (TriGem 486-BIOS)
-		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\.))''')
+		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
 		# "\xFF\xFF\xFF\xFFFLASH-" (Everex EISA 386-BIOS)
 		# Encoded "EVALUATION COPY" as a backup ("ami2939", possibly others without a date)

@@ -122,6 +122,25 @@ static char *AMI95ModuleNameGet(uint8_t ID)
 	return NULL;
 }
 
+static Bool
+IsAllZero(unsigned char *Buffer, int BufferSize)
+{
+	/* Optimized for x86, no idea about other architectures. */
+	register uintptr_t *ip = (uintptr_t *) Buffer;
+	register uintptr_t *iq = (uintptr_t *) (Buffer + BufferSize - (BufferSize % sizeof(uintptr_t)));
+	while (ip < iq) {
+		if (*ip++)
+			return FALSE;
+	}
+	register unsigned char *p = (unsigned char *) ip;
+	register unsigned char *q = Buffer + BufferSize;
+	while (p < q) {
+		if (*p++)
+			return FALSE;
+	}
+	return TRUE;
+}
+
 /*
  *
  */
@@ -218,9 +237,14 @@ NotCompressed:
 		if (Compressed) {
 			if (LH5Decode(BIOSImage + Offset + 8,
 				      ROMSize, Buffer, BufferSize) == -1) {
-				Compressed = FALSE;
+				Compressed = IsAllZero(Buffer, BufferSize);
 				munmap(Buffer, BufferSize);
-				unlink(filename);
+				if (Compressed) {
+					Compressed = FALSE;
+					unlink(filename);
+				} else {
+					strcpy(&filename[strlen(filename) - 3], "cmp");
+				}
 				goto NotCompressed;
 			}
 		} else
@@ -355,9 +379,14 @@ NotCompressed:
 		if (Compressed) {
 			if (LH5Decode(BIOSImage + ABCOffset + part->RealCS + 8,
 				      ROMSize, Buffer, BufferSize) == -1) {
-				Compressed = FALSE;
+				Compressed = IsAllZero(Buffer, BufferSize);
 				munmap(Buffer, BufferSize);
-				unlink(filename);
+				if (Compressed) {
+					Compressed = FALSE;
+					unlink(filename);
+				} else {
+					strcpy(&filename[strlen(filename) - 3], "cmp");
+				}
 				goto NotCompressed;
 			}
 		} else
@@ -579,9 +608,14 @@ NotCompressed:
 		if (Compressed) {
 			if (LH5Decode(BIOSImage + NewOffset,
 				      ROMSize, Buffer, BufferSize) == -1) {
-				Compressed = FALSE;
+				Compressed = IsAllZero(Buffer, BufferSize);
 				munmap(Buffer, BufferSize);
-				unlink(filename);
+				if (Compressed) {
+					Compressed = FALSE;
+					unlink(filename);
+				} else {
+					strcpy(&filename[strlen(filename) - 3], "cmp");
+				}
 				goto NotCompressed;
 			}
 		} else
