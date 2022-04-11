@@ -815,7 +815,7 @@ class AwardAnalyzer(Analyzer):
 		super().__init__('Award', *args, **kwargs)
 
 		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|Award Decompression Bios''')
-		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}A w a r d Software Inc\\.[\\x00-\\xFF]{82}''')
+		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}A w a r d Software Inc\\.''')
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
 		self._gigabyte_bif_pattern = re.compile(b'''\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\([a-zA-Z0-9]{1,8}\) EVALUATION ROM - NOT FOR SALE$''')
@@ -932,7 +932,11 @@ class AwardAnalyzer(Analyzer):
 			self.version = 'AST'
 
 			# Extract AST string as a sign-on.
-			self.signon = util.read_string(file_data[match.end(0):match.end(0) + 0x80]).replace('\r', '\n')
+			ast_offset = match.start(0)
+			self.signon = util.read_string(file_data[ast_offset + 0x44:ast_offset + 0x144])
+			if self.signon[:1] != 'A':
+				self.signon = util.read_string(file_data[ast_offset + 0x80:ast_offset + 0x180])
+			self.signon = self.signon.replace('\r', '\n')
 
 			# Split sign-on lines.
 			self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
