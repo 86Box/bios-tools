@@ -322,7 +322,7 @@ class AMIAnalyzer(Analyzer):
 		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC| Access Methods Inc\\.|AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) (?:IBM is a TM of IBM|[\\x00-\\xFF]{2}   AMI-[^-]+-BIOS )''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
 		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-......-Chipset$''')
-		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\\.86(?:[0-9A-Z])\\.(?:[0-9A-Z]{4})\\.(?:[0-9A-Z]{3})\\.(?:[0-9]{10})$''')
+		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 		# The "All Rights Reserved" is important to not catch the same header on other files.
 		# "All<Rights Reserved" (Tatung TCS-9850 9600x9, corrupted during production?)
 		# AMIBIOS 6+ version corner cases:
@@ -516,7 +516,7 @@ class AMIAnalyzer(Analyzer):
 		return True
 
 	def _signon_intel(self, line, match):
-		'''^(?:(BIOS (?:Release|Version) )?([0-9]\.[0-9]{2}\.[0-9]{2}\.[A-Z][0-9A-Z]{1,})|(?:\$IBIOSI\$)?([0-9A-Z]{8}\.([0-9A-Z]{3})\.[0-9A-Z]{4}\.[0-9A-Z]{3}\.[0-9]{10}|(?:\.[0-9]{4}){3}))'''
+		'''^(?:(BIOS (?:Release|Version) )?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[A-Z][0-9A-Z]{1,})|(?:\\$IBIOSI\\$)?([0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}|(?:\\.[0-9]{4}){3}))'''
 
 		# If this is Intel's second AMI run, check if this is not a generic
 		# (86x) version string overwriting an OEM version string.
@@ -1696,7 +1696,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._rombios_signon_alt_pattern = re.compile(b'''\\(R\\)eboot, other keys to continue\\x00\\xFF+''')
 		self._bcpsys_datetime_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/(?:[0-9]{2}) ''')
 		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''')
-		self._intel_86_pattern = re.compile('''(?:[0-9A-Z]{8})\.86(?:[0-9A-Z])\.(?:[0-9A-Z]{4})\.(?:[0-9A-Z]{3})\.(?:[0-9]{10})$''')
+		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 
 		self.register_check_list([
 			((self._signon_fujitsu_precheck, self._signon_fujitsu),	AlwaysRunChecker),
@@ -2166,7 +2166,7 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _signon_intel(self, line, match):
-		'''^(?:\$IBIOSI\$)?((?:[0-9])\.(?:[0-9]{2})\.(?:[0-9]{2})\.(?:[0-9A-Z]{2,})|(?:[0-9A-Z]{8})\.([0-9A-Z]{3})\.(?:[0-9A-Z]{4})\.(?:[0-9A-Z]{3})\.([0-9]{10}))'''
+		'''^(?:\\$IBIOSI\\$)?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[0-9A-Z]{2,}|[0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.([0-9]{10}))'''
 
 		# This is an Intel BIOS.
 		if not self.version:
