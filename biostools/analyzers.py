@@ -321,7 +321,7 @@ class AMIAnalyzer(Analyzer):
 
 		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC| Access Methods Inc\\.|AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) (?:IBM is a TM of IBM|[\\x00-\\xFF]{2}   AMI-[^-]+-BIOS )''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
-		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-......-Chipset$''')
+		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-[0-9]{6}-Chipset$''')
 		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 		# The "All Rights Reserved" is important to not catch the same header on other files.
 		# "All<Rights Reserved" (Tatung TCS-9850 9600x9, corrupted during production?)
@@ -395,11 +395,13 @@ class AMIAnalyzer(Analyzer):
 
 			# Extract string.
 			self.string = util.read_string(file_data[id_block_index + 0x78:id_block_index + 0xa0])
-
-			# Add identification tag to the string if one is present.
-			id_tag = util.read_string(file_data[id_block_index + 0xec:id_block_index + 0x100])
-			if id_tag[:4] == '_TG_':
-				self.string = self.string.rstrip() + '-' + id_tag[4:].lstrip()
+			if 'Intel Corporation' in self.string or len(self.string) <= 6: # (later Intel AMI with no string)
+				self.string = ''
+			else:
+				# Add identification tag to the string if one is present.
+				id_tag = util.read_string(file_data[id_block_index + 0xec:id_block_index + 0x100])
+				if id_tag[:4] == '_TG_':
+					self.string = self.string.rstrip() + '-' + id_tag[4:].lstrip()
 
 			# Stop if this BIOS is actually Aptio UEFI CSM.
 			if self._uefi_csm_pattern.match(self.string):
