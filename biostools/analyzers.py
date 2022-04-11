@@ -1780,7 +1780,14 @@ class PhoenixAnalyzer(Analyzer):
 				# Extract sign-on from Core and some 4.0 Release 6.0 BIOSes.
 				match = self._core_signon_pattern.search(file_data)
 				if match:
-					self.signon = match.group(1).decode('cp437', 'ignore')
+					self.signon = match.group(1)
+
+					# Phoenix allowed for some line drawing that is not quite CP437.
+					# The actual characters used haven't been confirmed in hardware.
+					for frm, to in ((b'\x91', b'\xDA'), (b'\x92', b'\xC4'), (b'\x87', b'\xBF'), (b'\x86', b'\xB3'), (b'\x90', b'\xC0'), (b'\x88', b'\xD9')):
+						self.signon = self.signon.replace(frm, to)
+
+					self.signon = self.signon.decode('cp437', 'ignore')
 				else:
 					# Extract sign-on from Ax86 and older BIOSes.
 					match = self._rombios_signon_pattern.search(file_data)
@@ -1876,16 +1883,22 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_branch(self, line, match):
-		'''Phoenix ([A-Za-z]+(?:BIOS|Bios)) (?:Version ([0-9]\.[^\s]+)|([0-9](?:\.[0-9.]+)? Release [0-9]\.[^\s]+))(?:[\s\.](.+))?'''
+		'''Phoenix ([A-Za-z]+(?:BIOS|Bios)) (?:Version ([0-9]\.[^\s]+)|([0-9](?:\.[0-9.]+)? Release ([0-9]\.[0-9]+)))(.+)?'''
 
 		# Extract version with branch and release.
 		self.version = match.group(1) + ' ' + (match.group(2) or match.group(3))
 
 		# Extract any additional information after the version
-		# as a sign-on, if one wasn't already found.
-		additional_info = match.group(4)
-		if additional_info and not self.signon:
-			self.signon = additional_info.rstrip()
+		# and modified version numbers as part of the sign-on.
+		additional_info = (match.group(5) or '').strip()
+		if additional_info:
+			if additional_info.lstrip() == additional_info:
+				additional_info = match.group(4).strip() + additional_info.strip()
+			if self.signon:
+				if additional_info not in self.signon:
+					self.signon = additional_info + '\n' + self.signon
+			else:
+				self.signon = additional_info
 
 		return True
 
@@ -1996,11 +2009,12 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_sct(self, line, match):
-		'''Phoenix BIOS (SC-T v[^\s]+)'''
+		'''Phoenix BIOS SC-T (v[^\\s#]+)'''
 		# (SecureCore Tiano)
+		# "SC-T v2.2#AcerSystem" (unknown Acer)
 
 		# Extract version.
-		self.version = match.group(1)
+		self.version = 'SecureCore Tiano ' + match.group(1)
 
 		# This is UEFI.
 		self.addons.append('UEFI')
