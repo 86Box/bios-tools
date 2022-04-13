@@ -23,6 +23,13 @@ except ImportError:
 	PIL.Image = None
 from . import util
 
+# Pattern for common BIOS entrypoints, declared globally here as multiple extractors use it.
+_entrypoint_pattern = re.compile(
+	b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0|''' # typical AMI/Award/Phoenix
+	b'''\\x0F\\x09\\xE9|''' # Intel AMIBIOS 6
+	b'''\\xE9[\\x00-\\xFF]{2}\\x00{5}''' # weird Intel (observed in SRSH4)
+)
+
 class Extractor:
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract the given file into one of the destination directories:
@@ -251,9 +258,6 @@ class BIOSExtractor(Extractor):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
-		# Signature for a common entry point jump instruction (fast search).
-		self._entrypoint_pattern = re.compile(b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0''')
-
 		# Fallback BIOS signatures (slower search), based on bios_extract.c
 		self._signature_pattern = re.compile(
 			b'''AMI(?:BIOS(?: \\(C\\)1993 American Megatrends Inc.,| W 0[45]|C0[6789])|BOOT ROM|EBBLK| Flash Utility for DOS Command mode\\.)|'''
@@ -303,7 +307,7 @@ class BIOSExtractor(Extractor):
 		file_header += util.read_complement(file_path, file_header)
 
 		# Stop if no BIOS signatures are found.
-		if not self._entrypoint_pattern.match(file_header[-16:]) and not self._signature_pattern.search(file_header):
+		if not _entrypoint_pattern.match(file_header[-16:]) and not self._signature_pattern.search(file_header):
 			return False
 
 		# Create destination directory and stop if it couldn't be created.
@@ -1194,30 +1198,36 @@ class IntelExtractor(Extractor):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
+		# Fill a list of potential extensions for BIOS part files.
 		self._part_extensions = []
-		for base_extension in ('bio', 'bbo'): # potential extensions for main BIOS part files
-			# Produce all possible variants (ext, ex1-ex9, exa-) for this extension.
+		for base_extension in ('bio', 'bbo'):
+			# Produce all possible variants (ext, ex1-ex9, exa-) for this extension. While the boot blocks are
+			# always one file, they are technically able to form a chain, so count them in here for safety.
 			extension_chars = base_extension[-1] + '123456789abcdefghijklm'
 			for x in range(len(extension_chars)):
 				extension = base_extension[:2] + extension_chars[x]
-				# Every pair should be inverted.
-				if (x % 2) == 0:
-					self._part_extensions.append(extension)
-				else:
-					self._part_extensions.insert(len(self._part_extensions) - 1, extension)
+				self._part_extensions.append(extension)
+
+		# Add recovery boot block extension.
+		self._part_extensions.append('rcv')
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if this is not an Intel BIOS update.
 		if file_header[90:95] != b'FLASH' and file_header[602:607] != b'FLASH':
 			return False
 
-		# Stop if this file has no extension.
-		file_name = os.path.basename(file_path)
-		if file_name[-4:-3] != '.':
+		# Stop if this is a boot block file, as those have a separate
+		# part count which breaks the main body part count check.
+		if file_header[40:50].upper() == b'BOOT BLOCK':
 			return True
 
 		# Stop if this file is too small (may be a copied header).
 		if len(file_header) <= 608:
+			return True
+
+		# Stop if this file has no extension.
+		file_name = os.path.basename(file_path)
+		if file_name[-4:-3] != '.':
 			return True
 
 		# Stop if this file has an irrelevant extension.
@@ -1240,7 +1250,7 @@ class IntelExtractor(Extractor):
 			dir_file_path = os.path.join(dir_path, dir_file_name)
 
 			# Remove irrelevant files which lack an Intel header.
-			if dir_file_name_lower[-4:] in ('.lng', '.rcv', '.rec'):
+			if dir_file_name_lower[-4:] in ('.lng', '.rec'):
 				try:
 					os.remove(dir_file_path)
 				except:
@@ -1253,7 +1263,10 @@ class IntelExtractor(Extractor):
 		# Try to find matching parts in the same directory.
 		file_name_base = file_name[:-3]
 		file_name_base_lower = file_name_lower[:-3]
-		found_parts = []
+		found_parts_main = []
+		found_parts_boot = []
+		have_bbo = False
+		have_rcv = False
 		largest_part_size = 0
 
 		# Try all part extensions.
@@ -1267,73 +1280,205 @@ class IntelExtractor(Extractor):
 				except:
 					continue
 
-				# Add it to the part list.
-				found_parts.append((found_part_path, found_part_size))
+				# Treat main and non-main body parts differently.
+				if extension[:2] == 'bi':
+					# Add part to the main body part list.
+					found_parts_main.append((found_part_path, found_part_size))
+				else:
+					# Add part to the boot block part list.
+					found_parts_boot.append((found_part_path, found_part_size))
 
-				# Update the largest part size.
+					# Flag the presence of main and recovery boot block files.
+					if extension[:2] == 'bb':
+						have_bbo = True
+					elif extension[:2] == 'rc':
+						have_rcv = True
+
+				# Update largest part size.
 				if found_part_size > largest_part_size:
 					largest_part_size = found_part_size
 
-		# Stop if no parts were found somehow.
-		if len(found_parts) == 0:
+		# Stop if no main body parts were found somehow.
+		if len(found_parts_main) == 0:
 			return True
 
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
 			return True
 
-		# Copy the header to a file, so we can still get the BIOS version from
-		# it in case the payload somehow cannot be decompressed successfully.
-		out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+		# Determine header-related sizes and offsets.
 		start_offset = (file_header[90:95] != b'FLASH') and 512 or 0
-		part_data_offset = (file_header[start_offset + 127:start_offset + 128] == b'\x00') and 128 or 160
-		out_f.write(file_header[start_offset:start_offset + part_data_offset])
-		out_f.close()
+
+		version = util.read_string(file_header[start_offset + 112:]) # null-terminated string...
+		header_size = 112 + len(version) + 1
+		remaining = header_size & 31
+		if remaining: # ...aligning the header to 32 bytes
+			header_size += 32 - remaining
+
+		part_data_offset = start_offset + header_size
+
+		# Copy the header to a file, so we can still get the BIOS version
+		# from it in case the payload cannot be decompressed successfully.
+		try:
+			out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+			out_f.write(file_header[start_offset:part_data_offset])
+			out_f.close()
+		except:
+			pass
+
+		# Subtract header from largest part size.
+		largest_part_size -= part_data_offset
+
+		# Determine if this is an inverted BIOS. This is quite tricky, since
+		# the header data and presence of boot blocks in the main body isn't
+		# super accurate, so we make a best guess through the following rules:
+		if have_rcv and not have_bbo:
+			# Recovery boot block file present but no main boot block file present => inverted
+			invert = True
+		elif have_bbo and not have_rcv:
+			# Main boot block file present but no recovery boot block file present => non-inverted
+			invert = False
+		elif len(version) <= 16:
+			# Short version (first AMI and Phoenix runs) => inverted
+			invert = True
+		else:
+			# Long version (second AMI and Phoenix runs) => non-inverted
+			invert = have_rcv # backup check for AN430TX which is inverted but has rcv
+
+		# Join the part lists together.
+		found_parts = found_parts_main + found_parts_boot
 
 		# Create destination file.
-		out_f = open(os.path.join(dest_dir, 'intel.bin'), 'wb')
-
-		# Create a copy of the found parts list for concurrent modification.
-		found_parts_copy = found_parts[::]
+		dest_file_path = os.path.join(dest_dir, 'intel.bin')
+		out_f = open(dest_file_path, 'wb')
+		dbg_f = open(dest_file_path[:-3] + 'txt', 'w')
+		dbg_f.write('Found {0} parts, header size {1}\n'.format(len(found_parts), header_size))
 
 		# Copy parts to the destination file.
-		while len(found_parts_copy) > 0:
-			found_part_path, found_part_size = found_parts_copy.pop(0)
+		bootblock_offset = None
+		end_offset = 0
+		while len(found_parts) > 0:
+			found_part_path, found_part_size = found_parts.pop(0)
 
 			try:
 				f = open(found_part_path, 'rb')
 
-				# Skip header.
-				file_header = f.read(128)
-				if file_header[127:128] != b'\x00':
-					f.seek(160)
+				# Read and parse header if present.
+				if found_part_path[-4:].lower() == '.rcv':
+					header = b''
+					logical_area = dest_offset = 0
+					logical_area_size = data_length = found_part_size
+				else:
+					header = f.read(part_data_offset)
+					logical_area, logical_area_size = struct.unpack('<BI', header[32:37])
+					dest_offset, data_length, _, last_part = struct.unpack('<IIBB', header[80:90])
+
+					# Update ROM end offset.
+					if logical_area_size > end_offset:
+						end_offset = logical_area_size
+					dbg_f.write('new eo las {0}\n'.format(hex(end_offset)))
+
+					# Apply inversion if needed.
+					if invert:
+						dest_offset ^= 0x10000
+
+				# Determine the part's location.
+				if logical_area == 0:
+					# Place boot block at the end of the ROM. Usually, the last part is cut
+					# short and the boot block slots in at the end of the gap, but D845PT has
+					# a full 64 KB last part containing a copy of the BBO boot block data.
+					if bootblock_offset == None:
+						bootblock_offset = end_offset - data_length
+						if bootblock_offset < 0:
+							bootblock_offset = 0
+					dest_offset += bootblock_offset
+					dbg_f.write('bbo {0} do {1}\n'.format(hex(bootblock_offset), hex(dest_offset)))
+				out_f.seek(dest_offset)
 
 				# Copy data.
+				dbg_f.write('{0} => {1} ({2})\n'.format(hex(dest_offset), found_part_path, data_length))
+				remaining = max(data_length, largest_part_size)
 				part_data = b' '
-				while part_data:
-					part_data = f.read(1048576)
+				while part_data and remaining > 0:
+					part_data = f.read(min(remaining, 1048576))
 					out_f.write(part_data)
+					remaining -= len(part_data)
 
 				# Write padding.
-				padding_size = largest_part_size - found_part_size
-				while padding_size > 0:
-					out_f.write(b'\xFF' * min(padding_size, 1048576))
-					padding_size -= 1048576
+				if logical_area == 1 and last_part == 0xff:
+					if data_length <= 8192 and len(found_parts_boot) == 0:
+						# Workaround for JN440BX, which requires its final
+						# part (sized 8 KB) to be at the end of the image.
+						remaining = 0
+					elif data_length == largest_part_size and ((dest_offset >> 16) & 1) == 0:
+						# Workaround for SE440BX-2 and SRMK2, which require a
+						# gap at the final 64 KB where the boot block goes.
+						remaining += largest_part_size
+				elif logical_area == 0 and dest_offset == bootblock_offset:
+					# Don't pad a boot block insertion.
+					remaining = 0
+				dbg_f.write('> adding {0} padding\n'.format(hex(remaining)))
+				while remaining > 0:
+					out_f.write(b'\xFF' * min(remaining, 1048576))
+					remaining -= 1048576
 
 				f.close()
+
+				# Update ROM end offset.
+				part_end_offset = out_f.tell()
+				if part_end_offset > end_offset:
+					end_offset = part_end_offset
+				dbg_f.write('new eo write {0}\n'.format(hex(end_offset)))
+
+				# Remove part.
+				os.remove(found_part_path)
 			except:
 				import traceback
 				traceback.print_exc()
 				pass
-			
-			# Remove this part.
-			try:
-				os.remove(found_part_path)
-			except:
-				pass
 
-		# Finish destination file.
 		out_f.close()
+
+		# Create new file with padding if the total size isn't a power of two.
+		if end_offset > 0:
+			padding_size = (1 << math.ceil(math.log2(end_offset))) - end_offset
+			if padding_size > 0:
+				try:
+					# Create a new file.
+					out_f = open(dest_file_path + '.padded', 'wb')
+
+					# Write padding.
+					dbg_f.write('Padding by {0}\n'.format(hex(padding_size)))
+					while padding_size > 0:
+						out_f.write(b'\xFF' * min(padding_size, 1048576))
+						padding_size -= 1048576
+
+					# Write the original file contents.
+					f = open(dest_file_path, 'rb')
+					part_data = b' '
+					while part_data:
+						part_data = f.read(1048576)
+						out_f.write(part_data)
+					f.close()
+
+					out_f.close()
+
+					# Remove the old file.
+					try:
+						os.remove(dest_file_path)
+					except:
+						pass
+
+					# Move the new file into place.
+					shutil.move(dest_file_path + '.padded', dest_file_path)
+				except:
+					pass
+
+		dbg_f.close()
+		try: # temporary for committing
+			os.remove(dest_file_path[:-3] + 'txt')
+		except:
+			pass
 
 		# Return destination directory.
 		return dest_dir
@@ -1926,7 +2071,6 @@ class VMExtractor(ArchiveExtractor):
 
 		# Check for other dependencies.
 		self._dep_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(util.__file__))), 'vm')
-		self._dep_hashes = {}
 		for dep in ('floppy.144', 'freedos.img', 'INSTL2O.EXE'):
 			if not os.path.exists(os.path.join(self._dep_dir, dep)):
 				self._qemu_path = None
