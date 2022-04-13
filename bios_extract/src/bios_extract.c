@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Bruteforce Intel AMI Color fork LH5. */
-	for (i = 0; i < (FileLength - 10); i += 0x10000) {
+	for (i = 0; i < (FileLength - 10); i += 0x4000) {
 		BIOSOffset = i;
 CopyrightOffset:if ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, IntelAMI, 13) > -1) &&
 		    !memcmp(IntelAMI, "AMIBIOS(C)AMI", 13)) {
