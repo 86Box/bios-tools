@@ -4,6 +4,7 @@ __pycache__
 
 # State
 biostools_error.log
+biostools_*_*
 
 # bios_extract
 bios_extract/bios_extract
