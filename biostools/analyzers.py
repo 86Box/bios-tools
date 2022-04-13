@@ -418,8 +418,13 @@ class AMIAnalyzer(Analyzer):
 			if self._uefi_csm_pattern.match(self.string):
 				return False
 
+			# Ignore unwanted string terminator on sign-on. (TriGem Lisbon-II)
+			signon_terminator = b'\x00'
+			if file_data[id_block_index + 0x123:id_block_index + 0x12b] == b' Inc.,\x00 ':
+				signon_terminator += b'\x00'
+
 			# Extract sign-on, while removing carriage returns.
-			self.signon = util.read_string(file_data[id_block_index + 0x100:id_block_index + 0x200])
+			self.signon = util.read_string(file_data[id_block_index + 0x100:id_block_index + 0x200], terminator=signon_terminator)
 
 			# The actual sign-on starts on the second line.
 			self.signon = '\n'.join(x.rstrip('\r').strip() for x in self.signon.split('\n')[1:] if x != '\r').strip('\n')
