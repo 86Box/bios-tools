@@ -543,7 +543,7 @@ LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 			if (offset > n)
 				return -1;
 
-			for (i = 0; i < length; i++) {
+			for (i = 0; (i < length) && (n < OutputBufferSize); i++) {
 				OutputBuffer[n] = OutputBuffer[n - offset];
 				n++;
 			}

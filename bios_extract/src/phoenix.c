@@ -317,7 +317,7 @@ static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	unsigned char *Buffer;
 	unsigned char *ModuleData;
 	uint32_t Packed;
-	int fd, ExtractResult;
+	int fd, ExtractResult, Remain;
 
 	Module = (struct PhoenixModuleHeader *)(BIOSImage + Offset);
 
@@ -396,15 +396,16 @@ valid_signature:
 			FragLength = le32toh(Fragment->FragLength);
 			printf("(%05X, %d bytes) ", FragOffset, FragLength);
 
-			if (Packed + FragLength > le32toh(Module->ExpLen)) {
+			if ((Packed + FragLength > le32toh(Module->ExpLen)) || ((FragOffset + 9 + FragLength) >= BIOSLength)) {
 				printf("\nFragment too big at %05X for %05X\n",
 				        FragOffset, Offset);
 				free(ModuleData);
 				/* Assume this is an invalid fragment module */
 				goto BadFragment;
 			}
+			Remain = BIOSLength - ((ModuleData + Packed) - BIOSImage);
 			memcpy(ModuleData + Packed, BIOSImage + FragOffset + 9,
-			       FragLength);
+			       (Remain < FragLength) ? Remain : FragLength);
 			Packed += FragLength;
 			FragOffset =
 			    le32toh(Fragment->NextFrag) & (BIOSLength - 1);
