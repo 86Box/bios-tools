@@ -329,6 +329,7 @@ class AMIAnalyzer(Analyzer):
 		# - Second digit not 0 (I forget which one had 000000)
 		# - Can be 4-digit instead of 6-digit (Biostar)
 		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))([0-9]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)''')
+		self._id_compressed_pattern = re.compile(b'''AMIBIOSC(0[1-9][0-9]{2})''')
 		# Weird TGem identifier (TriGem 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
@@ -352,6 +353,7 @@ class AMIAnalyzer(Analyzer):
 			(self._addons_color,			SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._addons_easy,				SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
 			(self._addons_hiflex,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
+			(self._addons_intel,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
 			(self._addons_new,				SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
 			(self._addons_simple,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
 			(self._addons_winbios,			SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
@@ -365,7 +367,16 @@ class AMIAnalyzer(Analyzer):
 		# Some Intel BIOSes may fail to decompress, in which case, we have to
 		# rely on the header version data to get the Intel version sign-on.
 		if header_data:
-			AMIIntelAnalyzer.can_handle(self, file_data, header_data)
+			ret = AMIIntelAnalyzer.can_handle(self, file_data, header_data)
+
+			# Extract version ID from compressed data.
+			# (0632 fork which bios_extract can't handle)
+			if self.version == 'Unknown Intel':
+				match = self._id_compressed_pattern.search(file_data)
+				if match:
+					self.version = match.group(1).decode('cp437', 'ignore') + '00'
+		else:
+			ret = False
 
 		# Check post-Color identification block.
 		match = self._id_block_pattern.search(file_data)
@@ -494,8 +505,8 @@ class AMIAnalyzer(Analyzer):
 					# Split sign-on lines. (Video Technology Info-Tech 286-BIOS)
 					self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 			else:
-				# Assume this is not an AMI BIOS.
-				return False
+				# Assume this is not an AMI BIOS, unless we found Intel data above.
+				return ret
 
 		return True
 
@@ -556,6 +567,14 @@ class AMIAnalyzer(Analyzer):
 
 		# Add setup type to add-ons.
 		self.addons.append('HiFlex')
+
+		return True
+
+	def _addons_intel(self, line, match):
+		'''Advanced Chipset Configuration  \\QPress'''
+
+		# Add setup type to add-ons.
+		self.addons.append('IntelSetup')
 
 		return True
 
@@ -679,7 +698,8 @@ class AMIIntelAnalyzer(Analyzer):
 	def can_handle(self, file_data, header_data):
 		# Handle Intel AMI BIOSes that could not be decompressed.
 
-		# Stop if there is no header data.
+		# Stop if there is no header data or if this file is just the header data.
+		# Note that headers with a 512-byte offset are converted by the extractor.
 		if not header_data:
 			return False
 
@@ -687,18 +707,13 @@ class AMIIntelAnalyzer(Analyzer):
 		if header_data[112:126] == b'User Data Area':
 			return False
 
-		# Extract the Intel version from the multi-part header.
+		# Extract the Intel version from the flash header.
 		if header_data[90:95] == b'FLASH':
-			version = header_data[112:header_data.find(b'\x00', 112)]
-		elif header_data[602:607] == b'FLASH':
-			version = header_data[624:header_data.find(b'\x00', 624)]
-		else:
-			version = None
-
-		# Apply the version as a sign-on if one was extracted.
-		if version:
 			self.version = 'Unknown Intel'
-			self.signon = version.decode('cp437', 'ignore')
+
+			# Apply the version as a sign-on.
+			self.signon = util.read_string(header_data[112:])
+
 			return True
 
 		return False
