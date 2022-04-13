@@ -291,9 +291,6 @@ class BIOSExtractor(Extractor):
 		if not os.path.exists(self._bios_extract_path):
 			self._bios_extract_path = None
 
-		# /dev/null handle for suppressing output.
-		self._devnull = open(os.devnull, 'wb')
-
 		# Built-in instance of ImageExtractor for converting
 		# any extracted BIOS logo images that were found.
 		self._image_extractor = ImageExtractor()
