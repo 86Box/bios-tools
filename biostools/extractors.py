@@ -2048,6 +2048,7 @@ class VMExtractor(ArchiveExtractor):
 
 		# Known signatures.
 		self._floppy_pattern = re.compile(
+			b'''( FastPacket V[0-9])|''' # Siemens Nixdorf FastPacket
 			b''', Sydex, Inc\\. All Rights Reserved\\.|''' # IBM Sydex
 			b'''Disk eXPress Self-Extracting Diskette Image''' # HP DXP
 		)
@@ -2084,8 +2085,15 @@ class VMExtractor(ArchiveExtractor):
 		# Check for cases which require this extractor.
 		# All signatures should be within the first 32 KB or so.
 		extractor = None
-		if file_header[:2] == b'MZ' and self._floppy_pattern.search(file_header):
-			extractor = self._extract_floppy
+		extractor_kwargs = {}
+		if file_header[:2] == b'MZ':
+			if file_header[28:32] == b'LZ91':
+				extractor = self._extract_lzexe
+			else:
+				match = self._floppy_pattern.search(file_header)
+				if match:
+					extractor = self._extract_floppy
+					extractor_kwargs['match'] = match
 		elif self._eti_pattern.match(file_header):
 			extractor = self._extract_eti
 
@@ -2098,24 +2106,17 @@ class VMExtractor(ArchiveExtractor):
 			return True
 
 		# Run extractor.
-		return extractor(file_path, file_header, dest_dir, dest_dir_0)
+		return extractor(file_path, file_header, dest_dir, dest_dir_0, **extractor_kwargs)
 
-	def _run_qemu(self, dest_dir, deps, hdd=None, floppy=None):
+	def _run_qemu(self, dest_dir, deps, hdd=None, hdd_snapshot=True, floppy=None, floppy_snapshot=True, vvfat=False, boot='c'):
 		# Copy dependencies.
 		for dep_src, dep_dest in deps:
+			# Skip dynamically-generated dependencies.
+			if not dep_src:
+				continue
+
 			try:
-				dep_dest_path = os.path.join(dest_dir, dep_dest)
-				if os.path.basename(dep_src) == 'freedos.img' and floppy == None:
-					# Patch the "dir a:" command out when no floppy image
-					# is called for. This could be done in a better way.
-					f = open(dep_src, 'rb')
-					data = f.read()
-					f.close()
-					f = open(dep_dest_path, 'wb')
-					f.write(data.replace(b'dir a:\r\n', b'rem a:\r\n'))
-					f.close()
-				else:
-					shutil.copy2(dep_src, dep_dest_path)
+				shutil.copy2(dep_src, os.path.join(dest_dir, dep_dest))
 			except:
 				try:
 					shutil.rmtree(dest_dir)
@@ -2125,23 +2126,33 @@ class VMExtractor(ArchiveExtractor):
 
 		# Build QEMU arguments.
 		dest_dir_sanitized = dest_dir.replace(',', ',,')
-		args = [self._qemu_path, '-nographic', '-m', '32']
-		if hdd != None:
-			args += ['-boot', 'c']
-			args += ['-drive', 'if=ide,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[hdd][1])]
-		args += ['-drive', 'if=ide,driver=vvfat,rw=on,dir=' + dest_dir_sanitized] # regular vvfat syntax can't handle : in path
-		if floppy != None:
-			args += ['-drive', 'if=floppy,format=raw,file=' + os.path.join(dest_dir_sanitized, deps[floppy][1])]
+		args = [self._qemu_path, '-m', '32', '-display', 'none', '-vga', 'none', '-boot', boot]
+		for drive, drive_snapshot, drive_if in ((floppy, floppy_snapshot, 'floppy'), (hdd, hdd_snapshot, 'ide')):
+			# Don't add this drive if an image was not specified.
+			if not drive:
+				# Add dummy floppy to prevent errors if no floppy is specified.
+				if drive_if == 'floppy':
+					drive = os.path.join(self._dep_dir, 'floppy.144')
+					drive_snapshot = True
+				else:
+					continue
+
+			# Add drive.
+			args += ['-drive', 'if=' + drive_if + ',snapshot=' + (drive_snapshot and 'on' or 'off') + ',format=raw,file=' + drive.replace(',', ',,')]
+		if vvfat:
+			# Add vvfat if requested.
+			args += ['-drive', 'if=ide,driver=vvfat,rw=on,dir=' + dest_dir_sanitized] # regular vvfat syntax can't handle : in path
 
 		# Run QEMU.
+		import time
 		try:
-			subprocess.run(args, timeout=30, input=None, stdout=self._devnull, stderr=None)
+			subprocess.run(args, timeout=60, input=None, stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
 		except:
 			pass
 
 		# Remove dependencies, except for the floppy image if present.
 		for i in range(len(deps)):
-			if i == floppy:
+			if (not floppy_snapshot and deps[i][1] == floppy) or (not hdd_snapshot and deps[i][1] == hdd):
 				continue
 			try:
 				os.remove(os.path.join(dest_dir, deps[i][1]))
@@ -2150,7 +2161,7 @@ class VMExtractor(ArchiveExtractor):
 
 		return True
 
-	def _extract_floppy(self, file_path, file_header, dest_dir, dest_dir_0):
+	def _extract_floppy(self, file_path, file_header, dest_dir, dest_dir_0, *, match):
 		"""Extract DOS-based floppy self-extractors."""
 
 		# Only support 1.44 MB floppies for now.
@@ -2158,13 +2169,19 @@ class VMExtractor(ArchiveExtractor):
 
 		# Establish dependencies.
 		deps = (
-			(os.path.join(self._dep_dir, floppy_media), '\\.img'), # DOS-invalid filenames on purpose, avoids conflicts
-			(os.path.join(self._dep_dir, 'freedos.img'), '\\\\.img'),
+			(os.path.join(self._dep_dir, floppy_media), 'floppy.img'),
 			(file_path, 'target.exe')
 		)
 
+		# Create batch file for unattended FastPacket execution.
+		if match.group(1):
+			f = open(os.path.join(dest_dir, 'target.bat'), 'wb')
+			f.write(b'd:target.exe /b a:\r\n')
+			f.close()
+			deps += ((None, 'target.bat'), (None, 'target.tmp')) # target.tmp cleans temporary file if left behind
+
 		# Run QEMU and stop if it failed.
-		if not self._run_qemu(dest_dir, deps, hdd=1, floppy=0):
+		if not self._run_qemu(dest_dir, deps, hdd=os.path.join(self._dep_dir, 'freedos.img'), floppy='floppy.img', floppy_snapshot=False, vvfat=True):
 			return True
 
 		# Extract image as an archive.
@@ -2192,6 +2209,12 @@ class VMExtractor(ArchiveExtractor):
 
 	def _extract_eti(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract Evergreen ETI files."""
+
+		# Establish dependencies.
+		deps = (
+			(os.path.join(self._dep_dir, 'INSTL2O.EXE'), 'INSTL2O.EXE'),
+			(None, 'TARGET.BAT')
+		)
 
 		# Read ETI header.
 		in_f = open(file_path, 'rb')
@@ -2254,15 +2277,8 @@ class VMExtractor(ArchiveExtractor):
 		bat_f.write(b'C:\r\n')
 		bat_f.close()
 
-		# Establish dependencies.
-		deps = (
-			(os.path.join(self._dep_dir, 'INSTL2O.EXE'), 'INSTL2O.EXE'),
-			(os.path.join(self._dep_dir, 'freedos.img'), 'freedos.img')
-		)
-
-		# Run QEMU and stop if it failed.
-		if not self._run_qemu(dest_dir, deps, hdd=1, floppy=None):
-			return True
+		# Run QEMU.
+		ret = self._run_qemu(dest_dir, deps, hdd=os.path.join(self._dep_dir, 'freedos.img'), vvfat=True)
 
 		# Remove leftover files.
 		for fn in ['CONTACT.ETI', 'CONTACT.TXT', 'PREVLANG.DAT', 'TARGET.BAT'] + etis:
@@ -2274,6 +2290,10 @@ class VMExtractor(ArchiveExtractor):
 				os.remove(os.path.join(dest_dir, fn.lower()))
 			except:
 				pass
+
+		# Stop if QEMU failed.
+		if not ret:
+			return False
 
 		# Check if anything was extracted.
 		dest_dir_files = os.listdir(dest_dir)
@@ -2295,3 +2315,59 @@ class VMExtractor(ArchiveExtractor):
 			return dest_dir
 		else:
 			return True
+
+	def _extract_lzexe(self, file_path, file_header, dest_dir, dest_dir_0):
+		"""Extract LZEXE executables and run them through the same pipeline. This is
+		   required for Siemens Nixdorf FastPacket with its LZEXE-compressed stub."""
+
+		# Establish dependencies.
+		deps = (
+			(os.path.join(self._dep_dir, 'UNLZEXE.EXE'), 'UNLZEXE.EXE'),
+			(file_path, 'target.exe'),
+			(None, 'target.bat')
+		)
+
+		# Create batch file for extraction.
+		f = open(os.path.join(dest_dir, 'target.bat'), 'wb')
+		f.write(b'D:\r\nUNLZEXE.EXE target.exe target.ulz\r\nC:\r\n')
+		f.close()
+
+		# Run QEMU and stop if it failed.
+		if not self._run_qemu(dest_dir, deps, hdd=os.path.join(self._dep_dir, 'freedos.img'), vvfat=True):
+			return True
+
+		# Stop if decompression was not successful.
+		decomp_file_path = os.path.join(dest_dir, 'target.ulz')
+		if not os.path.exists(decomp_file_path):
+			decomp_file_path = os.path.join(dest_dir, 'TARGET.ULZ') # just in case
+			if not os.path.exists(decomp_file_path):
+				return False
+
+		# Read decompressed file.
+		decomp_file_data = util.read_complement(decomp_file_path)
+
+		# Strip any remains of LZEXE to avoid infinite loops.
+		if decomp_file_data[28:32] == b'LZ91':
+			decomp_file_data = decomp_file_data[:28] + b'\xFF' + decomp_file_data[29:]
+
+		# Run this same extractor with detectors pointed at the decompressed data.
+		ret = self.extract(file_path, decomp_file_data, dest_dir, dest_dir_0)
+
+		# Remove original file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		# Stop if extraction was successful.
+		if ret:
+			# Remove decompressed file.
+			try:
+				os.remove(decomp_file_path)
+			except:
+				pass
+
+			return ret
+
+		# Keep the decompressed file around for other extractors to process.
+		return dest_dir
