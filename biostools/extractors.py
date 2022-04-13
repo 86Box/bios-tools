@@ -23,13 +23,6 @@ except ImportError:
 	PIL.Image = None
 from . import util
 
-# Pattern for common BIOS entrypoints, declared globally here as multiple extractors use it.
-_entrypoint_pattern = re.compile(
-	b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0|''' # typical AMI/Award/Phoenix
-	b'''\\x0F\\x09\\xE9|''' # Intel AMIBIOS 6
-	b'''\\xE9[\\x00-\\xFF]{2}\\x00{5}''' # weird Intel (observed in SRSH4)
-)
-
 class Extractor:
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract the given file into one of the destination directories:
@@ -258,6 +251,13 @@ class BIOSExtractor(Extractor):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
 
+		# BIOS entrypoint signatures (faster search)
+		self._entrypoint_pattern = re.compile(
+			b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0|''' # typical AMI/Award/Phoenix
+			b'''\\x0F\\x09\\xE9|''' # Intel AMIBIOS 6
+			b'''\\xE9[\\x00-\\xFF]{2}\\x00{5}''' # weird Intel (observed in SRSH4)
+		)
+
 		# Fallback BIOS signatures (slower search), based on bios_extract.c
 		self._signature_pattern = re.compile(
 			b'''AMI(?:BIOS(?: \\(C\\)1993 American Megatrends Inc.,| W 0[45]|C0[6789])|BOOT ROM|EBBLK| Flash Utility for DOS Command mode\\.)|'''
@@ -307,7 +307,7 @@ class BIOSExtractor(Extractor):
 		file_header += util.read_complement(file_path, file_header)
 
 		# Stop if no BIOS signatures are found.
-		if not _entrypoint_pattern.match(file_header[-16:]) and not self._signature_pattern.search(file_header):
+		if not self._entrypoint_pattern.match(file_header[-16:]) and not self._signature_pattern.search(file_header):
 			return False
 
 		# Create destination directory and stop if it couldn't be created.
