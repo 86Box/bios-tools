@@ -1875,9 +1875,10 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _version_40x(self, line, match):
-		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) (?:Plug and Play )?(Version +([0-9]\.[0-9]+)|4\.0[0-9])(.+)?'''
+		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) +(?:Plug and Play )?(Version +([0-9]\.[0-9]+)|4\.0[0-9])(.+)?'''
 		# Detect just 4.0x without the "Version" prefix to detect some weird
 		# OEM ones (Zenith Z-Station GT) while not causing false positives.
+		# Additional space before version = some Siemens Nixdorf stuff
 		# "Plug and Play" = ALR Sequel series
 
 		# Extract version.
