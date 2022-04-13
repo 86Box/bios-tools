@@ -212,7 +212,7 @@ class ArchiveExtractor(Extractor):
 
 		# Run 7z command to extract the archive.
 		# The dummy password prevents any password prompts from stalling 7z.
-		subprocess.run(['7z', 'x', '-y', '-ppassword', '--', link_path], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+		subprocess.run(['7z', 'x', '-y', '-aou', '-ppassword', '--', link_path], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
 
 		# Remove temporary symlink.
 		if link_path != file_path_abs:
