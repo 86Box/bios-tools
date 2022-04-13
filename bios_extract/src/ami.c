@@ -476,6 +476,11 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	Date[8] = 0;
 
 	printf("AMI95 Version\t: %.4s (%s)\n", abc->Version, Date);
+	if (!Date[0] && !memcmp(abc->Version, "0632", 4)) {
+		fprintf(stderr,
+			"Error: cannot handle Intel fork filesystem.\n");
+		return TRUE;
+	}
 
 	/* First, the boot rom */
 	uint32_t BootOffset;
