@@ -329,7 +329,6 @@ class AMIAnalyzer(Analyzer):
 		# - Second digit not 0 (I forget which one had 000000)
 		# - Can be 4-digit instead of 6-digit (Biostar)
 		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))([0-9]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)''')
-		self._id_compressed_pattern = re.compile(b'''AMIBIOSC(0[1-9][0-9]{2})''')
 		# Weird TGem identifier (TriGem 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
@@ -367,16 +366,9 @@ class AMIAnalyzer(Analyzer):
 		# Some Intel BIOSes may fail to decompress, in which case, we have to
 		# rely on the header version data to get the Intel version sign-on.
 		if header_data:
-			ret = AMIIntelAnalyzer.can_handle(self, file_data, header_data)
-
-			# Extract version ID from compressed data.
-			# (0632 fork which bios_extract can't handle)
-			if self.version == 'Unknown Intel':
-				match = self._id_compressed_pattern.search(file_data)
-				if match:
-					self.version = match.group(1).decode('cp437', 'ignore') + '00'
+			is_intel = AMIIntelAnalyzer.can_handle(self, file_data, header_data)
 		else:
-			ret = False
+			is_intel = False
 
 		# Check post-Color identification block.
 		match = self._id_block_pattern.search(file_data)
@@ -511,7 +503,7 @@ class AMIAnalyzer(Analyzer):
 					self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 			else:
 				# Assume this is not an AMI BIOS, unless we found Intel data above.
-				return ret
+				return is_intel
 
 		return True
 
@@ -696,9 +688,11 @@ class AMIDellAnalyzer(AMIAnalyzer):
 
 
 class AMIIntelAnalyzer(Analyzer):
+	_ami_pattern = re.compile(b'''AMIBIOS''')
+	_ami_version_pattern = re.compile(b'''AMIBIOSC(0[1-9][0-9]{2})''')
+
 	def __init__(self, *args, **kwargs):
-		super().__init__('AMI', *args, **kwargs)
-		self.vendor_id = 'AMIIntel'
+		super().__init__('AMIIntel', *args, **kwargs)
 
 	def can_handle(self, file_data, header_data):
 		# Handle Intel AMI BIOSes that could not be decompressed.
@@ -714,7 +708,20 @@ class AMIIntelAnalyzer(Analyzer):
 
 		# Extract the Intel version from the flash header.
 		if header_data[90:95] == b'FLASH':
+			# Start by assuming this is an unknown version of AMI.
+			if self.vendor_id == 'AMIIntel':
+				self.vendor = 'AMI'
 			self.version = 'Unknown Intel'
+
+			# Extract AMI version from compressed data.
+			# (0632 fork which bios_extract can't handle)
+			match = AMIIntelAnalyzer._ami_pattern.search(file_data)
+			if match:
+				match = AMIIntelAnalyzer._ami_version_pattern.search(file_data[match.start(0):])
+				if match:
+					self.version = match.group(1).decode('cp437', 'ignore') + '00'
+			elif self.vendor_id == 'AMIIntel':
+				self.vendor = 'Phoenix'
 
 			# Apply the version as a sign-on.
 			self.signon = util.read_string(header_data[112:])
