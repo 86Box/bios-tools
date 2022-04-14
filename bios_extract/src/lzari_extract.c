@@ -34,11 +34,11 @@ static int xputc(int chr, void *skip) {
 static
 unsigned long int  textsize = 0;
 
+static unsigned int  buffer, mask;
+
 static
 int GetBit(void)  /* Get one bit (0 or 1) */
 {
-	static unsigned int  buffer, mask = 0;
-	
 	if ((mask >>= 1) == 0) {
 		buffer = xgetc(infile);  mask = 128;
 	}
@@ -81,8 +81,8 @@ int		match_position, match_length,  /* of longest match.  These are
 #define N_CHAR  (256 - THRESHOLD + F)
 	/* character code = 0, 1, ..., N_CHAR - 1 */
 
-unsigned long int  low = 0, high = Q4, value = 0;
-int  shifts = 0;  /* counts for magnifying low and high around Q2 */
+unsigned long int  low, high, value;
+int  shifts;  /* counts for magnifying low and high around Q2 */
 int  char_to_sym[N_CHAR], sym_to_char[N_CHAR + 1];
 unsigned int
 	sym_freq[N_CHAR + 1],  /* frequency for symbols */
@@ -239,6 +239,18 @@ int unlzari(unsigned char *in, int insz, unsigned char *out, int outsz, char com
 	//if (textsize == 0) return(-1);
     if (textsize == 0) return(0);
     if (textsize < 0) return(-1);
+
+    mask = 0;
+    memset(text_buf, 0, sizeof(text_buf));
+    low = 0;
+	high = Q4;
+	value = 0;
+	shifts = 0;
+	memset(char_to_sym, 0, sizeof(char_to_sym));
+	memset(sym_to_char, 0, sizeof(sym_to_char));
+	memset(sym_freq, 0, sizeof(sym_freq));
+	memset(sym_cum, 0, sizeof(sym_cum));
+	memset(position_cum, 0, sizeof(position_cum));
 
 	StartDecode();  StartModel();
 	for (i = 0; i < N - F; i++) text_buf[i] = common;
