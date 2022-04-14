@@ -2156,7 +2156,7 @@ class VMExtractor(ArchiveExtractor):
 
 		# Check for other dependencies.
 		self._dep_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(util.__file__))), 'vm')
-		for dep in ('floppy.144', 'freedos.img', 'INSTL2O.EXE'):
+		for dep in ('floppy.144', 'freedos.img'):
 			if not os.path.exists(os.path.join(self._dep_dir, dep)):
 				self._qemu_path = None
 				break
@@ -2199,6 +2199,7 @@ class VMExtractor(ArchiveExtractor):
 			if not dep_src:
 				continue
 
+			# Copy file.
 			try:
 				shutil.copy2(dep_src, os.path.join(dest_dir, dep_dest))
 			except:
@@ -2209,7 +2210,6 @@ class VMExtractor(ArchiveExtractor):
 				return False
 
 		# Build QEMU arguments.
-		dest_dir_sanitized = dest_dir.replace(',', ',,')
 		args = [self._qemu_path, '-m', '32', '-display', 'none', '-vga', 'none', '-boot', boot]
 		for drive, drive_snapshot, drive_if in ((floppy, floppy_snapshot, 'floppy'), (hdd, hdd_snapshot, 'ide')):
 			# Don't add this drive if an image was not specified.
@@ -2225,21 +2225,29 @@ class VMExtractor(ArchiveExtractor):
 			args += ['-drive', 'if=' + drive_if + ',snapshot=' + (drive_snapshot and 'on' or 'off') + ',format=raw,file=' + drive.replace(',', ',,')]
 		if vvfat:
 			# Add vvfat if requested.
-			args += ['-drive', 'if=ide,driver=vvfat,rw=on,dir=' + dest_dir_sanitized] # regular vvfat syntax can't handle : in path
+			args += ['-drive', 'if=ide,driver=vvfat,rw=on,dir=' + dest_dir.replace(',', ',,')] # regular vvfat syntax can't handle : in path
 
 		# Run QEMU.
-		import time
 		try:
 			subprocess.run(args, timeout=60, input=None, stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
 		except:
 			pass
 
-		# Remove dependencies, except for the floppy image if present.
+		# Remove dependency files.
 		for i in range(len(deps)):
+			# Don't remove persistent disk images.
 			if (not floppy_snapshot and deps[i][1] == floppy) or (not hdd_snapshot and deps[i][1] == hdd):
 				continue
+
+			# Remove file.
 			try:
 				os.remove(os.path.join(dest_dir, deps[i][1]))
+			except:
+				pass
+
+			# Just in case, we're working with DOS after all.
+			try:
+				os.remove(os.path.join(dest_dir, deps[i][1].upper()))
 			except:
 				pass
 
@@ -2295,10 +2303,12 @@ class VMExtractor(ArchiveExtractor):
 		"""Extract Evergreen ETI files."""
 
 		# Establish dependencies.
-		deps = (
-			(os.path.join(self._dep_dir, 'INSTL2O.EXE'), 'INSTL2O.EXE'),
-			(None, 'TARGET.BAT')
-		)
+		deps = [
+			(None, 'target.bat'),
+			(None, 'contact.eti'),
+			(None, 'contact.txt'),
+			(None, 'prevlang.dat')
+		]
 
 		# Read ETI header.
 		in_f = open(file_path, 'rb')
@@ -2314,11 +2324,11 @@ class VMExtractor(ArchiveExtractor):
 			ctime = 0
 
 		# Start the extraction batch file.
-		bat_f = open(os.path.join(dest_dir, 'TARGET.BAT'), 'wb')
-		bat_f.write(b'D:\r\n')
+		bat_f = open(os.path.join(dest_dir, 'target.bat'), 'wb')
+		bat_f.write(b'd:\r\n')
 
 		# Extract files into individual ETIs.
-		etis = []
+		eti_index = 0
 		while True:
 				# Parse file header.
 				fn = in_f.read(12) # filename
@@ -2334,16 +2344,17 @@ class VMExtractor(ArchiveExtractor):
 				size = struct.unpack('<I', in_f.read(4))[0] # size
 
 				# Sanitize filename to not overwrite ourselves.
-				eti_name = 'X{0:07}.ETI'.format(len(etis))
-				etis.append(eti_name)
-				if fn.upper() in ['TARGET.BAT', 'INSTL2O.EXE', 'FREEDOS.IMG', 'CONTACT.ETI'] + etis:
+				eti_name = 'X{0:07}.ETI'.format(eti_index)
+				eti_index += 1
+				deps.append((None, eti_name.lower()))
+				if (None, fn.lower()) in deps:
 					fn = fn[:-1] + '_'
 				fn = self._dos_fn_pattern.sub('_', fn)
 
 				# Add individual ETI to the batch file.
 				bat_f.write(b'del CONTACT.ETI CONTACT.TXT PREVLANG.DAT\r\n') # remove old files
 				bat_f.write(b'c:move /y ' + eti_name.encode('cp437', 'ignore') + b' CONTACT.ETI\r\n') # insert ourselves
-				bat_f.write(b'INSTL2O.EXE\r\n') # run hacked executable
+				bat_f.write(b'c:instl2o\r\n') # run hacked executable
 				bat_f.write(b'c:move /y CONTACT.TXT ' + fn.encode('cp437', 'ignore') + b'\r\n') # rename decompressed file
 
 				# Write individual ETI.
@@ -2358,26 +2369,12 @@ class VMExtractor(ArchiveExtractor):
 				out_f.close()
 
 		# Finish the batch file.
-		bat_f.write(b'C:\r\n')
+		bat_f.write(b'c:\r\n')
 		bat_f.close()
 
-		# Run QEMU.
-		ret = self._run_qemu(dest_dir, deps, hdd=os.path.join(self._dep_dir, 'freedos.img'), vvfat=True)
-
-		# Remove leftover files.
-		for fn in ['CONTACT.ETI', 'CONTACT.TXT', 'PREVLANG.DAT', 'TARGET.BAT'] + etis:
-			try:
-				os.remove(os.path.join(dest_dir, fn))
-			except:
-				pass
-			try:
-				os.remove(os.path.join(dest_dir, fn.lower()))
-			except:
-				pass
-
-		# Stop if QEMU failed.
-		if not ret:
-			return False
+		# Run QEMU and stop if it failed.
+		if not self._run_qemu(dest_dir, deps, hdd=os.path.join(self._dep_dir, 'freedos.img'), vvfat=True):
+			return True
 
 		# Check if anything was extracted.
 		dest_dir_files = os.listdir(dest_dir)
@@ -2406,14 +2403,13 @@ class VMExtractor(ArchiveExtractor):
 
 		# Establish dependencies.
 		deps = (
-			(os.path.join(self._dep_dir, 'UNLZEXE.EXE'), 'UNLZEXE.EXE'),
 			(file_path, 'target.exe'),
 			(None, 'target.bat')
 		)
 
 		# Create batch file for extraction.
 		f = open(os.path.join(dest_dir, 'target.bat'), 'wb')
-		f.write(b'D:\r\nUNLZEXE.EXE target.exe target.ulz\r\nC:\r\n')
+		f.write(b'd:\r\nc:unlzexe target.exe target.ulz\r\nc:\r\n')
 		f.close()
 
 		# Run QEMU and stop if it failed.
