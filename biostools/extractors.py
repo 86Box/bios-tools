@@ -1749,50 +1749,94 @@ class OMFExtractor(Extractor):
 class PEExtractor(ArchiveExtractor):
 	"""Extract PE executables."""
 
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		# Signatures for flash tool executables which may have an embedded ROM.
+		self._flashtool_pattern = re.compile(
+			b'''(Software\\\\AMI\\\\AFUWIN)|''' # AMIBIOS 8 AFUWIN (many ASRock)
+			b'''(AOpen FLASH ROM Utility R)|''' # AOpen (AP61)
+			b'''Micro Firmware, Incorporated \\* ''' # Micro Firmware (Intel Monsoon surfaced so far)
+		)
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Determine if this is a PE/MZ.
 		# The MZ signature is way too short. Check extension as well to be safe.
+		# This also stops :header: files from being re-processed as flash tools.
 		if file_header[:2] != b'MZ' or file_path[-4:].lower() not in ('.exe', '.dll', '.scr'):
 			return False
 
 		# Read up to 16 MB as a safety net.
 		file_header += util.read_complement(file_path, file_header)
 
-		# Extract embedded ROM from AMIBIOS 8 AFUWIN.
-		if b'Software\\AMI\\AFUWIN' in file_header:
-			afuwin_result = self._extract_afuwin(file_path, file_header, dest_dir)
-			if afuwin_result:
-				return afuwin_result
+		# Determine if this executable may have an embedded ROM.
+		match = self._flashtool_pattern.search(file_header)
+		if match:
+			# Extract embedded ROM and stop if extraction was successful.
+			ret = self._extract_flashtool(file_path, file_header, dest_dir, match)
+			if ret:
+				return ret
 
 		# Extract this as an archive.
 		return self._extract_archive(file_path, dest_dir)
 
-	def _extract_afuwin(self, file_path, file_header, dest_dir):
-		# Stop if there's no embedded ROM.
-		rom_start_idx = file_header.find(b'_EMBEDDED_ROM_START_\x00')
-		if rom_start_idx == -1:
-			return False
-		rom_end_idx = file_header.find(b'_EMBEDDED_ROM_END_\x00', rom_start_idx)
-		if rom_end_idx == -1:
-			return False
+	def _extract_flashtool(self, file_path, file_header, dest_dir, match):
+		# Determine embedded ROM start and end offsets.
+		if match.group(1): # AFUWIN
+			# Look for markers and stop if one of them wasn't found.
+			rom_start_offset = file_header.find(b'_EMBEDDED_ROM_START_\x00')
+			if rom_start_offset == -1:
+				return False
+			rom_start_offset += 21
+
+			rom_end_offset = file_header.find(b'_EMBEDDED_ROM_END_\x00', rom_start_offset)
+			if rom_end_offset == -1:
+				return False
+		else: # others
+			# Round ROM size down to a power of two.
+			try:
+				file_size = os.path.getsize(file_path)
+			except:
+				file_size = len(file_header)
+			rom_size = 1 << math.floor(math.log2(file_size))
+			rom_start_offset = file_size - rom_size # ROM located at the end of the file
+			rom_end_offset = file_size
+
+			# Adjust offsets if needed.
+			if match.group(2): # AOpen
+				# Stop if this file appears to be standalone AOFLASH.
+				if file_size < 32768:
+					return False
+
+				# Skip checksum word at the end. All files I've seen
+				# contain it, but check for its presence just in case.
+				remaining = file_size & 15
+				if remaining == 2:
+					rom_start_offset -= remaining
+					rom_end_offset -= remaining
+
+				# Skip BBOO data block. Same caveat as above.
+				rom_half_offset = int((rom_start_offset + rom_end_offset) / 2)
+				if file_header[rom_half_offset:rom_half_offset + 6] == b'*BBOO*':
+					rom_end_offset = rom_half_offset
 
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
 			return True
 
-		# Write area before and after the embedded ROM as a header.
+		# Write data before and after the embedded ROM as a header.
 		try:
 			f = open(os.path.join(dest_dir, ':header:'), 'wb')
-			f.write(file_header[:rom_start_idx])
-			f.write(file_header[rom_end_idx + 19:])
+			f.write(file_header[:rom_start_offset])
+			f.write(file_header[rom_end_offset:])
 			f.close()
 		except:
 			pass
 
 		# Extract ROM.
 		try:
-			f = open(os.path.join(dest_dir, 'afuwin.bin'), 'wb')
-			f.write(file_header[rom_start_idx + 21:rom_end_idx])
+			f = open(os.path.join(dest_dir, 'flashtool.bin'), 'wb')
+			f.write(file_header[rom_start_offset:rom_end_offset])
 			f.close()
 		except:
 			return True
