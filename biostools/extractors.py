@@ -90,9 +90,12 @@ class ApricotExtractor(Extractor):
 				return True
 
 			# Write header.
-			out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
-			out_f.write(header)
-			out_f.close()
+			try:
+				out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+				out_f.write(header)
+				out_f.close()
+			except:
+				pass
 
 			# Remove Apricot file.
 			in_f.close()
@@ -444,15 +447,21 @@ class CPUZExtractor(Extractor):
 		file_header += util.read_complement(file_path, file_header)
 
 		# Convert hex back to binary.
-		f = open(os.path.join(dest_dir, 'cpuz.bin'), 'wb')
-		for match in self._hex_pattern.finditer(file_header):
-			f.write(codecs.decode(match.group(1).replace(b' ', b''), 'hex'))
-		f.close()
+		try:
+			f = open(os.path.join(dest_dir, 'cpuz.bin'), 'wb')
+			for match in self._hex_pattern.finditer(file_header):
+				f.write(codecs.decode(match.group(1).replace(b' ', b''), 'hex'))
+			f.close()
+		except:
+			return True
 
 		# Create header file with the CPU-Z version string.
-		f = open(os.path.join(dest_dir, ':header:'), 'wb')
-		f.write(cpuz_match.group(1))
-		f.close()
+		try:
+			f = open(os.path.join(dest_dir, ':header:'), 'wb')
+			f.write(cpuz_match.group(1))
+			f.close()
+		except:
+			pass
 
 		# Remove report file.
 		try:
@@ -594,9 +603,12 @@ class DellExtractor(Extractor):
 
 		# Create header file with the copyright string, to tell the analyzer
 		# this BIOS went through this extractor.
-		f = open(os.path.join(dest_dir_0, ':header:'), 'wb')
-		f.write(copyright_string)
-		f.close()
+		try:
+			f = open(os.path.join(dest_dir_0, ':header:'), 'wb')
+			f.write(copyright_string)
+			f.close()
+		except:
+			pass
 
 		# Remove BIOS file.
 		try:
@@ -1040,9 +1052,12 @@ class ImageExtractor(Extractor):
 			return False
 
 	def _write_type(self, dest_dir_0, identifier):
-		f = open(os.path.join(dest_dir_0, ':header:'), 'w')
-		f.write(identifier)
-		f.close()
+		try:
+			f = open(os.path.join(dest_dir_0, ':header:'), 'w')
+			f.write(identifier)
+			f.close()
+		except:
+			pass
 
 class FATExtractor(ArchiveExtractor):
 	"""Extract FAT disk images."""
@@ -1093,29 +1108,35 @@ class HexExtractor(Extractor):
 		if not util.try_makedirs(dest_dir):
 			return True
 
-		# Create destination file.
-		f = open(os.path.join(dest_dir, 'intelhex.bin'), 'wb')
+		try:
+			# Create destination file.
+			f = open(os.path.join(dest_dir, 'intelhex.bin'), 'wb')
 
-		# Extract data blocks.
-		for match in self._hex_data_pattern.finditer(file_header):
-			length, addr, data = match.groups()
+			# Extract data blocks.
+			for match in self._hex_data_pattern.finditer(file_header):
+				length, addr, data = match.groups()
 
-			# Move on to the next block if the data length doesn't match.
-			if ((len(data) >> 1) - 1) != int(length, 16):
-				continue
+				# Move on to the next block if the data length doesn't match.
+				if ((len(data) >> 1) - 1) != int(length, 16):
+					continue
 
-			# Decode data.
-			data = codecs.decode(data[:-2], 'hex')
+				# Decode data.
+				data = codecs.decode(data[:-2], 'hex')
 
-			# Write data block at the specified address.
-			f.seek(int(addr, 16))
-			f.write(data)
+				# Write data block at the specified address.
+				f.seek(int(addr, 16))
+				f.write(data)
 
-		# Finish destination file.
-		f.close()
+			# Finish destination file.
+			f.close()
+		except:
+			return True
 
 		# Create dummy header file.
-		open(os.path.join(dest_dir, ':header:'), 'wb').close()
+		try:
+			open(os.path.join(dest_dir, ':header:'), 'wb').close()
+		except:
+			pass
 
 		# Remove file.
 		try:
@@ -1730,18 +1751,28 @@ class OMFExtractor(Extractor):
 			# Open OMF file.
 			in_f = open(file_path, 'rb')
 
-			# Copy header.
-			out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
-			out_f.write(in_f.read(112))
-			out_f.close()
+			# Read header.
+			header = in_f.read(112)
 
-			# Copy payload.
-			out_f = open(os.path.join(dest_dir, 'omf.bin'), 'wb')
-			data = b' '
-			while data:
-				data = in_f.read(1048576)
-				out_f.write(data)
-			out_f.close()
+			try:
+				# Copy payload.
+				out_f = open(os.path.join(dest_dir, 'omf.bin'), 'wb')
+				data = b' '
+				while data:
+					data = in_f.read(1048576)
+					out_f.write(data)
+				out_f.close()
+			except:
+				in_f.close()
+				return True
+
+			# Write header.
+			try:
+				out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+				out_f.write(header)
+				out_f.close()
+			except:
+				pass
 
 			# Remove OMF file.
 			in_f.close()
@@ -1946,7 +1977,10 @@ class TrimondExtractor(Extractor):
 		out_f.close()
 
 		# Create dummy header file on the destination directory.
-		open(os.path.join(dest_dir, ':header:'), 'wb').close()
+		try:
+			open(os.path.join(dest_dir, ':header:'), 'wb').close()
+		except:
+			pass
 
 		# Remove files.
 		try:
@@ -2070,9 +2104,12 @@ class UEFIExtractor(Extractor):
 
 		# Create header file with a dummy string, to tell the analyzer
 		# this BIOS went through this extractor.
-		f = open(os.path.join(dest_dir_0, ':header:'), 'wb')
-		f.write(b'\x00\xFFUEFIExtract\xFF\x00')
-		f.close()
+		try:
+			f = open(os.path.join(dest_dir_0, ':header:'), 'wb')
+			f.write(b'\x00\xFFUEFIExtract\xFF\x00')
+			f.close()
+		except:
+			pass
 
 		# Create flag file on the destination directory for the analyzer to
 		# treat it as a big chunk of data.
