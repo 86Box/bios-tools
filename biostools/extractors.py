@@ -1634,7 +1634,6 @@ class InterleaveExtractor(Extractor):
 
 		# Write all deinterleaved permutations, as some sets may
 		# contain the same interleaved string on more than one part.
-		alphanumeric = '0123456789abcdefghijklmn'
 		file_counter = 0
 		part_count = len(data)
 		buf = bytearray(part_size * part_count)
@@ -1646,7 +1645,7 @@ class InterleaveExtractor(Extractor):
 				data_offset += 1
 
 			# Write deinterleaved file.
-			f = open(os.path.join(dest_dir, 'deinterleaved_' + alphanumeric[file_counter] + '.bin'), 'wb')
+			f = open(os.path.join(dest_dir, 'deinterleaved_' + ''.join(util.base62[data_index] for data_index in permutation) + '.bin'), 'wb')
 			f.write(buf)
 			f.close()
 			file_counter += 1
@@ -1661,7 +1660,7 @@ class InterleaveExtractor(Extractor):
 		for counterpart_path in counterpart_paths:
 			# Move original file.
 			try:
-				shutil.move(counterpart_path, os.path.join(dest_dir, 'interleaved_' + alphanumeric[file_counter] + '.bin'))
+				shutil.move(counterpart_path, os.path.join(dest_dir, 'interleaved_' + util.base62[file_counter] + '.bin'))
 			except:
 				pass
 			file_counter += 1
@@ -1751,6 +1750,7 @@ class OMFExtractor(Extractor):
 				while data:
 					data = in_f.read(1048576)
 					out_f.write(data)
+
 				out_f.close()
 			except:
 				in_f.close()
@@ -2215,7 +2215,7 @@ class VMExtractor(ArchiveExtractor):
 		floppy_media = 'floppy.144'
 
 		# Copy original file and blank floppy image to the destination directory.
-		exe_name = util.random_name(8, alnum_only=True).lower() + '.exe'
+		exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'
 		exe_path = os.path.join(dest_dir, exe_name)
 		image_path = os.path.join(dest_dir, util.random_name(8) + '.img')
 		try:
@@ -2301,7 +2301,7 @@ class VMExtractor(ArchiveExtractor):
 				# Create filename for the individual ETI.
 				eti_name = temp_files[0] # dummy
 				while eti_name in temp_files:
-					eti_name = util.random_name(8, alnum_only=True).lower() + '.eti'
+					eti_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.eti'
 				temp_files.append(eti_name)
 
 				# Sanitize extracted filename to not overwrite ourselves.
@@ -2361,7 +2361,7 @@ class VMExtractor(ArchiveExtractor):
 		   required for Siemens Nixdorf FastPacket with its LZEXE-compressed stub."""
 
 		# Copy original file to the destination directory.
-		exe_name = util.random_name(8, alnum_only=True).lower() + '.exe'
+		exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'
 		exe_path = os.path.join(dest_dir, exe_name)
 		try:
 			shutil.copy2(file_path, exe_path)
@@ -2369,7 +2369,7 @@ class VMExtractor(ArchiveExtractor):
 			return True
 
 		# Generate a name for the unpacked file.
-		unpacked_name = util.random_name(8, alnum_only=True).lower() + '.ulz'
+		unpacked_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.ulz'
 		unpacked_path = os.path.join(dest_dir, unpacked_name)
 
 		# Create batch file for extraction.

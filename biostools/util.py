@@ -21,6 +21,14 @@ from biostools.pciutil import *
 date_pattern_mmddyy = re.compile('''(?P<month>[0-9]{2})/(?P<day>[0-9]{2})/(?P<year>[0-9]{2,4})''')
 number_pattern = re.compile('''[0-9]+''')
 
+digits = '0123456789'
+lowercase = 'abcdefghijklmnopqrstuvwxyz'
+uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+fn_symbols = '$%\'-_@~`!(){}^#&.+,;=[]'
+base62 = digits + lowercase + uppercase
+random_name_symbols = lowercase + digits + fn_symbols + uppercase
+random_name_nosymbols = lowercase + digits + uppercase
+
 _error_log_lock = multiprocessing.Lock()
 
 
@@ -158,14 +166,9 @@ def log_traceback(*args):
 		traceback.print_exc(file=f)
 		f.close()
 
-def random_name(chars=16, alnum_only=False):
-	"""Generate a random filename using valid DOS/Windows characters
-	   (alnum_only=False) or alphanumeric characters (alnum_only=True)."""
-	if alnum_only:
-		symbols = ''
-	else:
-		symbols = '$%\'-_@~`!(){}^#&.+,;=[]'
-	return ''.join(random.choice('abcdefghijklmnopqrstuvwxyz0123456789' + symbols + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') for x in range(chars))
+def random_name(chars=16, charset=random_name_symbols):
+	"""Generate a random filename using the given charset."""
+	return ''.join(random.choice(charset) for x in range(chars))
 
 def read_complement(file_path, file_header=None, max_size=16777216):
 	"""Read up to max_size from file_path starting at the end of file_header.
