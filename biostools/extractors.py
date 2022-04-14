@@ -74,17 +74,24 @@ class ApricotExtractor(Extractor):
 			# Open Apricot file.
 			in_f = open(file_path, 'rb')
 
-			# Copy header.
-			out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
-			out_f.write(in_f.read(file_size - pow2))
-			out_f.close()
+			# Read header.
+			header = in_f.read(file_size - pow2)
 
 			# Copy payload.
-			out_f = open(os.path.join(dest_dir, 'apricot.bin'), 'wb')
-			data = b' '
-			while data:
-				data = in_f.read(1048576)
-				out_f.write(data)
+			try:
+				out_f = open(os.path.join(dest_dir, 'apricot.bin'), 'wb')
+				data = b' '
+				while data:
+					data = in_f.read(1048576)
+					out_f.write(data)
+				out_f.close()
+			except:
+				in_f.close()
+				return True
+
+			# Write header.
+			out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+			out_f.write(header)
 			out_f.close()
 
 			# Remove Apricot file.
@@ -548,12 +555,6 @@ class DellExtractor(Extractor):
 		if not util.try_makedirs(dest_dir_0):
 			return True
 
-		# Create header file with the copyright string, to tell the analyzer
-		# this BIOS went through this extractor.
-		f = open(os.path.join(dest_dir_0, ':header:'), 'wb')
-		f.write(copyright_string)
-		f.close()
-
 		# Create flag file on the destination directory for the analyzer to
 		# treat it as a big chunk of data.
 		open(os.path.join(dest_dir_0, ':combined:'), 'wb').close()
@@ -590,6 +591,12 @@ class DellExtractor(Extractor):
 
 			# Increase filename counter.
 			module_number += 1
+
+		# Create header file with the copyright string, to tell the analyzer
+		# this BIOS went through this extractor.
+		f = open(os.path.join(dest_dir_0, ':header:'), 'wb')
+		f.write(copyright_string)
+		f.close()
 
 		# Remove BIOS file.
 		try:
@@ -1314,15 +1321,6 @@ class IntelExtractor(Extractor):
 
 		part_data_offset = start_offset + header_size
 
-		# Copy the header to a file, so we can still get the BIOS version
-		# from it in case the payload cannot be decompressed successfully.
-		try:
-			out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
-			out_f.write(file_header[start_offset:part_data_offset])
-			out_f.close()
-		except:
-			pass
-
 		# Subtract header from largest part size.
 		largest_part_size -= part_data_offset
 
@@ -1474,6 +1472,15 @@ class IntelExtractor(Extractor):
 		dbg_f.close()
 		try: # temporary for committing
 			os.remove(dest_file_path[:-3] + 'txt')
+		except:
+			pass
+
+		# Copy the header to a file, so we can still get the BIOS version
+		# from it in case the payload cannot be decompressed successfully.
+		try:
+			out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+			out_f.write(file_header[start_offset:part_data_offset])
+			out_f.close()
 		except:
 			pass
 
@@ -1824,6 +1831,14 @@ class PEExtractor(ArchiveExtractor):
 		if not util.try_makedirs(dest_dir):
 			return True
 
+		# Extract ROM.
+		try:
+			f = open(os.path.join(dest_dir, 'flashtool.bin'), 'wb')
+			f.write(file_header[rom_start_offset:rom_end_offset])
+			f.close()
+		except:
+			return True
+
 		# Write data before and after the embedded ROM as a header.
 		try:
 			f = open(os.path.join(dest_dir, ':header:'), 'wb')
@@ -1832,14 +1847,6 @@ class PEExtractor(ArchiveExtractor):
 			f.close()
 		except:
 			pass
-
-		# Extract ROM.
-		try:
-			f = open(os.path.join(dest_dir, 'flashtool.bin'), 'wb')
-			f.write(file_header[rom_start_offset:rom_end_offset])
-			f.close()
-		except:
-			return True
 
 		# Remove file.
 		try:
