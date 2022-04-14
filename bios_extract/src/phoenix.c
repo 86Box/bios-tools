@@ -1251,5 +1251,22 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	write(fd, BIOSImage + Offset, Length);
 	close(fd);
 
+	/* Extract BCPSEGMENT data */
+	Offset = BCPSegmentOffset;
+	Length = ((unsigned char *)ID) - (BIOSImage + Offset);
+	if ((Offset + Length) > BIOSLength)
+		Length = BIOSLength - Offset;
+	fd = open("bcpsegment.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	if (fd < 0) {
+		fprintf(stderr, "Error: unable to open bcpsegment.rom: %s\n\n",
+			strerror(errno));
+		return FALSE;
+	}
+	printf("0x%05X (%6d bytes)   ->   bcpsegment.rom\n",
+	       Offset, Length);
+	write(fd, BIOSImage + Offset, Length);
+	close(fd);
+
+
 	return TRUE;
 }
