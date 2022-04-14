@@ -345,6 +345,16 @@ static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 		return 0;
 	}
 
+	/* phoedeco: "for Fujitsu-Siemens Computer D1219" */
+	if ((Module->Compression >= 0) && (Module->Compression <= 5) &&
+		(Module->Signature[1] == 0x31) && (Module->Signature[2] == 0x31)) {
+		struct PhoenixModuleHeader NewHeader;
+		memcpy(&NewHeader, Module, sizeof(struct PhoenixModuleHeader));
+		NewHeader.ExpLen = Module->ExpLen & 0x00ffffff;
+		NewHeader.FragLength = Module->FragLength & 0x00ffffff;
+		Module = &NewHeader;
+	}
+
 valid_signature:
 	if ((Offset + Module->HeadLen + 4 + le32toh(Module->FragLength)) >
 	    BIOSLength) {
@@ -1075,9 +1085,9 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		BCD6F1 = (struct PhoenixBCD6F1 *)p;
 
 		sprintf(filename, "segment_%04X.rom", BCD6F1->Segment);
-		printf("0x%05lX (%6d bytes)   ->   %s\t(%d bytes)\n",
+		printf("0x%05lX (%6d bytes)   ->   %s\t(%d bytes) (%s)\n",
 		       p - BIOSImage, le32toh(BCD6F1->FragLength), filename,
-		       le32toh(BCD6F1->ExpLen));
+		       le32toh(BCD6F1->ExpLen), (phx.compression == 0) ? "BCD6F1" : "LZARI");
 		Buffer = MMapOutputFile(filename, le32toh(BCD6F1->ExpLen));
 		if (!Buffer)
 			break;
