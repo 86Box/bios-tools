@@ -1751,6 +1751,11 @@ class OMFExtractor(Extractor):
 					data = in_f.read(1048576)
 					out_f.write(data)
 
+				# Truncate payloads with an extra byte.
+				pos = out_f.tell()
+				if pos & 1:
+					out_f.truncate(pos - 1)
+
 				out_f.close()
 			except:
 				in_f.close()
