@@ -1723,7 +1723,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._rombios_signon_pattern = re.compile(b'''\\x0D\\x0AAll Rights Reserved\\x0D\\x0A(?:\\x0A(?:\\x00(?:[\\x90\\xF4]\\x01)?)?|\\x0D\\x0A\\x0D\\x0A)''')
 		# No "All Rights Reserved" (Yangtech 2.27 / pxxt)
 		self._rombios_signon_alt_pattern = re.compile(b'''\\(R\\)eboot, other keys to continue\\x00\\xFF+''')
-		self._bcpsys_datetime_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/(?:[0-9]{2}) ''')
+		self._bcpsys_datetime_pattern = re.compile('''[0-9]{2}/[0-9]{2}/[0-9]{2} ''')
 		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''')
 		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 
@@ -1757,7 +1757,7 @@ class PhoenixAnalyzer(Analyzer):
 
 	def reset(self):
 		super().reset()
-		self._is_core = False
+		self._bcpsys_date_time = None
 		self._trap_signon_fujitsu_lines = 0
 		self._trap_signon_nec = False
 		self._found_signon_tandy = ''
@@ -1770,17 +1770,22 @@ class PhoenixAnalyzer(Analyzer):
 		if b'search=f000,0,ffff,S,"' in file_data:
 			return False
 
-		# Read build date and time from BCPSYS on 4.0 and newer BIOSes.
+		# Read build code, date and time from BCPSYS on 4.0 and newer BIOSes.
 		offset = file_data.find(b'BCPSYS')
 		if offset > -1:
-			# Extract the build date and time as a string.
-			self.string = util.read_string(file_data[offset + 15:offset + 32].replace(b'\x00', b'\x20'))
+			# Extract the build code as a string.
+			build_code = self.string = util.read_string(file_data[offset + 55:offset + 63].replace(b'\x00', b'\x20')).strip()
+			if build_code:
+				self.debug_print('BCPSYS build code', build_code)
 
-			# Discard if this is an invalid date/time (PHLASH.EXE)
-			if not self._bcpsys_datetime_pattern.match(self.string):
-				self.string = ''
-			else:
-				self.debug_print('BCPSYS date/time', self.string)
+			# Append the build date and time to the string.
+			date_time = util.read_string(file_data[offset + 15:offset + 32].replace(b'\x00', b'\x20')).strip()
+			if self._bcpsys_datetime_pattern.match(date_time): # discard if this is an invalid date/time (PHLASH.EXE)
+				self._bcpsys_date_time = date_time
+				self.debug_print('BCPSYS build date/time', date_time)
+				if self.string:
+					self.string += '\n'
+				self.string += date_time
 
 		# Determine if this is a Dell BIOS (48-byte header).
 		offset = file_data.find(b'Dell System ')
@@ -1792,6 +1797,8 @@ class PhoenixAnalyzer(Analyzer):
 			dell_version = util.read_string(file_data[offset + 0x20:offset + 0x23])
 			if dell_version[0:1] == 'A':
 				self.signon += 'BIOS Version: ' + dell_version
+
+			self.debug_print('Dell version', dell_version)
 		else:
 			# Determine if this is some sort of HP Vectra BIOS.
 			match = self._hp_pattern.search(file_data)
@@ -1805,6 +1812,7 @@ class PhoenixAnalyzer(Analyzer):
 				match = self._hp_signon_pattern.search(file_data)
 				if match:
 					self.signon = match.group(0).decode('cp437', 'ignore')
+					self.debug_print('HP version', self.signon)
 			else:
 				# Extract sign-on from Core and some 4.0 Release 6.0 BIOSes.
 				match = self._core_signon_pattern.search(file_data)
@@ -1834,11 +1842,8 @@ class PhoenixAnalyzer(Analyzer):
 
 		return True
 
-	def _core_precheck(self, line):
-		return self._is_core
-
 	def _date_precheck(self, line):
-		return len(self.string) != 8 or util.date_pattern_mmddyy.match(line)
+		return not self._bcpsys_date_time
 
 	def _dell_precheck(self, line):
 		return self.version == 'Dell'
@@ -2106,7 +2111,7 @@ class PhoenixAnalyzer(Analyzer):
 		return True
 
 	def _string_date(self, line, match):
-		'''^((?:[0-9]{2})/(?:[0-9]{2})/(?:[0-9]{2})|(?:[0-9]{4})//(?:[0-9]{4})//(?:[0-9]{4}))((?:[0-9]{2})/(?:[0-9]{2})/(?:[0-9]{2}))?'''
+		'''^([0-9]{2}/[0-9]{2}/[0-9]{2}|[0-9]{4}//[0-9]{4}//[0-9]{4})([0-9]{2}/[0-9]{2}/[0-9]{2})?'''
 
 		# De-interleave date if interleaved.
 		date = match.group(1)
@@ -2122,9 +2127,23 @@ class PhoenixAnalyzer(Analyzer):
 		if date == '00/00/00':
 			return True
 
-		# Extract the date as a string if newer than any previously-found date.
-		if ' ' not in self.string and (not self.string or util.date_gt(date, self.string, util.date_pattern_mmddyy)):
-			self.string = date
+		# Extract existing date/time from string if present.
+		newline_index = self.string.rfind('\n')
+		if newline_index > -1:
+			string_rest = self.string[:newline_index]
+			string_date = self.string[newline_index + 1:]
+		else:
+			string_rest = ''
+			string_date = self.string
+
+		# Add date to string, or replace an existing one if this one is newer.
+		string_date_valid = util.date_pattern_mmddyy.match(string_date)
+		if not string_date_valid or util.date_gt(date, string_date[:8], util.date_pattern_mmddyy):
+			if string_date_valid:
+				self.string = string_rest
+			if self.string:
+				self.string += '\n'
+			self.string += date
 
 		return True
 
@@ -2208,16 +2227,6 @@ class PhoenixAnalyzer(Analyzer):
 		if not oem or oem[:2] != '86' or not self._intel_86_pattern.match(self.signon):
 			# Extract the version string as a sign-on.
 			self.signon = match.group(1)
-
-		# The longer string on Intel's second Phoenix run has a build date and
-		# time, which is more accurate than the build date and time in BCPSYS.
-		build_date_time = match.group(3)
-		if build_date_time:
-			# Check if the date is newer than any existing date.
-			build_date = '{0}/{1}/{2}'.format(build_date_time[2:4], build_date_time[4:6], build_date_time[:2])
-			if len(self.string) >= 8 and util.date_gt(build_date, self.string[:8], util.date_pattern_mmddyy):
-				# Extract the date as a string.
-				self.string = '{0} {1}:{2}'.format(build_date, build_date_time[6:8], build_date_time[8:10])
 
 		return True
 
