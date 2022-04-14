@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import multiprocessing, os, math, re, shutil, traceback, urllib.request
+import multiprocessing, os, math, random, re, shutil, traceback, urllib.request
 from biostools.pciutil import *
 
 date_pattern_mmddyy = re.compile('''(?P<month>[0-9]{2})/(?P<day>[0-9]{2})/(?P<year>[0-9]{2,4})''')
@@ -158,6 +158,15 @@ def log_traceback(*args):
 		traceback.print_exc(file=f)
 		f.close()
 
+def random_name(chars=16, alnum_only=False):
+	"""Generate a random filename using valid DOS/Windows characters
+	   (alnum_only=False) or alphanumeric characters (alnum_only=True)."""
+	if alnum_only:
+		symbols = ''
+	else:
+		symbols = '$%\'-_@~`!(){}^#&.+,;=[]'
+	return ''.join(random.choice('abcdefghijklmnopqrstuvwxyz0123456789' + symbols + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') for x in range(chars))
+
 def read_complement(file_path, file_header=None, max_size=16777216):
 	"""Read up to max_size from file_path starting at the end of file_header.
 	   Usage: file_header += read_complement(file_path, file_header)"""
@@ -195,6 +204,19 @@ def rmdirs(dir_path):
 		except:
 			continue
 	return removed_count
+
+def remove_all(files, func=lambda x: x):
+	"""Remove all specified files, applying func to the paths.
+	   func can return a string or iterable object."""
+	for file in files:
+		file = func(file)
+		if type(file) == str:
+			file = [file]
+		for subfile in file:
+			try:
+				os.remove(subfile)
+			except:
+				pass
 
 def remove_extension(file_name):
 	"""Remove file_name's extension, if one is present."""
