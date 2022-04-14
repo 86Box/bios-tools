@@ -1524,7 +1524,7 @@ class InterleaveExtractor(Extractor):
 			b'memory (parity error)',
 			b'Copyright COMPAQ Computer Corporation', # Compaq
 			b'Press any key when ready', # Access Methods
-			b'AMPRO ', # AMPRO
+			b'* AMPRO Little Board', # AMPRO
 		]
 
 		# Interleave the strings.
@@ -1545,9 +1545,9 @@ class InterleaveExtractor(Extractor):
 		file_header += util.read_complement(file_path, file_header, max_size=131072)
 
 		# Check for interleaved strings.
-		counterpart_string_sets = part_order = None
+		counterpart_string_sets = None
 		sets_2 = [self._interleaved_odd, self._interleaved_even]
-		sets_4 = [self._interleaved_q0, self._interleaved_q2, self._interleaved_q2, self._interleaved_q3]
+		sets_4 = [self._interleaved_q0, self._interleaved_q1, self._interleaved_q2, self._interleaved_q3]
 		for part_set in (sets_2, sets_4):
 			# Go through sets.
 			for counterpart_set in part_set:
@@ -1557,7 +1557,6 @@ class InterleaveExtractor(Extractor):
 					if string in file_header:
 						# Generate new string set list without this set.
 						counterpart_string_sets = [new_set for new_set in part_set if new_set != counterpart_set]
-						this_part_order = part_order
 						break
 
 				# Stop if a set was found.
@@ -1581,15 +1580,7 @@ class InterleaveExtractor(Extractor):
 		for counterpart_string_set in counterpart_string_sets:
 			# Try to find this file's counterpart in the directory.
 			counterpart_candidates = []
-			file_size = None
-			for _ in range(10):
-				try:
-					file_size = os.path.getsize(file_path)
-					break
-				except:
-					pass
-			if file_size == None:
-				raise Exception('file somehow missing')
+			file_size = os.path.getsize(file_path)
 			for file_in_dir in dir_files:
 				# Skip seen files.
 				file_in_dir_path = os.path.join(dir_path, file_in_dir)
