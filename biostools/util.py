@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import multiprocessing, os, math, re, traceback, urllib.request
+import multiprocessing, os, math, re, shutil, traceback, urllib.request
 from biostools.pciutil import *
 
 date_pattern_mmddyy = re.compile('''(?P<month>[0-9]{2})/(?P<day>[0-9]{2})/(?P<year>[0-9]{2,4})''')
@@ -130,6 +130,18 @@ def date_lt(date1, date2, pattern):
 	"""Returns True if date1 is lesser than date2.
 	   Date format set by the given pattern."""
 	return date_cmp(date1, date2, pattern) < 0
+
+def hardlink_or_copy(src, dest):
+	"""Attempt to hardlink or copy src to dest.
+	   Returns True if either operation was successful."""
+	try:
+		os.link(src, dest)
+	except:
+		try:
+			shutil.copy2(src, dest)
+		except:
+			return False
+	return True
 
 def log_traceback(*args):
 	"""Log to biostools_error.log, including any outstanding traceback."""

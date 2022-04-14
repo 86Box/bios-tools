@@ -406,12 +406,11 @@ class BIOSExtractor(Extractor):
 		# treat it as a big chunk of data.
 		open(os.path.join(dest_dir_0, ':combined:'), 'wb').close()
 
-		# Copy any header file to extracted directory, for identifying Intel BIOSes.
-		# See AMIAnalyzer.can_handle for more information.
-		try:
-			shutil.copy(os.path.join(os.path.dirname(file_path_abs), ':header:'), os.path.join(dest_dir_0, ':header:'))
-		except:
-			pass
+		# Hardlink or copy any header file to extracted directory, to help with
+		# identifying Intel BIOSes. See AMIAnalyzer.can_handle for more information.
+		parent_header = os.path.join(os.path.dirname(file_path_abs), ':header:')
+		if os.path.exists(parent_header):
+			util.hardlink_or_copy(parent_header, os.path.join(dest_dir_0, ':header:'))
 
 		# Remove BIOS file.
 		try:
