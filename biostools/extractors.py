@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import array, codecs, datetime, io, itertools, math, os, re, shutil, struct, subprocess
+import array, codecs, datetime, io, itertools, math, os, re, shutil, struct, subprocess, sys
 try:
 	import PIL.Image
 except ImportError:
@@ -1365,8 +1365,7 @@ class IntelExtractor(Extractor):
 		# Create destination file.
 		dest_file_path = os.path.join(dest_dir, 'intel.bin')
 		out_f = open(dest_file_path, 'wb')
-		dbg_f = open(dest_file_path[:-3] + 'txt', 'w')
-		dbg_f.write('Found {0} parts, header size {1}\n'.format(len(found_parts), header_size))
+		self.log_print('Found', len(found_parts), 'parts, header size', header_size)
 
 		# Copy parts to the destination file.
 		bootblock_offset = None
@@ -1390,7 +1389,7 @@ class IntelExtractor(Extractor):
 					# Update ROM end offset.
 					if logical_area_size > end_offset:
 						end_offset = logical_area_size
-					dbg_f.write('new eo las {0}\n'.format(hex(end_offset)))
+					self.log_print('new eo las', hex(end_offset))
 
 					# Apply inversion if needed.
 					if invert:
@@ -1406,11 +1405,11 @@ class IntelExtractor(Extractor):
 						if bootblock_offset < 0:
 							bootblock_offset = 0
 					dest_offset += bootblock_offset
-					dbg_f.write('bbo {0} do {1}\n'.format(hex(bootblock_offset), hex(dest_offset)))
+					self.log_print('bbo', hex(bootblock_offset), 'do', hex(dest_offset))
 				out_f.seek(dest_offset)
 
 				# Copy data.
-				dbg_f.write('{0} => {1} ({2})\n'.format(hex(dest_offset), found_part_path, data_length))
+				self.log_print(hex(dest_offset), '=>', found_part_path, '-', data_length, 'bytes')
 				remaining = max(data_length, largest_part_size)
 				part_data = b' '
 				while part_data and remaining > 0:
@@ -1431,7 +1430,7 @@ class IntelExtractor(Extractor):
 				elif logical_area == 0 and dest_offset == bootblock_offset:
 					# Don't pad a boot block insertion.
 					remaining = 0
-				dbg_f.write('> adding {0} padding\n'.format(hex(remaining)))
+				self.log_print('> adding', hex(remaining), 'padding')
 				while remaining > 0:
 					out_f.write(b'\xFF' * min(remaining, 1048576))
 					remaining -= 1048576
@@ -1442,7 +1441,7 @@ class IntelExtractor(Extractor):
 				part_end_offset = out_f.tell()
 				if part_end_offset > end_offset:
 					end_offset = part_end_offset
-				dbg_f.write('new eo write {0}\n'.format(hex(end_offset)))
+				self.log_print('new eo write', hex(end_offset))
 
 				# Remove part.
 				os.remove(found_part_path)
@@ -1462,7 +1461,7 @@ class IntelExtractor(Extractor):
 					out_f = open(dest_file_path + '.padded', 'wb')
 
 					# Write padding.
-					dbg_f.write('Padding by {0}\n'.format(hex(padding_size)))
+					self.log_print('Padding by', hex(padding_size))
 					while padding_size > 0:
 						out_f.write(b'\xFF' * min(padding_size, 1048576))
 						padding_size -= 1048576
@@ -1487,12 +1486,6 @@ class IntelExtractor(Extractor):
 					shutil.move(dest_file_path + '.padded', dest_file_path)
 				except:
 					pass
-
-		dbg_f.close()
-		try: # temporary for committing
-			os.remove(dest_file_path[:-3] + 'txt')
-		except:
-			pass
 
 		# Copy the header to a file, so we can still get the BIOS version
 		# from it in case the payload cannot be decompressed successfully.
