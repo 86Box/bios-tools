@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import array, codecs, datetime, io, itertools, math, os, re, shutil, struct, subprocess, sys
+import array, codecs, datetime, io, itertools, math, os, re, shutil, struct, subprocess, sys, time
 try:
 	import PIL.Image
 except ImportError:
@@ -1365,7 +1365,7 @@ class IntelExtractor(Extractor):
 		# Create destination file.
 		dest_file_path = os.path.join(dest_dir, 'intel.bin')
 		out_f = open(dest_file_path, 'wb')
-		self.log_print('Found', len(found_parts), 'parts, header size', header_size)
+		self.log_print('Found', len(found_parts), 'parts, header size', header_size, 'bytes, largest part size', largest_part_size, 'bytes')
 
 		# Copy parts to the destination file.
 		bootblock_offset = None
@@ -1389,7 +1389,6 @@ class IntelExtractor(Extractor):
 					# Update ROM end offset.
 					if logical_area_size > end_offset:
 						end_offset = logical_area_size
-					self.log_print('new eo las', hex(end_offset))
 
 					# Apply inversion if needed.
 					if invert:
@@ -1409,11 +1408,13 @@ class IntelExtractor(Extractor):
 				out_f.seek(dest_offset)
 
 				# Copy data.
-				self.log_print(hex(dest_offset), '=>', found_part_path, '-', data_length, 'bytes')
+				self.log_print(data_length, 'bytes @', hex(dest_offset), '=>', found_part_path)
 				remaining = max(data_length, largest_part_size)
+				print(remaining)
 				part_data = b' '
 				while part_data and remaining > 0:
 					part_data = f.read(min(remaining, 1048576))
+					print(len(part_data))
 					out_f.write(part_data)
 					remaining -= len(part_data)
 
@@ -1422,15 +1423,17 @@ class IntelExtractor(Extractor):
 					if data_length <= 8192 and len(found_parts_boot) == 0:
 						# Workaround for JN440BX, which requires its final
 						# part (sized 8 KB) to be at the end of the image.
+						self.log_print('> Final part non-padded')
 						remaining = 0
 					elif data_length == largest_part_size and ((dest_offset >> 16) & 1) == 0:
 						# Workaround for SE440BX-2 and SRMK2, which require a
 						# gap at the final 64 KB where the boot block goes.
+						self.log_print('> Final part gap')
 						remaining += largest_part_size
 				elif logical_area == 0 and dest_offset == bootblock_offset:
 					# Don't pad a boot block insertion.
 					remaining = 0
-				self.log_print('> adding', hex(remaining), 'padding')
+				self.log_print('> Adding', remaining, 'padding bytes')
 				while remaining > 0:
 					out_f.write(b'\xFF' * min(remaining, 1048576))
 					remaining -= 1048576
@@ -1441,7 +1444,6 @@ class IntelExtractor(Extractor):
 				part_end_offset = out_f.tell()
 				if part_end_offset > end_offset:
 					end_offset = part_end_offset
-				self.log_print('new eo write', hex(end_offset))
 
 				# Remove part.
 				os.remove(found_part_path)
@@ -1580,7 +1582,22 @@ class InterleaveExtractor(Extractor):
 					continue
 
 				# Skip any files which differ in size.
-				if os.path.getsize(file_in_dir_path) != file_size:
+				file_in_dir_size = 0
+				for retry in range(10): # mergerfs hack
+					try:
+						file_in_dir_size = os.path.getsize(file_in_dir_path)
+						try:
+							if retry > 0:
+								with util._error_log_lock:
+									f = open('biostools_retry.log', 'a')
+									f.write('{0} => {1} (took {2} retries)\n'.format(file_path, file_in_dir, retry))
+									f.close()
+						except:
+							pass
+						break
+					except:
+						time.sleep(retry)
+				if file_in_dir_size != file_size:
 					continue
 
 				# Read up to 128 KB.
