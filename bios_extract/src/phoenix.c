@@ -309,7 +309,7 @@ phx_write_file(unsigned char *BIOSImage, char *filename, short filetype,
 
 #define MODULE_SIGNATURE_INVALID(Module) (Module->Signature[0] || (Module->Signature[1] != 0x31) || (Module->Signature[2] != 0x31))
 
-static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
+static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset, unsigned char *remainder)
 {
 	struct PhoenixModuleHeader *Module, *NewModule;
 
@@ -395,6 +395,8 @@ valid_signature:
 
 		memcpy(ModuleData, BIOSImage + Offset + Module->HeadLen,
 		       FragLength);
+		if (remainder)
+			memset(remainder + Offset, 0, Module->HeadLen + FragLength);
 
 		Packed = FragLength;
 		FragOffset = le32toh(Module->NextFrag) & (BIOSLength - 1);
@@ -416,6 +418,8 @@ valid_signature:
 			Remain = BIOSLength - ((ModuleData + Packed) - BIOSImage);
 			memcpy(ModuleData + Packed, BIOSImage + FragOffset + 9,
 			       (Remain < FragLength) ? Remain : FragLength);
+			if (remainder)
+				memset(remainder + FragOffset + 9, 0, (Remain < FragLength) ? Remain : FragLength);
 			Packed += FragLength;
 			FragOffset =
 			    le32toh(Fragment->NextFrag) & (BIOSLength - 1);
@@ -531,6 +535,8 @@ Uncompressed:
 
 	if (IsFragment)
 		free(ModuleData);
+	else if (remainder)
+		memset(remainder + Offset, 0, Module->HeadLen + Packed);
 
 	if (le16toh(Module->Offset) || le16toh(Module->Segment)) {
 		if (!Module->Compression)
@@ -968,7 +974,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	struct PhoenixBCD6F1 *BCD6F1;
 	uint32_t Offset, Length;
 	int fd;
-	unsigned char *p, *Buffer,
+	unsigned char *p, *Buffer, *remainder,
 		      module_signature[] = {0x00, 0x31, 0x31},
 		      bcd6f1_signature[] = {'B', 'C', 0xd6, 0xf1, 0x00, 0x00, 0x12},
 		      optrom_signature[] = {0x55, 0xaa},
@@ -989,6 +995,10 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	if (BIOSLength > 0x100000 && BIOSOffset > 0) {
 		BIOSLength = BIOSLength + BIOSOffset - 0x100000;
 	}
+
+	remainder = malloc(BIOSLength);
+	if (remainder)
+		memcpy(remainder, BIOSImage, BIOSLength);
 
 	for (ID = (struct PhoenixID *)(BIOSImage + BCPSegmentOffset + 10);
 	     ((void *)ID < (void *)(BIOSImage + BIOSLength)) && ID->Name[0];
@@ -1068,7 +1078,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	}
 
 	while (Offset) {
-		Offset = PhoenixModule(BIOSImage, BIOSLength, Offset);
+		Offset = PhoenixModule(BIOSImage, BIOSLength, Offset, remainder);
 		Offset &= BIOSLength - 1;
 	}
 
@@ -1091,6 +1101,9 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		Buffer = MMapOutputFile(filename, le32toh(BCD6F1->ExpLen));
 		if (!Buffer)
 			break;
+
+		if (remainder)
+			memset(remainder + (p - BIOSImage), 0, sizeof(struct PhoenixBCD6F1) + le32toh(BCD6F1->FragLength));
 
 		p += sizeof(struct PhoenixBCD6F1);
 		if (phx.compression == 0)
@@ -1131,6 +1144,8 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
+		if (remainder)
+			memset(remainder + (p - BIOSImage), 0, Length);
 		p += Length;
 	}
 
@@ -1147,6 +1162,10 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 			continue;
 		}
 
+		Length = 8192;
+		if ((p + Length) > (BIOSImage + BIOSLength))
+			Length = (BIOSImage + BIOSLength) - p;
+
 		fd = open("boot.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 		if (fd < 0) {
 			fprintf(stderr, "Error: unable to open boot.rom: %s\n\n",
@@ -1154,11 +1173,13 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 			return FALSE;
 		}
 		printf("0x%05lX (%6d bytes)   ->   boot.rom\n",
-		       p - BIOSImage, 8192);
-		write(fd, p, 8192);
+		       p - BIOSImage, Length);
+		write(fd, p, Length);
 		close(fd);
 
-		p += 8192;
+		if (remainder)
+			memset(remainder + (p - BIOSImage), 0, Length);
+		p += Length;
 	}
 
 	/* Bruteforce scan */
@@ -1172,7 +1193,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 		Module = (struct PhoenixModuleHeader *)p;
 		if (!MODULE_SIGNATURE_INVALID(Module))
-			PhoenixModule(BIOSImage, BIOSLength, p - BIOSImage);
+			PhoenixModule(BIOSImage, BIOSLength, p - BIOSImage, remainder);
 
 		p += sizeof(struct PhoenixModuleHeader);
 	}
@@ -1187,6 +1208,10 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 		sprintf(filename, "napi_%05lX.rom", p - BIOSImage);
 
+		Length = 8192;
+		if ((p + Length) > (BIOSImage + BIOSLength))
+			Length = (BIOSImage + BIOSLength) - p;
+
 		fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 		if (fd < 0) {
 			fprintf(stderr, "Error: unable to open %s: %s\n\n", filename,
@@ -1194,11 +1219,13 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 			return FALSE;
 		}
 		printf("0x%05lX (%6d bytes)   ->   %s\n",
-		       p - BIOSImage, 8192, filename);
-		write(fd, p, 8192);
+		       p - BIOSImage, Length, filename);
+		write(fd, p, Length);
 		close(fd);
 
-		p += 8192;
+		if (remainder)
+			memset(remainder + (p - BIOSImage), 0, Length);
+		p += Length;
 	}
 
 	/* ACFG scan */
@@ -1215,6 +1242,8 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 			p += 4;
 			continue;
 		}
+		if ((p + Length) > (BIOSImage + BIOSLength))
+			Length = (BIOSImage + BIOSLength) - p;
 
 		sprintf(filename, "acfg_%05lX.rom", p - BIOSImage);
 
@@ -1229,44 +1258,70 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
+		if (remainder)
+			memset(remainder + (p - BIOSImage), 0, Length);
 		p += Length;
 	}
 
 	/* Extract uncompressed data */
-	if ((bcpComp->head.major_revision == 0) && (bcpComp->head.minor_revision == 0)) {
-		Offset = BIOSLength - 0x10000 + le16toh(bcpComp->alt.unc_start_offset);
-		Length = 0x10000 - le16toh(bcpComp->alt.unc_start_offset);
+	if (BIOSLength > 0x10000) {
+		Offset = BIOSLength - 0x10000;
+		Length = 0x10000;
 	} else {
-		Offset = BIOSLength - 0x10000 + le16toh(bcpComp->main.unc_start_offset);
-		Length = 0x10000 - le16toh(bcpComp->main.unc_start_offset);
+		Offset = 0;
+		Length = BIOSLength;
 	}
-	fd = open("uncompressed.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-		fprintf(stderr, "Error: unable to open uncompressed.rom: %s\n\n",
-			strerror(errno));
-		return FALSE;
+	if ((bcpComp->head.major_revision == 0) && (bcpComp->head.minor_revision == 0)) {
+		Offset += le16toh(bcpComp->alt.unc_start_offset);
+		Length -= le16toh(bcpComp->alt.unc_start_offset);
+	} else {
+		Offset += le16toh(bcpComp->main.unc_start_offset);
+		Length -= le16toh(bcpComp->main.unc_start_offset);
 	}
-	printf("0x%05X (%6d bytes)   ->   uncompressed.rom\n",
-	       Offset, Length);
-	write(fd, BIOSImage + Offset, Length);
-	close(fd);
+	if (Length > 0) {
+		fd = open("uncompressed.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+		if (fd < 0) {
+			fprintf(stderr, "Error: unable to open uncompressed.rom: %s\n\n",
+				strerror(errno));
+			return FALSE;
+		}
+		printf("0x%05X (%6d bytes)   ->   uncompressed.rom\n",
+		       Offset, Length);
+		write(fd, BIOSImage + Offset, Length);
+		close(fd);
+		if (remainder)
+			memset(remainder + Offset, 0, Length);
+	}
 
-	/* Extract BCPSEGMENT data */
-	Offset = BCPSegmentOffset;
-	Length = ((unsigned char *)ID) - (BIOSImage + Offset);
-	if ((Offset + Length) > BIOSLength)
-		Length = BIOSLength - Offset;
-	fd = open("bcpsegment.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-		fprintf(stderr, "Error: unable to open bcpsegment.rom: %s\n\n",
-			strerror(errno));
-		return FALSE;
+	/* Extract remaining data */
+	if (remainder) {
+		/* Manually flag BCPSEGMENT data as remaining, just in case */
+		Offset = BCPSegmentOffset;
+		Length = ((unsigned char *)ID) - (BIOSImage + Offset);
+		if ((Offset + Length) > BIOSLength)
+			Length = BIOSLength - Offset;
+		memset(remainder + Offset, 0x55, Length);
+	
+		fd = open("remainder.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+		if (fd < 0) {
+			fprintf(stderr, "Error: unable to open remainder.rom: %s\n\n",
+				strerror(errno));
+			return FALSE;
+		}
+		printf("0x%05X (%6d bytes)   ->   remainder.rom\n",
+		       Offset, Length);
+		if (remainder) {
+			Offset = 0;
+			Length = BIOSLength - 1;
+			while ((Offset <= Length) && ((remainder[Offset] == 0x00) || (remainder[Offset] == 0xff)))
+				Offset++;
+			while ((Offset <= Length) && ((remainder[Length] == 0x00) || (remainder[Length] == 0xff)))
+				Length--;
+			if ((Offset <= Length) && (Length > 0))
+				write(fd, BIOSImage + Offset, Length);
+		}
+		close(fd);
 	}
-	printf("0x%05X (%6d bytes)   ->   bcpsegment.rom\n",
-	       Offset, Length);
-	write(fd, BIOSImage + Offset, Length);
-	close(fd);
-
 
 	return TRUE;
 }
