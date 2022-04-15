@@ -20,7 +20,6 @@ import getopt, os, multiprocessing, re, subprocess, sys
 from . import analyzers, extractors, formatters, util
 
 # Constants.
-MP_PROCESS_COUNT = 4
 ANALYZER_MAX_CACHE_MB = 512
 
 
@@ -166,8 +165,8 @@ def extract(dir_path, _, options):
 
 		# Start multiprocessing pool.
 		print('Starting extraction on directory {0}'.format(dir_number), end='', flush=True)
-		queue = multiprocessing.Queue(maxsize=MP_PROCESS_COUNT)
-		mp_pool = multiprocessing.Pool(MP_PROCESS_COUNT, initializer=extract_process, initargs=(queue, dir_number_path, next_dir_number_path, options.get('debug')))
+		queue = multiprocessing.Queue(maxsize=options['threads'])
+		mp_pool = multiprocessing.Pool(options['threads'], initializer=extract_process, initargs=(queue, dir_number_path, next_dir_number_path, options['debug']))
 
 		# Create next directory.
 		if not os.path.isdir(next_dir_number_path):
@@ -201,7 +200,7 @@ def extract(dir_path, _, options):
 		dir_number += 1
 
 		# Stop multiprocessing pool and wait for its workers to finish.
-		for _ in range(MP_PROCESS_COUNT):
+		for _ in range(options['threads']):
 			queue.put(None)
 		mp_pool.close()
 		mp_pool.join()
@@ -568,8 +567,8 @@ def analyze(dir_path, formatter_args, options):
 		dir_path = dir_path[:-1]
 
 	# Start multiprocessing pool.
-	queue = multiprocessing.Queue(maxsize=MP_PROCESS_COUNT)
-	mp_pool = multiprocessing.Pool(MP_PROCESS_COUNT, initializer=analyze_process, initargs=(queue, formatter, dir_path, options.get('debug')))
+	queue = multiprocessing.Queue(maxsize=options['threads'])
+	mp_pool = multiprocessing.Pool(options['threads'], initializer=analyze_process, initargs=(queue, formatter, dir_path, options['debug']))
 
 	if os.path.isdir(dir_path):
 		# Scan directory structure.
@@ -580,7 +579,7 @@ def analyze(dir_path, formatter_args, options):
 		queue.put(('', [dir_path]))
 
 	# Stop multiprocessing pool and wait for its workers to finish.
-	for _ in range(MP_PROCESS_COUNT):
+	for _ in range(options['threads']):
 		queue.put(None)
 	mp_pool.close()
 	mp_pool.join()
@@ -600,11 +599,12 @@ def main():
 		'format': 'csv',
 		'headers': True,
 		'hyperlink': False,
+		'threads': 0,
 		'docker-usage': False,
 	}
 
 	# Parse arguments.
-	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xadf:hnr', ['extract', 'analyze', 'debug', 'format=', 'hyperlink', 'no-headers', 'array', 'docker-usage'])
+	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xadf:hnrt', ['extract', 'analyze', 'debug', 'format=', 'hyperlink', 'no-headers', 'array', 'threads', 'docker-usage'])
 	for opt, arg in args:
 		if opt in ('-x', '--extract'):
 			mode = 'extract'
@@ -620,14 +620,18 @@ def main():
 			options['headers'] = False
 		elif opt in ('-r', '--array'):
 			options['array'] = True
+		elif opt in ('-t', '--threads'):
+			try:
+				options['threads'] = int(arg)
+			except:
+				pass
 		elif opt == '--docker-usage':
 			options['docker-usage'] = True
 
 	if len(remainder) > 0:
-		# Disable multi-threading in debug mode.
-		if options.get('debug'):
-			global MP_PROCESS_COUNT
-			MP_PROCESS_COUNT = 1
+		# Set default thread count.
+		if options['threads'] <= 0:
+			options['threads'] = options['debug'] and 1 or (os.cpu_count() or 4)
 
 		# Run mode handler.
 		if mode == 'extract':
@@ -645,16 +649,15 @@ Usage: docker run -v directory:/bios biostools [-d] [-f output_format] [-h] [-n]
 '''
 	else:
 		usage = '''
-Usage: python3 -m biostools [-d] -x directory
-       python3 -m biostools [-d] [-f output_format] [-h] [-n] [-r] -a directory|single_file [formatter_options]
+Usage: python3 -m biostools [-d] [-t threads] -x directory
+       python3 -m biostools [-d] [-f output_format] [-h] [-n] [-r] [-t threads]
+                            -a directory|single_file [formatter_options]
 
        -x    Extract archives and BIOS images recursively in the given directory
-       -d    Enable debug output.
 
        -a    Analyze extracted BIOS images in the given directory, or a single
              extracted file (extracting with -x first is recommended)'''
 	usage += '''
-	   -d    Enable debug output.
        -f    Output format:
                  csv        Comma-separated values with quotes (default)
                  scsv       Semicolon-separated values with quotes
@@ -666,6 +669,10 @@ Usage: python3 -m biostools [-d] -x directory
                        HYPERLINK formula name in formatter_options.
        -n    csv/scsv/jsontable: Don't output column headers.
        -r    json/jsontable: Output multi-value cells as arrays.
+
+       Common options (applicable to both -x and -a modes):
+       -d    Enable debug output.
+       -t    Set number of threads to use.
 '''
 	print(usage, file=sys.stderr)
 	return 1
