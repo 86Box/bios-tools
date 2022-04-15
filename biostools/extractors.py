@@ -179,11 +179,10 @@ class ArchiveExtractor(Extractor):
 				pass
 
 			# Remove any created symlink.
-			while os.path.islink(link_path):
-				try:
-					os.remove(link_path)
-				except:
-					break
+			try:
+				os.remove(link_path)
+			except:
+				pass
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract an archive."""
