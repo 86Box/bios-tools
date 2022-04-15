@@ -1410,11 +1410,9 @@ class IntelExtractor(Extractor):
 				# Copy data.
 				self.log_print(data_length, 'bytes @', hex(dest_offset), '=>', found_part_path)
 				remaining = max(data_length, largest_part_size)
-				print(remaining)
 				part_data = b' '
 				while part_data and remaining > 0:
 					part_data = f.read(min(remaining, 1048576))
-					print(len(part_data))
 					out_f.write(part_data)
 					remaining -= len(part_data)
 
@@ -1425,7 +1423,7 @@ class IntelExtractor(Extractor):
 						# part (sized 8 KB) to be at the end of the image.
 						self.log_print('> Final part non-padded')
 						remaining = 0
-					elif data_length == largest_part_size and ((dest_offset >> 16) & 1) == 0:
+					elif data_length == largest_part_size and ((dest_offset >> 16) & 1) == int(invert):
 						# Workaround for SE440BX-2 and SRMK2, which require a
 						# gap at the final 64 KB where the boot block goes.
 						self.log_print('> Final part gap')
