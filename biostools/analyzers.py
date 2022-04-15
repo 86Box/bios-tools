@@ -102,9 +102,9 @@ class AbortAnalysisError(Exception):
 
 
 class Analyzer:
-	def __init__(self, vendor, debug=False):
+	def __init__(self, vendor):
 		self.vendor_id = self.vendor = vendor
-		self.debug = debug
+		self.debug = True # to speed up analyze_line
 
 		self._check_list = []
 
@@ -124,7 +124,8 @@ class Analyzer:
 			if checker_result:
 				callback_result = callback_func(line, checker_result)
 				if callback_result:
-					self.debug_print(callback_func.__name__, line)
+					if self.debug:
+						self.debug_print(callback_func.__name__, '=>', repr(line))
 					return callback_result
 
 	def can_analyze(self):
@@ -137,10 +138,9 @@ class Analyzer:
 		   None if no such file exists."""
 		return True
 
-	def debug_print(self, key, line=None):
-		"""Print a line containing analyzer state if debugging is enabled."""
-		if self.debug:
-			print(self._file_path, '=> found', self.vendor_id, key, '=', (line == None) and 'no line' or repr(line), '\n', end='', file=sys.stderr)
+	def debug_print(self, *args):
+		"""Print a log line if debug output is enabled."""
+		print(self.__class__.__name__ + ':', *args, file=sys.stderr)
 
 	def register_check_list(self, check_list):
 		"""Register the list of checks this analyzer will handle.
@@ -177,7 +177,7 @@ class Analyzer:
 		self.addons = []
 		self.oroms = []
 
-		self._file_path = '?'
+		self._file_path = '[?]'
 
 class NoInfoAnalyzer(Analyzer):
 	"""Special analyzer for BIOSes which can be identified,
@@ -367,6 +367,8 @@ class AMIAnalyzer(Analyzer):
 		# rely on the header version data to get the Intel version sign-on.
 		if header_data:
 			is_intel = AMIIntelAnalyzer.can_handle(self, file_data, header_data)
+			if is_intel:
+				self.debug_print('Intel data found')
 		else:
 			is_intel = False
 
@@ -375,12 +377,14 @@ class AMIAnalyzer(Analyzer):
 		if match:
 			# Determine location of the identification block.
 			id_block_index = match.start(0)
+			self.debug_print('ID block starts at', hex(id_block_index))
 
 			# Extract version.
 			version_6plus = match.group(1)
 			if version_6plus:
 				# AMIBIOS 6 onwards.
 				self.version = version_6plus.decode('cp437', 'ignore')
+				self.debug_print('Version (6+):', self.version)
 
 				# Pad 4-digit versions. (Biostar)
 				if self.version[-1] not in '0123456789':
@@ -390,56 +394,73 @@ class AMIAnalyzer(Analyzer):
 				version_winbios_maj = match.group(2)
 				version_winbios_min = match.group(3)
 				if version_winbios_maj and version_winbios_min:
-					self.version = (version_winbios_maj + version_winbios_min).decode('cp437', 'ignore') + '00'
+					self.version = (version_winbios_maj + version_winbios_min).decode('cp437', 'ignore')
+					self.debug_print('Version (4-5):', self.version)
+					self.version += '00'
 					self.addons.append('WinBIOS')
 				else:
-					# AMI Color date.
+					# AMI Color (or WinBIOS 12/15/93) date.
 					self.version = match.group(4).decode('cp437', 'ignore')
+					self.debug_print('Version (Color):', self.version)
 
 			# Extract string.
 			self.string = util.read_string(file_data[id_block_index + 0x78:id_block_index + 0xa0])
 			if 'Intel Corporation' in self.string or len(self.string) <= 6: # (later Intel AMI with no string)
 				self.string = ''
+				self.debug_print('Intel with no string')
 			else:
+				self.debug_print('Base string:', self.string)
+
 				# Add identification tag to the string if one is present.
 				id_tag = util.read_string(file_data[id_block_index + 0xec:id_block_index + 0x100])
+				self.debug_print('String tag:', id_tag)
 				if id_tag[:4] == '_TG_':
 					self.string = self.string.rstrip() + '-' + id_tag[4:].lstrip()
 
-			# Stop if this BIOS is actually Aptio UEFI CSM.
-			if self._uefi_csm_pattern.match(self.string):
-				return False
+				# Stop if this BIOS is actually Aptio UEFI CSM.
+				if self._uefi_csm_pattern.match(self.string):
+					self.debug_print('String matches UEFI CSM, aborting')
+					return False
 
 			# Ignore unwanted string terminator on sign-on. (TriGem Lisbon-II)
 			signon_terminator = b'\x00'
 			if file_data[id_block_index + 0x123:id_block_index + 0x12b] == b' Inc.,\x00 ':
+				self.debug_print('Applying sign-on terminator hack')
 				signon_terminator += b'\x00'
 
 			# Extract sign-on, while removing carriage returns.
 			self.signon = util.read_string(file_data[id_block_index + 0x100:id_block_index + 0x200], terminator=signon_terminator)
+			self.debug_print('Raw sign-on:', repr(self.signon))
 
 			# The actual sign-on starts on the second line.
 			self.signon = '\n'.join(x.rstrip('\r').strip() for x in self.signon.split('\n')[1:] if x != '\r').strip('\n')
 		elif len(file_data) < 1024:
 			# Ignore false positives from sannata readmes.
+			self.debug_print('False positive by size of', len(file_data), 'bytes')
 			return False
 		elif self._precolor_date_pattern.search(file_data):
+			self.debug_print('Found potential pre-Color')
+
 			# Check date, using a different pattern to differentiate core date from build date.
 			match = self._precolor_core_date_pattern.search(file_data)
 			if match:
 				date_start = match.start(0)
+				self.debug_print('Pre-Color data starts at', hex(date_start))
 			else:
 				match = self._date_pattern.search(file_data)
 				date_start = 0
+				self.debug_print('Pre-Color data start is unknown')
 			if match:
 				# Extract date as the version.
 				self.version = (match.group(1) or (match.group(2) + b'/' + match.group(3) + b'/' + match.group(4))).decode('cp437', 'ignore')
+				self.debug_print('Version (pre-Color):', self.version)
 
 				# Check pre-Color identification block.
 				match = self._precolor_block_pattern.search(file_data)
 				if match:
 					# Determine location of the identification block.
 					id_block_index = match.start(0)
+					self.debug_print('Pre-Color ID block starts at', hex(id_block_index))
 
 					# Locate the encoded string.
 					match = self._precolor_string_pattern.search(file_data[date_start:])
@@ -453,6 +474,7 @@ class AMIAnalyzer(Analyzer):
 							if c & 0x80: # MSB termination
 								break
 						self.string = bytes(buf).decode('cp437', 'ignore')
+						self.debug_print('Base string:', self.string)
 
 						# Remove "-K" KBC suffix.
 						# Note: K without preceding - is possible (Atari PC5)
@@ -470,6 +492,8 @@ class AMIAnalyzer(Analyzer):
 						# Add date.
 						self.string += '-' + util.read_string(file_data[id_block_index + 0x9c:id_block_index + 0xa4]).replace('/', '').strip()
 
+						self.debug_print('Reconstructed string:', self.string)
+
 						# Invalidate string if the identification block doesn't
 						# appear to be valid. (Intel AMI post-Color without string)
 						if self.string[:10] in ('????-0000-', '????-0166-'):
@@ -478,6 +502,7 @@ class AMIAnalyzer(Analyzer):
 				elif check_match.group(1): # 8088-BIOS header
 					# Extract version.
 					self.version = check_match.group(1).decode('cp437', 'ignore')
+					self.debug_print('Version (8088):', self.string)
 
 					# Locate the encoded string.
 					match = self._8088_string_pattern.search(file_data)
@@ -489,20 +514,27 @@ class AMIAnalyzer(Analyzer):
 							c = (c << 1) | (c >> 7)
 							buf.append(c & 0x7f)
 						self.string = bytes(buf).decode('cp437', 'ignore')
+
+						self.debug_print('Base string:', self.string)
 					else:
 						# Fallback if we can't find the encoded string.
 						self.string = '????-' + self.version.replace('/', '')
+
+						self.debug_print('Reconstructed string:', self.string)
 
 				# Extract additional information after the copyright as a sign-on.
 				# (Shuttle 386SX, CDTEK 286, Flying Triumph Access Methods)
 				match = self._precolor_signon_pattern.search(file_data)
 				if match:
 					self.signon = match.group(1).decode('cp437', 'ignore')
+					self.debug_print('Raw sign-on:', repr(self.signon))
 
 					# Split sign-on lines. (Video Technology Info-Tech 286-BIOS)
 					self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 			else:
 				# Assume this is not an AMI BIOS, unless we found Intel data above.
+				if is_intel:
+					self.debug_print('No AMI data found but Intel data found')
 				return is_intel
 
 		return True
@@ -617,7 +649,7 @@ class AMIDellAnalyzer(AMIAnalyzer):
 		if file_data[:9] == b'DELLBIOS\x00':
 			# DELLBIOS header contains the Dell version.
 			self.version = '11/11/92'
-			self.debug_print('DELLBIOS header')
+			self.debug_print('DELLBIOS header present')
 
 			# Extract the version as a sign-on.
 			terminator_index = file_data.find(b'\x00', 10)
@@ -640,7 +672,7 @@ class AMIDellAnalyzer(AMIAnalyzer):
 
 			# The Dell version will be in the BIOS body.
 			self.version = '11/11/92'
-			self.debug_print('DELLXBIOS string')
+			self.debug_print('DELLXBIOS string present')
 
 			return True
 
@@ -1776,13 +1808,13 @@ class PhoenixAnalyzer(Analyzer):
 			# Extract the build code as a string.
 			build_code = self.string = util.read_string(file_data[offset + 55:offset + 63].replace(b'\x00', b'\x20')).strip()
 			if build_code:
-				self.debug_print('BCPSYS build code', build_code)
+				self.debug_print('BCPSYS build code:', build_code)
 
 			# Append the build date and time to the string.
 			date_time = util.read_string(file_data[offset + 15:offset + 32].replace(b'\x00', b'\x20')).strip()
 			if self._bcpsys_datetime_pattern.match(date_time): # discard if this is an invalid date/time (PHLASH.EXE)
 				self._bcpsys_date_time = date_time
-				self.debug_print('BCPSYS build date/time', date_time)
+				self.debug_print('BCPSYS build date/time:', date_time)
 				if self.string:
 					self.string += '\n'
 				self.string += date_time
@@ -1798,7 +1830,7 @@ class PhoenixAnalyzer(Analyzer):
 			if dell_version[0:1] == 'A':
 				self.signon += 'BIOS Version: ' + dell_version
 
-			self.debug_print('Dell version', dell_version)
+			self.debug_print('Dell version:', dell_version)
 		else:
 			# Determine if this is some sort of HP Vectra BIOS.
 			match = self._hp_pattern.search(file_data)
@@ -1812,7 +1844,7 @@ class PhoenixAnalyzer(Analyzer):
 				match = self._hp_signon_pattern.search(file_data)
 				if match:
 					self.signon = match.group(0).decode('cp437', 'ignore')
-					self.debug_print('HP version', self.signon)
+					self.debug_print('HP version:', self.signon)
 			else:
 				# Extract sign-on from Core and some 4.0 Release 6.0 BIOSes.
 				match = self._core_signon_pattern.search(file_data)
@@ -1825,15 +1857,22 @@ class PhoenixAnalyzer(Analyzer):
 						self.signon = self.signon.replace(frm, to)
 
 					self.signon = self.signon.decode('cp437', 'ignore')
+					print('Raw sign-on (4R6+):', repr(self.signon))
 				else:
 					# Extract sign-on from Ax86 and older BIOSes.
 					match = self._rombios_signon_pattern.search(file_data)
-					if not match:
+					if match:
+						signon_log = '(old std):'
+					else:
 						match = self._rombios_signon_alt_pattern.search(file_data)
+						signon_log = '(old alt):'
 					if match:
 						end = match.end(0)
 						if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
 							self.signon = util.read_string(file_data[end:end + 256])
+							print('Raw sign-on', signon_log, repr(self.signon))
+						else:
+							self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
 
 				# Split sign-on lines.
 				if self.signon:

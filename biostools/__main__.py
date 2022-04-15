@@ -89,7 +89,7 @@ def extract_dir(file_extractors, dir_number_path, next_dir_number_path, scan_dir
 	# Remove this directory if it ends up empty.
 	util.rmdirs(scan_dir_path)
 
-def extract_process(queue, dir_number_path, next_dir_number_path):
+def extract_process(queue, dir_number_path, next_dir_number_path, debug):
 	"""Main loop for the extraction multiprocessing pool."""
 
 	# Set up extractors.
@@ -116,6 +116,12 @@ def extract_process(queue, dir_number_path, next_dir_number_path):
 		extractors.UEFIExtractor(),
 		extractors.MBRUnsafeExtractor(),
 	]
+
+	# Disable debug mode on extractors.
+	if not debug:
+		dummy_func = lambda self, *args: None
+		for extractor in file_extractors:
+			extractor.debug_print = dummy_func
 
 	# Receive work from the queue.
 	while True:
@@ -161,7 +167,7 @@ def extract(dir_path, _, options):
 		# Start multiprocessing pool.
 		print('Starting extraction on directory {0}'.format(dir_number), end='', flush=True)
 		queue = multiprocessing.Queue(maxsize=MP_PROCESS_COUNT)
-		mp_pool = multiprocessing.Pool(MP_PROCESS_COUNT, initializer=extract_process, initargs=(queue, dir_number_path, next_dir_number_path))
+		mp_pool = multiprocessing.Pool(MP_PROCESS_COUNT, initializer=extract_process, initargs=(queue, dir_number_path, next_dir_number_path, options.get('debug')))
 
 		# Create next directory.
 		if not os.path.isdir(next_dir_number_path):
@@ -471,7 +477,7 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 		# Output the results.
 		formatter.output_row(fields)
 
-def analyze_process(queue, formatter, scan_base):
+def analyze_process(queue, formatter, scan_base, debug):
 	"""Main loop for the analysis multiprocessing pool."""
 
 	# Set up analyzers.
@@ -518,6 +524,13 @@ def analyze_process(queue, formatter, scan_base):
 		analyzers.ZenithAnalyzer(),
 	]
 
+	# Disable debug mode on analyzers.
+	if not debug:
+		dummy_func = lambda self, *args: None
+		for analyzer in file_analyzers:
+			analyzer.debug_print = dummy_func
+			analyzer.debug = False
+
 	# Receive work from the queue.
 	while True:
 		item = queue.get()
@@ -556,7 +569,7 @@ def analyze(dir_path, formatter_args, options):
 
 	# Start multiprocessing pool.
 	queue = multiprocessing.Queue(maxsize=MP_PROCESS_COUNT)
-	mp_pool = multiprocessing.Pool(MP_PROCESS_COUNT, initializer=analyze_process, initargs=(queue, formatter, dir_path))
+	mp_pool = multiprocessing.Pool(MP_PROCESS_COUNT, initializer=analyze_process, initargs=(queue, formatter, dir_path, options.get('debug')))
 
 	if os.path.isdir(dir_path):
 		# Scan directory structure.
@@ -579,21 +592,26 @@ def analyze(dir_path, formatter_args, options):
 
 
 def main():
+	# Set default options.
 	mode = None
 	options = {
 		'array': False,
+		'debug': False,
 		'format': 'csv',
 		'headers': True,
 		'hyperlink': False,
 		'docker-usage': False,
 	}
 
-	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xaf:hnr', ['extract', 'analyze', 'format=', 'hyperlink', 'no-headers', 'array', 'docker-usage'])
+	# Parse arguments.
+	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xadf:hnr', ['extract', 'analyze', 'debug', 'format=', 'hyperlink', 'no-headers', 'array', 'docker-usage'])
 	for opt, arg in args:
 		if opt in ('-x', '--extract'):
 			mode = 'extract'
 		elif opt in ('-a', '--analyze'):
 			mode = 'analyze'
+		elif opt in ('-d', '--debug'):
+			options['debug'] = True
 		elif opt in ('-f', '--format'):
 			options['format'] = arg.lower()
 		elif opt in ('-h', '--hyperlink'):
@@ -606,33 +624,42 @@ def main():
 			options['docker-usage'] = True
 
 	if len(remainder) > 0:
+		# Disable multi-threading in debug mode.
+		if options.get('debug'):
+			global MP_PROCESS_COUNT
+			MP_PROCESS_COUNT = 1
+
+		# Run mode handler.
 		if mode == 'extract':
 			return extract(remainder[0], remainder[1:], options)
 		elif mode == 'analyze':
 			return analyze(remainder[0], remainder[1:], options)
 
+	# Print usage.
 	if options['docker-usage']:
 		usage = '''
-Usage: docker run -v directory:/bios biostools [-f output_format] [-h] [-n] [-r] [formatter_options]
+Usage: docker run -v directory:/bios biostools [-d] [-f output_format] [-h] [-n] [-r] [formatter_options]
 
        Archives and BIOS images in the directory mounted to /bios will be
        extracted and analyzed.
 '''
 	else:
 		usage = '''
-Usage: python3 -m biostools -x directory
-       python3 -m biostools [-f output_format] [-h] [-n] [-r] -a directory|single_file [formatter_options]
+Usage: python3 -m biostools [-d] -x directory
+       python3 -m biostools [-d] [-f output_format] [-h] [-n] [-r] -a directory|single_file [formatter_options]
 
        -x    Extract archives and BIOS images recursively in the given directory
+       -d    Enable debug output.
 
        -a    Analyze extracted BIOS images in the given directory, or a single
              extracted file (extracting with -x first is recommended)'''
 	usage += '''
+	   -d    Enable debug output.
        -f    Output format:
-                 csv		Comma-separated values with quotes (default)
-                 scsv		Semicolon-separated values with quotes
-                 json		JSON object array
-                 jsontable	JSON table
+                 csv        Comma-separated values with quotes (default)
+                 scsv       Semicolon-separated values with quotes
+                 json       JSON object array
+                 jsontable  JSON table
        -h    Generate download links for file paths representing HTTP URLs.
              csv/scsv: The Excel HYPERLINK formula is used; if you have
                        non-English Excel, you must provide your language's

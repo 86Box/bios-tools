@@ -20,7 +20,7 @@
 if [ ! -d /bios/0 -o -d /bios/1 ]
 then
 	# Run extractor.
-	python3 -u -m biostools -x /bios >&2
+	python3 -u -m biostools -x /bios $* >&2
 
 	# Print usage if there's no 1 directory (nothing bound to /bios).
 	[ ! -d /bios/1 ] && exec python3 -u -m biostools --docker-usage >&2

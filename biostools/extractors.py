@@ -33,9 +33,9 @@ class Extractor:
 		   - a string with the produced output file/directory path"""
 		raise NotImplementedError()
 
-	def log_print(self, *args):
-		"""Print a log line."""
-		print('{0}:'.format(self.__class__.__name__), *args, file=sys.stderr)
+	def debug_print(self, *args):
+		"""Print a log line if debug output is enabled."""
+		print(self.__class__.__name__ + ':', *args, file=sys.stderr)
 
 
 class ApricotExtractor(Extractor):
@@ -1365,7 +1365,7 @@ class IntelExtractor(Extractor):
 		# Create destination file.
 		dest_file_path = os.path.join(dest_dir, 'intel.bin')
 		out_f = open(dest_file_path, 'wb')
-		self.log_print('Found', len(found_parts), 'parts, header size', header_size, 'bytes, largest part size', largest_part_size, 'bytes')
+		self.debug_print('Found', len(found_parts), 'parts, header size', header_size, 'bytes, largest part size', largest_part_size, 'bytes')
 
 		# Copy parts to the destination file.
 		bootblock_offset = None
@@ -1404,11 +1404,11 @@ class IntelExtractor(Extractor):
 						if bootblock_offset < 0:
 							bootblock_offset = 0
 					dest_offset += bootblock_offset
-					self.log_print('bbo', hex(bootblock_offset), 'do', hex(dest_offset))
+					self.debug_print('bbo', hex(bootblock_offset), 'do', hex(dest_offset))
 				out_f.seek(dest_offset)
 
 				# Copy data.
-				self.log_print(data_length, 'bytes @', hex(dest_offset), '=>', found_part_path)
+				self.debug_print(data_length, 'bytes @', hex(dest_offset), '=>', found_part_path)
 				remaining = max(data_length, largest_part_size)
 				part_data = b' '
 				while part_data and remaining > 0:
@@ -1421,17 +1421,17 @@ class IntelExtractor(Extractor):
 					if data_length <= 8192 and len(found_parts_boot) == 0:
 						# Workaround for JN440BX, which requires its final
 						# part (sized 8 KB) to be at the end of the image.
-						self.log_print('> Final part non-padded')
+						self.debug_print('> Final part non-padded')
 						remaining = 0
 					elif data_length == largest_part_size and ((dest_offset >> 16) & 1) == int(invert):
 						# Workaround for SE440BX-2 and SRMK2, which require a
 						# gap at the final 64 KB where the boot block goes.
-						self.log_print('> Final part gap')
+						self.debug_print('> Final part gap')
 						remaining += largest_part_size
 				elif logical_area == 0 and dest_offset == bootblock_offset:
 					# Don't pad a boot block insertion.
 					remaining = 0
-				self.log_print('> Adding', remaining, 'padding bytes')
+				self.debug_print('> Adding', remaining, 'padding bytes')
 				while remaining > 0:
 					out_f.write(b'\xFF' * min(remaining, 1048576))
 					remaining -= 1048576
@@ -1461,7 +1461,7 @@ class IntelExtractor(Extractor):
 					out_f = open(dest_file_path + '.padded', 'wb')
 
 					# Write padding.
-					self.log_print('Padding by', hex(padding_size))
+					self.debug_print('Padding by', hex(padding_size))
 					while padding_size > 0:
 						out_f.write(b'\xFF' * min(padding_size, 1048576))
 						padding_size -= 1048576
