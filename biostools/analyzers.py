@@ -474,7 +474,11 @@ class AMIAnalyzer(Analyzer):
 							if c & 0x80: # MSB termination
 								break
 						self.string = bytes(buf).decode('cp437', 'ignore')
-						self.debug_print('Base string:', self.string)
+						if len(self.string) <= 6: # (later Intel AMI with no string)
+							self.string = ''
+							self.debug_print('Intel with no string')
+						else:
+							self.debug_print('Base string:', self.string)
 
 						# Remove "-K" KBC suffix.
 						# Note: K without preceding - is possible (Atari PC5)
