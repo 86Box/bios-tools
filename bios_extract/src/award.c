@@ -35,11 +35,10 @@ AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	     uint32_t Offset1, uint32_t BCPSegmentOffset)
 {
 	unsigned char *p, *Buffer;
-	int HeaderSize;
+	int HeaderSize = 0;
 	unsigned int BufferSize, PackedSize;
-	char *filename;
+	char *filename = {0};
 	unsigned short crc;
-	Bool First = TRUE;
 
 	printf("Found Award BIOS.\n");
 
@@ -49,24 +48,6 @@ AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		if (!p)
 			break;
 		p -= 2;
-
-		if (First) {
-			First = FALSE;
-			BufferSize = p - BIOSImage;
-			if (BufferSize > 0) {
-				filename = "awardboot.rom";
-				printf("0x%05X (%6d bytes)    ->    %s\n",
-				       0, BufferSize, filename);
-
-				Buffer = MMapOutputFile(filename, BufferSize);
-				if (!Buffer)
-					return FALSE;
-
-				memcpy(Buffer, BIOSImage, BufferSize);
-
-				munmap(Buffer, BufferSize);
-			}
-		}
 
 		HeaderSize = LH5HeaderParse(p, BIOSLength - (p - BIOSImage),
 					    &BufferSize, &PackedSize, &filename,
@@ -82,12 +63,13 @@ AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		if (!Buffer)
 			return FALSE;
 
-		LH5Decode(p + HeaderSize, PackedSize, Buffer, BufferSize);
+		if (LH5Decode(p + HeaderSize, PackedSize, Buffer, BufferSize) != -1)
+			SetRemainder(p - BIOSImage, HeaderSize + PackedSize, FALSE);
 
 		munmap(Buffer, BufferSize);
 
 		p += HeaderSize + PackedSize;
 	}
 
-	return !First;
+	return !!filename[0];
 }

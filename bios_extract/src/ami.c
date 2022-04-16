@@ -23,6 +23,7 @@
 #define _GNU_SOURCE 1		/* for memmem */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <inttypes.h>
 #include <errno.h>
 #include <string.h>
@@ -180,25 +181,6 @@ AMI940725Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 	printf("AMI94 Version\t: %s (%s)\n", Version, Date);
 
-	/* First, the boot rom */
-	uint32_t BootOffset;
-	int fd;
-
-	BootOffset = AMIBOffset & 0xFFFE0000;
-
-	printf("0x%05X (%6d bytes) -> amiboot.rom\n", BootOffset,
-	       BIOSLength - BootOffset);
-
-	fd = open("amiboot.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-		fprintf(stderr, "Error: unable to open %s: %s\n\n",
-			"amiboot.rom", strerror(errno));
-		return FALSE;
-	}
-
-	write(fd, BIOSImage + BootOffset, BIOSLength - BootOffset);
-	close(fd);
-
 	for (i = 0; i < 0x80; i++) {
 		char filename[64];
 		unsigned char *Buffer;
@@ -246,10 +228,14 @@ NotCompressed:
 					strcpy(&filename[strlen(filename) - 3], "cmp");
 				}
 				goto NotCompressed;
+			} else {
+				SetRemainder(Offset, ROMSize + 8, FALSE);
 			}
-		} else
+		} else {
 			memcpy(Buffer, BIOSImage + Offset + 8,
 			       BufferSize);
+			SetRemainder(Offset, BufferSize + 8, FALSE);
+		}
 
 		munmap(Buffer, BufferSize);
 
@@ -312,25 +298,6 @@ AMI941010Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 	printf("AMI94 Version\t: %s (%s)\n", Version, Date);
 
-	/* First, the boot rom */
-	uint32_t BootOffset;
-	int fd;
-
-	BootOffset = AMIBOffset & 0xFFFE0000;
-
-	printf("0x%05X (%6d bytes) -> amiboot.rom\n", BootOffset,
-	       BIOSLength - BootOffset);
-
-	fd = open("amiboot.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-		fprintf(stderr, "Error: unable to open %s: %s\n\n",
-			"amiboot.rom", strerror(errno));
-		return FALSE;
-	}
-
-	write(fd, BIOSImage + BootOffset, BIOSLength - BootOffset);
-	close(fd);
-
 	/* now dump the individual modules */
 	headerinfo = (struct headerinfo *)(BIOSImage + ABCOffset + 0x10);
 	for (i = 0; i < headerinfo->ModuleCount; i++) {
@@ -388,10 +355,14 @@ NotCompressed:
 					strcpy(&filename[strlen(filename) - 3], "cmp");
 				}
 				goto NotCompressed;
+			} else {
+				SetRemainder(ABCOffset + part->RealCS, ROMSize + 8, FALSE);
 			}
-		} else
+		} else {
 			memcpy(Buffer, BIOSImage + ABCOffset + part->RealCS,
 			       BufferSize);
+			SetRemainder(ABCOffset + part->RealCS, BufferSize, FALSE);
+		}
 
 		munmap(Buffer, BufferSize);
 	}
@@ -481,25 +452,6 @@ AMI95Extract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 			"Error: cannot handle Intel fork filesystem.\n");
 		return TRUE;
 	}
-
-	/* First, the boot rom */
-	uint32_t BootOffset;
-	int fd;
-
-	BootOffset = AMIBOffset & 0xFFFF0000;
-
-	printf("0x%05X (%6d bytes) -> amiboot.rom\n", BootOffset,
-	       BIOSLength - BootOffset);
-
-	fd = open("amiboot.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-		fprintf(stderr, "Error: unable to open %s: %s\n\n",
-			"amiboot.rom", strerror(errno));
-		return FALSE;
-	}
-
-	write(fd, BIOSImage + BootOffset, BIOSLength - BootOffset);
-	close(fd);
 
 	/* now dump the individual modules */
 	if (BIOSLength > 0x100000) {
@@ -626,6 +578,7 @@ NotCompressed:
 		} else
 			memcpy(Buffer, BIOSImage + NewOffset,
 			       ROMSize);
+		SetRemainder(Offset - BIOSOffset, (NewOffset - (Offset - BIOSOffset)) + ROMSize, FALSE);
 
 		munmap(Buffer, BufferSize);
 
@@ -683,7 +636,14 @@ AFUDOSExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 	munmap(Buffer, hdr->ExpSize);
 
-	char *argv[] = {"", "afudos.bin"};
+	if (remainder_buf) {
+		SetRemainder(((unsigned char *)hdr) - BIOSImage, hdr->ROMSize, FALSE);
+		SaveRemainder(BIOSImage);
+		free(remainder_buf);
+		rename("remainder.rom", "afudos_remainder.rom");
+	}
+
+	char *argv[] = {"\x01", "afudos.bin"};
 	int ret = main(2, argv);
 	unlink("afudos.bin");
 

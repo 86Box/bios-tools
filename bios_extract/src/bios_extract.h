@@ -36,6 +36,11 @@
 
 /* bios_extract.c */
 unsigned char *MMapOutputFile(char *filename, int size);
+extern unsigned char *remainder_buf;
+void InitRemainder(unsigned char *BIOSImage, int BIOSLength);
+void SetRemainder(uint32_t Offset, uint32_t Length, int val);
+int SaveRemainder(unsigned char *BIOSImage);
+
 int main(int argc, char *argv[]);
 
 /* ami.c */

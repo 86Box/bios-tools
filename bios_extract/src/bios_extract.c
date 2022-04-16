@@ -92,6 +92,84 @@ unsigned char *MMapOutputFile(char *filename, int size)
 	return Buffer;
 }
 
+unsigned char *remainder_buf = NULL;
+static int remainder_size = 0, remainder_padding = 0;
+
+void InitRemainder(unsigned char *BIOSImage, int BIOSLength)
+{
+	unsigned char *new_remainder_buf = realloc(remainder_buf, BIOSLength);
+	if (new_remainder_buf) {
+		remainder_buf = new_remainder_buf;
+		remainder_size = BIOSLength;
+	}
+
+	if (!remainder_buf)
+		return;
+
+	/* Remove padding from the start only, as the end will have the entry point anyway. */
+	if (remainder_size < BIOSLength)
+		BIOSLength = remainder_size;
+	unsigned char *p = BIOSImage, *q = BIOSImage + BIOSLength;
+	while ((p < q) && ((*p == 0x00) || (*p == 0xff)))
+		p++;
+
+	remainder_padding = p - BIOSImage;
+	if (remainder_padding > 0) {
+		BIOSLength -= remainder_padding;
+		memset(remainder_buf, 0x00, remainder_padding);
+	}
+	memset(remainder_buf + remainder_padding, 0xff, BIOSLength);
+}
+
+void SetRemainder(uint32_t Offset, uint32_t Length, int val)
+{
+	if (!remainder_buf)
+		return;
+
+	if ((remainder_size - Offset) < Length)
+		Length = remainder_size - Offset;
+	memset(remainder_buf + Offset, 0xff * !!val, Length);
+}
+
+int SaveRemainder(unsigned char *BIOSImage)
+{
+	if (!remainder_buf)
+		return TRUE;
+
+	if (remainder_padding > 0)
+		printf("Padding (%6d bytes)   ->   [discarded]\n",
+		       remainder_padding);
+
+	int fd = open("remainder.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	if (fd < 0) {
+		fprintf(stderr, "Error: unable to open remainder.rom: %s\n\n",
+			strerror(errno));
+		return FALSE;
+	}
+
+	int remaining = remainder_size, copy;
+	unsigned char *p = remainder_buf, *q, c = *p;
+	while (p) {
+		c = ~c;
+		q = memchr(p, c, remaining);
+		if (q)
+			copy = q - p;
+		else
+			copy = remaining;
+		if (!c)
+			write(fd, BIOSImage + (p - remainder_buf), copy);
+		remaining -= copy;
+		p = q;
+	}
+
+	printf("Remains (%6ld bytes)   ->   remainder.rom\n",
+	       lseek(fd, 0, SEEK_CUR));
+
+	close(fd);
+
+	return TRUE;
+}
+
 /* TODO: Make bios identification more flexible */
 
 static struct {
@@ -191,11 +269,17 @@ int main(int argc, char *argv[])
 			Offset2 = Offset1;
 		}
 
-		if (BIOSIdentification[i].Handler
-		    (BIOSImage, FileLength, BIOSOffset, Offset1, Offset2))
-			return 0;
-		else
-			return 1;
+		if ((argv[0][0] != 0x01) || (argv[0][1] != 0x00))
+			InitRemainder(BIOSImage, FileLength);
+
+		len = BIOSIdentification[i].Handler
+		    (BIOSImage, FileLength, BIOSOffset, Offset1, Offset2);
+		if (remainder_buf) {
+			len &= SaveRemainder(BIOSImage);
+			free(remainder_buf);
+			remainder_buf = NULL;
+		}
+		return len ? 0 : 1;
 	}
 
 	/* Bruteforce Intel AMI Color fork LH5. */
@@ -206,28 +290,32 @@ CopyrightOffset:if ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, 
 		    (!memcmp(IntelAMI, "AMIBIOS(C)AMI", 13) || ((IntelAMI[0] == 0x55) && (IntelAMI[1] == 0xaa)))) {
 			if (Offset2 == 1) {
 				printf("Found potential Intel AMIBIOS.\n");
+				InitRemainder(BIOSImage, FileLength);
 				Offset2 = 86; /* magic exit code if no main body found */
 			}
 
 			if (IntelAMI[0] == 0x55) {
 				len = IntelAMI[2] * 512;
-				sprintf((char *) IntelAMI, "intelopt_%05X.bin", BIOSOffset);
+				sprintf((char *) IntelAMI, "intelopt_%05X.rom", BIOSOffset);
 			} else {
 				len = 65536;
-				sprintf((char *) IntelAMI, "intelbody_%05X.bin", BIOSOffset);
+				sprintf((char *) IntelAMI, "intelbody_%05X.rom", BIOSOffset);
 				Offset2 = 0; /* main body found, all good */
 			}
 
-			printf("0x%05X                  ->   %s\t(%d bytes)\n",
-		       		BIOSOffset, IntelAMI, len);
 			Buffer = MMapOutputFile((char *) IntelAMI, len);
 			if (!Buffer)
 				return 1;
 
 			i = len;
-			while ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, Buffer, i) == -1) &&
+			while (((fd = LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, Buffer, i)) == -1) &&
 				(i > 16))
 				i--;
+			if (fd > 0) {
+				printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes)\n",
+		       			BIOSOffset, fd, IntelAMI, len);
+				SetRemainder(BIOSOffset, fd, FALSE);
+			}
 
 			munmap(Buffer, len);
 		} else if (!(BIOSOffset & 0xff)) {
@@ -238,5 +326,7 @@ CopyrightOffset:if ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, 
 
 	if (Offset2)
 		fprintf(stderr, "Error: Unable to detect BIOS Image type.\n");
+	else
+		return !SaveRemainder(BIOSImage);
 	return Offset2;
 }

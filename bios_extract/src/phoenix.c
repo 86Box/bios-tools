@@ -309,7 +309,7 @@ phx_write_file(unsigned char *BIOSImage, char *filename, short filetype,
 
 #define MODULE_SIGNATURE_INVALID(Module) (Module->Signature[0] || (Module->Signature[1] != 0x31) || (Module->Signature[2] != 0x31))
 
-static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset, unsigned char *remainder)
+static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 {
 	struct PhoenixModuleHeader *Module, *NewModule;
 
@@ -395,8 +395,7 @@ valid_signature:
 
 		memcpy(ModuleData, BIOSImage + Offset + Module->HeadLen,
 		       FragLength);
-		if (remainder)
-			memset(remainder + Offset, 0, Module->HeadLen + FragLength);
+		SetRemainder(Offset, Module->HeadLen + FragLength, FALSE);
 
 		Packed = FragLength;
 		FragOffset = le32toh(Module->NextFrag) & (BIOSLength - 1);
@@ -418,8 +417,7 @@ valid_signature:
 			Remain = BIOSLength - ((ModuleData + Packed) - BIOSImage);
 			memcpy(ModuleData + Packed, BIOSImage + FragOffset + 9,
 			       (Remain < FragLength) ? Remain : FragLength);
-			if (remainder)
-				memset(remainder + FragOffset + 9, 0, (Remain < FragLength) ? Remain : FragLength);
+			SetRemainder(FragOffset + 9, (Remain < FragLength) ? Remain : FragLength, FALSE);
 			Packed += FragLength;
 			FragOffset =
 			    le32toh(Fragment->NextFrag) & (BIOSLength - 1);
@@ -507,7 +505,7 @@ BadFragment:
 					  le32toh(Module->ExpLen));
 		munmap(Buffer, le32toh(Module->ExpLen));
 		/* Write compressed data if decompression failed. */
-		if (ExtractResult)
+		if (ExtractResult == -1)
 			goto Uncompressed;
 		break;
 
@@ -535,8 +533,8 @@ Uncompressed:
 
 	if (IsFragment)
 		free(ModuleData);
-	else if (remainder)
-		memset(remainder + Offset, 0, Module->HeadLen + Packed);
+	else
+		SetRemainder(Offset, Module->HeadLen + Packed, FALSE);
 
 	if (le16toh(Module->Offset) || le16toh(Module->Segment)) {
 		if (!Module->Compression)
@@ -974,7 +972,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	struct PhoenixBCD6F1 *BCD6F1;
 	uint32_t Offset, Length;
 	int fd;
-	unsigned char *p, *Buffer, *remainder,
+	unsigned char *p, *Buffer,
 		      module_signature[] = {0x00, 0x31, 0x31},
 		      bcd6f1_signature[] = {'B', 'C', 0xd6, 0xf1, 0x00, 0x00, 0x12},
 		      optrom_signature[] = {0x55, 0xaa},
@@ -994,11 +992,8 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	 */
 	if (BIOSLength > 0x100000 && BIOSOffset > 0) {
 		BIOSLength = BIOSLength + BIOSOffset - 0x100000;
+		InitRemainder(BIOSImage, BIOSLength);
 	}
-
-	remainder = malloc(BIOSLength);
-	if (remainder)
-		memcpy(remainder, BIOSImage, BIOSLength);
 
 	for (ID = (struct PhoenixID *)(BIOSImage + BCPSegmentOffset + 10);
 	     ((void *)ID < (void *)(BIOSImage + BIOSLength)) && ID->Name[0];
@@ -1078,7 +1073,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	}
 
 	while (Offset) {
-		Offset = PhoenixModule(BIOSImage, BIOSLength, Offset, remainder);
+		Offset = PhoenixModule(BIOSImage, BIOSLength, Offset);
 		Offset &= BIOSLength - 1;
 	}
 
@@ -1102,8 +1097,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		if (!Buffer)
 			break;
 
-		if (remainder)
-			memset(remainder + (p - BIOSImage), 0, sizeof(struct PhoenixBCD6F1) + le32toh(BCD6F1->FragLength));
+		SetRemainder(p - BIOSImage, sizeof(struct PhoenixBCD6F1) + le32toh(BCD6F1->FragLength), FALSE);
 
 		p += sizeof(struct PhoenixBCD6F1);
 		if (phx.compression == 0)
@@ -1144,8 +1138,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
-		if (remainder)
-			memset(remainder + (p - BIOSImage), 0, Length);
+		SetRemainder(p - BIOSImage, Length, FALSE);
 		p += Length;
 	}
 
@@ -1177,8 +1170,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
-		if (remainder)
-			memset(remainder + (p - BIOSImage), 0, Length);
+		SetRemainder(p - BIOSImage, Length, FALSE);
 		p += Length;
 	}
 
@@ -1193,7 +1185,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 		Module = (struct PhoenixModuleHeader *)p;
 		if (!MODULE_SIGNATURE_INVALID(Module))
-			PhoenixModule(BIOSImage, BIOSLength, p - BIOSImage, remainder);
+			PhoenixModule(BIOSImage, BIOSLength, p - BIOSImage);
 
 		p += sizeof(struct PhoenixModuleHeader);
 	}
@@ -1223,8 +1215,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
-		if (remainder)
-			memset(remainder + (p - BIOSImage), 0, Length);
+		SetRemainder(p - BIOSImage, Length, FALSE);
 		p += Length;
 	}
 
@@ -1258,8 +1249,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
-		if (remainder)
-			memset(remainder + (p - BIOSImage), 0, Length);
+		SetRemainder(p - BIOSImage, Length, FALSE);
 		p += Length;
 	}
 
@@ -1289,39 +1279,11 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		       Offset, Length);
 		write(fd, BIOSImage + Offset, Length);
 		close(fd);
-		if (remainder)
-			memset(remainder + Offset, 0, Length);
+		SetRemainder(Offset, Length, FALSE);
 	}
 
-	/* Extract remaining data */
-	if (remainder) {
-		/* Manually flag BCPSEGMENT data as remaining, just in case */
-		Offset = BCPSegmentOffset;
-		Length = ((unsigned char *)ID) - (BIOSImage + Offset);
-		if ((Offset + Length) > BIOSLength)
-			Length = BIOSLength - Offset;
-		memset(remainder + Offset, 0x55, Length);
-	
-		fd = open("remainder.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-		if (fd < 0) {
-			fprintf(stderr, "Error: unable to open remainder.rom: %s\n\n",
-				strerror(errno));
-			return FALSE;
-		}
-		printf("0x%05X (%6d bytes)   ->   remainder.rom\n",
-		       Offset, Length);
-		if (remainder) {
-			Offset = 0;
-			Length = BIOSLength - 1;
-			while ((Offset <= Length) && ((remainder[Offset] == 0x00) || (remainder[Offset] == 0xff)))
-				Offset++;
-			while ((Offset <= Length) && ((remainder[Length] == 0x00) || (remainder[Length] == 0xff)))
-				Length--;
-			if ((Offset <= Length) && (Length > 0))
-				write(fd, BIOSImage + Offset, Length);
-		}
-		close(fd);
-	}
+	/* Manually flag BCPSEGMENT data as remaining, just in case */
+	SetRemainder(BCPSegmentOffset, ((unsigned char *)ID) - (BIOSImage + BCPSegmentOffset), TRUE);
 
 	return TRUE;
 }

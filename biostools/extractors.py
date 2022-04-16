@@ -329,18 +329,17 @@ class BIOSExtractor(Extractor):
 			proc = None
 			self.debug_print('Processing timed out on:', file_path)
 
-		# Assume failure if nothing was extracted. A lone boot block file also counts as a failure,
-		# as the extractors produce them before attempting to extract any actual BIOS modules.
+		# Assume failure if nothing was extracted. A lone remainder file also counts as a failure.
 		dest_dir_files = os.listdir(dest_dir_0)
 		num_files_extracted = len(dest_dir_files)
 		if num_files_extracted < 1:
 			return False
-		elif num_files_extracted == 1 and dest_dir_files[0] in ('amiboot.rom', 'ssboot.rom'):
-			# Remove boot block file so that the destination directory can be rmdir'd later.
+		elif num_files_extracted == 1 and dest_dir_files[0] == 'remainder.rom':
+			# Remove remainder file so that the destination directory can be rmdir'd later.
 			util.remove_all(dest_dir_files, lambda x: os.path.join(dest_dir_0, x))
 			return False
 		elif proc and proc.returncode == 86:
-			# We received the magic exit code indicating the Intel pipeline found
+			# We received the magic exit code that tells us the Intel pipeline found
 			# an option ROM but not the main body. This could indicate a non-Intel
 			# BIOS with LH5-compressed option ROMs. Check the files just in case.
 			have_intelopt = have_intelbody = False
@@ -354,6 +353,11 @@ class BIOSExtractor(Extractor):
 				# Remove all files so that the destination directory can be rmdir'd later.
 				util.remove_all(dest_dir_files, lambda x: os.path.join(dest_dir_0, x))
 				return False
+
+		# A missing remainder.rom may indicate an extraction interrupted by a segfault
+		# or something else gone wrong. Copy the original file to its place for safety.
+		if 'remainder.rom' not in dest_dir_files:
+			util.hardlink_or_copy(file_path, os.path.join(dest_dir_0, 'remainder.rom'))
 
 		# Extract Award BIOS PhoenixNet ROS filesystem.
 		if not proc or b'Found Award BIOS.' in proc.stdout:

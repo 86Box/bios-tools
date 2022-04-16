@@ -549,5 +549,5 @@ LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 			}
 		}
 	}
-	return 0;
+	return CompressedOffset;
 }

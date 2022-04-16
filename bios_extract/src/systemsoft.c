@@ -90,8 +90,7 @@ SystemSoftExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 			Length = le16toh(part->PackedLen);
 			sprintf(filename, "ssbody_%05X.rom", Offset);
 			if (Magic == 0x88FF) {
-				/* another tool called insydeco might be able to decompress
-				   Insyde modules, but it's been lost to time... */
+				/* nobody seems to know how this compression works */
 				strcpy(ModuleName, "Insyde module");
 			} else {
 				IsPart = 1;
@@ -224,6 +223,9 @@ SystemSoftExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 			printf("\t\t\t%s\n", ModuleName);
 		}
+
+		i = ((unsigned char *)part) - BIOSImage;
+		SetRemainder(i, Offset - i, FALSE);
 
 		close(fd);
 	}
