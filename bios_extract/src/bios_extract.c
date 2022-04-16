@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
 	int FileLength = 0;
 	uint32_t BIOSOffset = 0;
 	unsigned char *BIOSImage = NULL,
-		      IntelAMI[256], /* just 13 bytes needed, but LH5Decode overflows the buffer */
+		      IntelAMI[256], /* could be shorter if not for LH5Decode overflowing the buffer */
 		      *Buffer = NULL;
 	int fd;
 	uint32_t Offset1 = 0, Offset2 = 0;
@@ -199,30 +199,44 @@ int main(int argc, char *argv[])
 	}
 
 	/* Bruteforce Intel AMI Color fork LH5. */
-	for (i = 0; i < (FileLength - 10); i += 0x4000) {
-		BIOSOffset = i;
+	Offset2 = 1;
+	for (Offset1 = 0; Offset1 < (FileLength - 10); Offset1 += 0x4000) {
+		BIOSOffset = Offset1;
 CopyrightOffset:if ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, IntelAMI, 13) > -1) &&
-		    !memcmp(IntelAMI, "AMIBIOS(C)AMI", 13)) {
-			printf("Found Intel AMIBIOS.\nOffset: %X\n", BIOSOffset);
+		    (!memcmp(IntelAMI, "AMIBIOS(C)AMI", 13) || ((IntelAMI[0] == 0x55) && (IntelAMI[1] == 0xaa)))) {
+			if (Offset2 == 1) {
+				printf("Found potential Intel AMIBIOS.\n");
+				Offset2 = 86; /* magic exit code if no main body found */
+			}
 
-		    	Buffer = MMapOutputFile("intelbody.bin", 65536);
+			if (IntelAMI[0] == 0x55) {
+				len = IntelAMI[2] * 512;
+				sprintf((char *) IntelAMI, "intelopt_%05X.bin", BIOSOffset);
+			} else {
+				len = 65536;
+				sprintf((char *) IntelAMI, "intelbody_%05X.bin", BIOSOffset);
+				Offset2 = 0; /* main body found, all good */
+			}
+
+			printf("0x%05X                  ->   %s\t(%d bytes)\n",
+		       		BIOSOffset, IntelAMI, len);
+			Buffer = MMapOutputFile((char *) IntelAMI, len);
 			if (!Buffer)
 				return 1;
 
-			i = 65536;
+			i = len;
 			while ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, Buffer, i) == -1) &&
 				(i > 16))
 				i--;
 
-			munmap(Buffer, 65536);
-
-			return 0;
+			munmap(Buffer, len);
 		} else if (!(BIOSOffset & 0xff)) {
 			BIOSOffset += 0x44;
 			goto CopyrightOffset;
 		}
 	}
 
-	fprintf(stderr, "Error: Unable to detect BIOS Image type.\n");
-	return 1;
+	if (Offset2)
+		fprintf(stderr, "Error: Unable to detect BIOS Image type.\n");
+	return Offset2;
 }

@@ -327,6 +327,7 @@ class BIOSExtractor(Extractor):
 		except:
 			# Bad data can cause infinite loops.
 			proc = None
+			self.debug_print('Processing timed out on:', file_path)
 
 		# Assume failure if nothing was extracted. A lone boot block file also counts as a failure,
 		# as the extractors produce them before attempting to extract any actual BIOS modules.
@@ -336,11 +337,23 @@ class BIOSExtractor(Extractor):
 			return False
 		elif num_files_extracted == 1 and dest_dir_files[0] in ('amiboot.rom', 'ssboot.rom'):
 			# Remove boot block file so that the destination directory can be rmdir'd later.
-			try:
-				os.remove(os.path.join(dest_dir_0, dest_dir_files[0]))
-			except:
-				pass
+			util.remove_all(dest_dir_files, lambda x: os.path.join(dest_dir_0, x))
 			return False
+		elif proc and proc.returncode == 86:
+			# We received the magic exit code indicating the Intel pipeline found
+			# an option ROM but not the main body. This could indicate a non-Intel
+			# BIOS with LH5-compressed option ROMs. Check the files just in case.
+			have_intelopt = have_intelbody = False
+			for dest_dir_file in dest_dir_files:
+				if dest_dir_file[:9] == 'intelopt_':
+					have_intelopt = True
+				elif dest_dir_file[:10] == 'intelbody_':
+					have_intelbody = True
+					break
+			if have_intelopt and not have_intelbody:
+				# Remove all files so that the destination directory can be rmdir'd later.
+				util.remove_all(dest_dir_files, lambda x: os.path.join(dest_dir_0, x))
+				return False
 
 		# Extract Award BIOS PhoenixNet ROS filesystem.
 		if not proc or b'Found Award BIOS.' in proc.stdout:
@@ -1404,7 +1417,6 @@ class IntelExtractor(Extractor):
 						if bootblock_offset < 0:
 							bootblock_offset = 0
 					dest_offset += bootblock_offset
-					self.debug_print('bbo', hex(bootblock_offset), 'do', hex(dest_offset))
 				out_f.seek(dest_offset)
 
 				# Copy data.
@@ -1461,7 +1473,7 @@ class IntelExtractor(Extractor):
 					out_f = open(dest_file_path + '.padded', 'wb')
 
 					# Write padding.
-					self.debug_print('Padding by', hex(padding_size))
+					self.debug_print('Adding', padding_size, 'bytes of initial padding')
 					while padding_size > 0:
 						out_f.write(b'\xFF' * min(padding_size, 1048576))
 						padding_size -= 1048576
