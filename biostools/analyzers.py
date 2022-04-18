@@ -182,14 +182,26 @@ class Analyzer:
 class NoInfoAnalyzer(Analyzer):
 	"""Special analyzer for BIOSes which can be identified,
 	   but contain no information to be extracted."""
+
 	def __init__(self, vendor, *args, **kwargs):
 		super().__init__(vendor, *args, **kwargs)
 
+		self._entrypoint_date_pattern = re.compile(b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2})''')
+
 	def can_handle(self, file_data, header_data):
+		# Check if this file can be handled by this specific analyzer.
 		if not self.has_strings(file_data):
 			return False
 
+		# Unknown version.
 		self.version = '?'
+
+		# Look for entrypoint dates.
+		for match in self._entrypoint_date_pattern.finditer(file_data):
+			# Extract the date as a string if newer than any previously-found date.
+			date = match.group(1).decode('cp437', 'ignore')
+			if not self.string or util.date_gt(date, self.string, util.date_pattern_mmddyy):
+				self.string = date
 
 		return True
 
