@@ -284,9 +284,9 @@ int main(int argc, char *argv[])
 
 	/* Bruteforce Intel AMI Color fork LH5. */
 	Offset2 = 1;
-	for (Offset1 = 0; Offset1 < (FileLength - 10); Offset1 += 0x4000) {
+	for (Offset1 = 0; Offset1 < (FileLength - 10); Offset1 += 0x1000) {
 		BIOSOffset = Offset1;
-CopyrightOffset:if ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, IntelAMI, 13) > -1) &&
+retry:	if (((fd = LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, IntelAMI, 13)) > -1) &&
 		    (!memcmp(IntelAMI, "AMIBIOS(C)AMI", 13) || ((IntelAMI[0] == 0x55) && (IntelAMI[1] == 0xaa)))) {
 			if (Offset2 == 1) {
 				printf("Found potential Intel AMIBIOS.\n");
@@ -303,7 +303,7 @@ CopyrightOffset:if ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, 
 				Offset2 = 0; /* main body found, all good */
 			}
 
-			Buffer = MMapOutputFile((char *) IntelAMI, len);
+save:		Buffer = MMapOutputFile((char *) IntelAMI, len);
 			if (!Buffer)
 				return 1;
 
@@ -319,8 +319,12 @@ CopyrightOffset:if ((LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, 
 
 			munmap(Buffer, len);
 		} else if (!(BIOSOffset & 0xff)) {
-			BIOSOffset += 0x44;
-			goto CopyrightOffset;
+			BIOSOffset += 0x44; /* skip "Copyright Notice: Copyright Intel..." */
+			goto retry;
+		} else if ((fd > -1) && !memcmp(BIOSImage + Offset1, "Copyright Notice: Copyright Intel", 33)) {
+			len = 65536;
+			sprintf((char *) IntelAMI, "intelunk_%05X.rom", BIOSOffset);
+			goto save;
 		}
 	}
 
