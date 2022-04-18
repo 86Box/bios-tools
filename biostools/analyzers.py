@@ -871,8 +871,11 @@ class AmstradAnalyzer(NoInfoAnalyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Amstrad', *args, **kwargs)
 
+		self._plc_pattern = re.compile(b'''A(?:MSTRAD|mstrad(?: Consumer Electronics)?) plc''')
+		self._bios_pattern = re.compile(b'''IBMUS NON CARBORUNDUM|fit new batteries|Veuillez mettre des piles neuves|Batterie da sostituire|ponga piles nuevas|neue Batterien einsetzen''')
+
 	def has_strings(self, file_data):
-		return (b'AMSTRAD plc' in file_data or b'Amstrad plc' in file_data or b'Amstrad Consumer Electronics plc' in file_data) and ((b'Veuillez mettre des piles neuves' in file_data and b'Batterie da sostituire' in file_data and b'ponga piles nuevas' in file_data and b'neue Batterien einsetzen' in file_data) or b'IBMUS NON CARBORUNDUM' in file_data)
+		return self._plc_pattern.search(file_data) and self._bios_pattern.search(file_data)
 
 
 class AwardAnalyzer(Analyzer):
