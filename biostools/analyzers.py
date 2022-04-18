@@ -2142,7 +2142,7 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Extract version if a more specific one wasn't already found.
 		if not self.version:
-			self.version = 'SC-T'
+			self.version = 'SecureCore Tiano'
 
 		# This is UEFI.
 		self.addons.append('UEFI')
