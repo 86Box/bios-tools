@@ -286,6 +286,7 @@ int main(int argc, char *argv[])
 	Offset2 = 1;
 	for (Offset1 = 0; Offset1 < (FileLength - 10); Offset1 += 0x1000) {
 		BIOSOffset = Offset1;
+		i = 1;
 retry:	if (((fd = LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, IntelAMI, 13)) > -1) &&
 		    (!memcmp(IntelAMI, "AMIBIOS(C)AMI", 13) || ((IntelAMI[0] == 0x55) && (IntelAMI[1] == 0xaa)))) {
 			if (Offset2 == 1) {
@@ -318,10 +319,28 @@ save:		Buffer = MMapOutputFile((char *) IntelAMI, len);
 			}
 
 			munmap(Buffer, len);
-		} else if (!(BIOSOffset & 0xff)) {
+
+			/* There may be compressed data after the main body. (Advanced/EV VBIOS) */
+			if (fd > 0) {
+				if (fd & 1) /* padded to even byte */
+					fd++;
+				BIOSOffset += fd;
+				i = 1;
+				goto retry;
+			}
+		} else if (i) {
 			BIOSOffset += 0x44; /* skip "Copyright Notice: Copyright Intel..." */
+			i = 0;
 			goto retry;
 		} else if ((fd > -1) && !memcmp(BIOSImage + Offset1, "Copyright Notice: Copyright Intel", 33)) {
+			BIOSOffset = Offset1;
+
+			if (Offset2 == 1) {
+				printf("Found potential Intel AMIBIOS.\n");
+				InitRemainder(BIOSImage, FileLength);
+				Offset2 = 86; /* magic exit code if no main body found */
+			}
+
 			len = 65536;
 			sprintf((char *) IntelAMI, "intelunk_%05X.rom", BIOSOffset);
 			goto save;
