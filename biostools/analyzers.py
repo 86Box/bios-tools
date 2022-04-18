@@ -1323,6 +1323,16 @@ class CompaqAnalyzer(NoInfoAnalyzer):
 		return b'Copyright COMPAQ Computer Corporation' in file_data and (b'Insert DIAGNOSTIC diskette in Drive ' in file_data or b'Insert COMPAQ DOS diskette' in file_data or b'You must load COMPAQ BASIC' in file_data)
 
 
+class CopamAnalyzer(NoInfoAnalyzer):
+	def __init__(self, *args, **kwargs):
+		super().__init__('Copam', *args, **kwargs)
+
+		self._pattern = re.compile(b'''THIS IS NOT IBM BIOS COPAM\\(C\\) [0-9]{4}''')
+
+	def has_strings(self, file_data):
+		return self._pattern.search(file_data)
+
+
 class CorebootAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('coreboot', *args, **kwargs)

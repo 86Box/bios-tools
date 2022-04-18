@@ -502,6 +502,7 @@ def analyze_process(queue, formatter, scan_base, debug):
 		analyzers.ChipsAnalyzer(),
 		analyzers.CommodoreAnalyzer(),
 		analyzers.CompaqAnalyzer(),
+		analyzers.CopamAnalyzer(),
 		analyzers.CorebootAnalyzer(),
 		analyzers.DTKGoldStarAnalyzer(),
 		analyzers.GeneralSoftwareAnalyzer(),
