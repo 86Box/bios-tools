@@ -223,6 +223,8 @@ int DecodePosition(void)
 
 /********** Encode and Decode **********/
 
+int lzari_in_bruteforce = 0;
+
 int unlzari(unsigned char *in, int insz, unsigned char *out, int outsz, char common) {
 	int  i, j, k, r, c;
 	unsigned long int  count;
@@ -239,6 +241,7 @@ int unlzari(unsigned char *in, int insz, unsigned char *out, int outsz, char com
 	//if (textsize == 0) return(-1);
     if (textsize == 0) return(0);
     if (textsize < 0) return(-1);
+    if (lzari_in_bruteforce && (textsize > outsz)) return(-1);
 
     mask = 0;
     memset(text_buf, 0, sizeof(text_buf));

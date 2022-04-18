@@ -29,6 +29,7 @@ unsigned short CRC16Calculate(unsigned char *Buffer, int BufferSize);
 int LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 	      unsigned char *OutputBuffer, int OutputBufferSize);
 
+extern int lzari_in_bruteforce;
 int unlzari(unsigned char *in, int insz, unsigned char *out, int outsz, char common);
 
 int unlzh(unsigned char *in, int insz, unsigned char *out, int outsz);

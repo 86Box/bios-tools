@@ -31,6 +31,12 @@ LH5_TEST_OBJS = $(SRCDIR)/lh5_extract.o $(SRCDIR)/lh5_test.o
 lh5_test: $(LH5_TEST_OBJS)
 	$(CC) $(CFLAGS) $(LH5_TEST_OBJS) -o lh5_test
 
+BRUTEFORCE_OBJS = $(SRCDIR)/lh5_extract.o $(SRCDIR)/lzari_extract.o \
+		  $(SRCDIR)/lzhuf_extract.o $(SRCDIR)/lzss_extract.o \
+		  $(SRCDIR)/phoenix.o $(SRCDIR)/bruteforce.o
+bruteforce: $(BRUTEFORCE_OBJS)
+	$(CC) $(CFLAGS) $(BRUTEFORCE_OBJS) -o bruteforce
+
 gitconfig:
 	[ -d .git ]
 	mkdir -p .git/hooks
@@ -51,5 +57,6 @@ clean:
 	rm -f lh5_test
 	rm -f ami_slab
 	rm -f xfv/efidecomp xfv/*.o
+	rm -f bruteforce
 
-.PHONY: all bios_extract bcpvpd ami_slab efidecomp lh5_test clean gitconfig
+.PHONY: all bios_extract bcpvpd ami_slab efidecomp lh5_test bruteforce clean gitconfig

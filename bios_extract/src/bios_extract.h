@@ -56,6 +56,8 @@ Bool AFUDOSExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 /* phoenix.c */
 Bool PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		    uint32_t Offset1, uint32_t Offset2);
+void PhoenixBCD6F1Decode(unsigned char *PackedBuffer, int PackedBufferSize,
+			 unsigned char *OutputBuffer, int OutputBufferSize);
 
 /* award.c */
 Bool AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
