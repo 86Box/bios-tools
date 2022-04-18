@@ -69,7 +69,7 @@ class ApricotExtractor(Extractor):
 		if not util.try_makedirs(dest_dir):
 			return True
 
-		# Separate file and header.
+		# Separate payload and header.
 		try:
 			# Open Apricot file.
 			in_f = open(file_path, 'rb')
@@ -1516,6 +1516,98 @@ class IntelExtractor(Extractor):
 		return dest_dir
 
 
+class IntelNewExtractor(Extractor):
+	"""Extract newer Intel single-part BIOS updates."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		# BIOS payload header. Checking the first bytes makes sure
+		# we don't accidentally parse $IBIOSI$ version strings.
+		self._ibi_pattern = re.compile(b'''\\$IBI[\\x00-\\x4E\\x50-\\xFF][\\x00-\\x52\\x54-\\xFF][\\x00-\\x23\\x25-\\xFF][\\x00-\\xFF]([\\x00-\\xFF]{8})''')
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if the payload header couldn't be found.
+		match = self._ibi_pattern.search(file_header)
+		if not match:
+			return False
+
+		# Parse payload header and stop if the sizes appear to be wrong.
+		header_sizes = match.group(1)
+		if header_sizes == b'\xAA\x55\xAA\x55\x55\xAA\x55\xAA':
+			# This is a :header: file with an invalidated size field.
+			return True
+		header_size, payload_size = struct.unpack('<II', header_sizes)
+		self.debug_print('$IBI header at', hex(match.start(1)), 'declaring header size', header_size, 'and payload size', payload_size)
+		if header_size > 65536 or payload_size > 16777216:
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Separate payload and header.
+		try:
+			# Open update file.
+			in_f = open(file_path, 'rb')
+
+			# Copy payload.
+			payload_offset = match.start(0) + header_size
+			try:
+				in_f.seek(payload_offset)
+				out_f = open(os.path.join(dest_dir, 'intel.bin'), 'wb')
+				while payload_size > 0:
+					data = in_f.read(min(payload_size, 1048576))
+					out_f.write(data)
+					payload_size -= len(data)
+				out_f.close()
+			except:
+				in_f.close()
+				return True
+
+			# Copy header.
+			try:
+				out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+
+				# Copy data before the header size fields.
+				in_f.seek(0)
+				size = match.start(1)
+				while size > 0:
+					data = in_f.read(min(size, 1048576))
+					out_f.write(data)
+					size -= len(data)
+
+				# Invalidate the size fields so we don't process the header again.
+				out_f.write(b'\xAA\x55\xAA\x55\x55\xAA\x55\xAA')
+
+				# Write the rest of the header.
+				in_f.seek(match.end(1))
+				size = payload_offset - match.end(1)
+				while size > 0:
+					data = in_f.read(min(size, 1048576))
+					out_f.write(data)
+					size -= len(data)
+
+				# Copy data after the payload.
+				in_f.seek(payload_offset + payload_size)
+				data = b' '
+				while data:
+					data = in_f.read(1048576)
+					out_f.write(data)
+
+				out_f.close()
+			except:
+				pass
+
+			# Remove update file.
+			in_f.close()
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory path.
+		return dest_dir
+
 class InterleaveExtractor(Extractor):
 	"""Detect and de-interleave any interleaved ROMs."""
 
@@ -1758,7 +1850,7 @@ class OMFExtractor(Extractor):
 		if not util.try_makedirs(dest_dir):
 			return True
 
-		# Separate file and header.
+		# Separate payload and header.
 		try:
 			# Open OMF file.
 			in_f = open(file_path, 'rb')
@@ -1766,8 +1858,8 @@ class OMFExtractor(Extractor):
 			# Read header.
 			header = in_f.read(112)
 
+			# Copy payload.
 			try:
-				# Copy payload.
 				out_f = open(os.path.join(dest_dir, 'omf.bin'), 'wb')
 				data = b' '
 				while data:

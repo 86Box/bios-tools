@@ -105,7 +105,8 @@ def extract_process(queue, dir_number_path, next_dir_number_path, debug):
 		extractors.HexExtractor(),
 		extractors.ImageExtractor(),
 		extractors.ApricotExtractor(),
-		# extractors from here on down read more than the header
+		extractors.IntelNewExtractor(),
+		# extractors from here on down may read more than the header during detection
 		extractors.DellExtractor(),
 		extractors.IntelExtractor(),
 		extractors.OMFExtractor(),
