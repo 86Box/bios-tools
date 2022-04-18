@@ -396,7 +396,7 @@ class AMIAnalyzer(Analyzer):
 			if version_6plus:
 				# AMIBIOS 6 onwards.
 				self.version = version_6plus.decode('cp437', 'ignore')
-				self.debug_print('Version (6+):', self.version)
+				self.debug_print('Version (6+):', repr(self.version))
 
 				# Pad 4-digit versions. (Biostar)
 				if self.version[-1] not in '0123456789':
@@ -407,32 +407,27 @@ class AMIAnalyzer(Analyzer):
 				version_winbios_min = match.group(3)
 				if version_winbios_maj and version_winbios_min:
 					self.version = (version_winbios_maj + version_winbios_min).decode('cp437', 'ignore')
-					self.debug_print('Version (4-5):', self.version)
+					self.debug_print('Version (4-5):', repr(self.version))
 					self.version += '00'
 					self.addons.append('WinBIOS')
 				else:
 					# AMI Color (or WinBIOS 12/15/93) date.
 					self.version = match.group(4).decode('cp437', 'ignore')
-					self.debug_print('Version (Color):', self.version)
+					self.debug_print('Version (Color):', repr(self.version))
 
 			# Extract string.
-			self.string = util.read_string(file_data[id_block_index + 0x78:id_block_index + 0xa0])
-			if 'Intel Corporation' in self.string or len(self.string) <= 6: # (later Intel AMI with no string)
-				self.string = ''
-				self.debug_print('Intel with no string')
-			else:
-				self.debug_print('Base string:', self.string)
+			self.debug_print('Raw string:', repr(self.string))
 
-				# Add identification tag to the string if one is present.
-				id_tag = util.read_string(file_data[id_block_index + 0xec:id_block_index + 0x100])
-				self.debug_print('String tag:', id_tag)
-				if id_tag[:4] == '_TG_':
-					self.string = self.string.rstrip() + '-' + id_tag[4:].lstrip()
+			# Add identification tag to the string if one is present.
+			id_tag = util.read_string(file_data[id_block_index + 0xec:id_block_index + 0x100])
+			self.debug_print('String tag:', repr(id_tag))
+			if id_tag[:4] == '_TG_':
+				self.string = self.string.rstrip() + '-' + id_tag[4:].lstrip()
 
-				# Stop if this BIOS is actually Aptio UEFI CSM.
-				if self._uefi_csm_pattern.match(self.string):
-					self.debug_print('String matches UEFI CSM, aborting')
-					return False
+			# Stop if this BIOS is actually Aptio UEFI CSM.
+			if self._uefi_csm_pattern.match(self.string):
+				self.debug_print('String matches UEFI CSM, aborting')
+				return False
 
 			# Ignore unwanted string terminator on sign-on. (TriGem Lisbon-II)
 			signon_terminator = b'\x00'
@@ -486,11 +481,11 @@ class AMIAnalyzer(Analyzer):
 							if c & 0x80: # MSB termination
 								break
 						self.string = bytes(buf).decode('cp437', 'ignore')
-						if len(self.string) <= 6: # (later Intel AMI with no string)
+						if 'Intel Corporation' in self.string or len(self.string) <= 8: # (later Intel AMI with no string)
 							self.string = ''
 							self.debug_print('Intel with no string')
 						else:
-							self.debug_print('Base string:', self.string)
+							self.debug_print('Base string:', repr(self.string))
 
 						# Remove "-K" KBC suffix.
 						# Note: K without preceding - is possible (Atari PC5)
@@ -508,7 +503,7 @@ class AMIAnalyzer(Analyzer):
 						# Add date.
 						self.string += '-' + util.read_string(file_data[id_block_index + 0x9c:id_block_index + 0xa4]).replace('/', '').strip()
 
-						self.debug_print('Reconstructed string:', self.string)
+						self.debug_print('Reconstructed string:', repr(self.string))
 
 						# Invalidate string if the identification block doesn't
 						# appear to be valid. (Intel AMI post-Color without string)
@@ -531,12 +526,12 @@ class AMIAnalyzer(Analyzer):
 							buf.append(c & 0x7f)
 						self.string = bytes(buf).decode('cp437', 'ignore')
 
-						self.debug_print('Base string:', self.string)
+						self.debug_print('Base string:', repr(self.string))
 					else:
 						# Fallback if we can't find the encoded string.
 						self.string = '????-' + self.version.replace('/', '')
 
-						self.debug_print('Reconstructed string:', self.string)
+						self.debug_print('Reconstructed string:', repr(self.string))
 
 				# Extract additional information after the copyright as a sign-on.
 				# (Shuttle 386SX, CDTEK 286, Flying Triumph Access Methods)
@@ -574,20 +569,15 @@ class AMIAnalyzer(Analyzer):
 		return True
 
 	def _signon_intel(self, line, match):
-		'''^(?:(BIOS (?:Release|Version) )?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[A-Z][0-9A-Z]{1,})|(?:\\$IBIOSI\\$)?([0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}|(?:\\.[0-9]{4}){3}))'''
+		'''^(?:(?:BIOS (?:Release|Version) )?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[A-Z][0-9A-Z]{1,})|(?:\\$IBIOSI\\$)?([0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}|(?:\\.[0-9]{4}){3}))'''
 
 		# If this is Intel's second AMI run, check if this is not a generic
 		# (86x) version string overwriting an OEM version string.
-		oem = match.group(4)
-		intel_version = match.group(2) or match.group(3)
+		oem = match.group(3)
+		intel_version = match.group(1) or match.group(2)
 		if (not oem or oem[:2] != '86' or not self._intel_86_pattern.match(self.signon)) and intel_version not in self.signon:
 			# Extract the version string as a sign-on.
-			prefix_idx = self.signon.rfind(' ')
-			if prefix_idx > -1:
-				prefix = self.signon[:prefix_idx + 1]
-			else:
-				prefix = match.group(1) or ''
-			self.signon = prefix + intel_version
+			self.signon = intel_version
 
 		return True
 
