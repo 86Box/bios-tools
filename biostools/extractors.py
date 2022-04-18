@@ -344,7 +344,7 @@ class BIOSExtractor(Extractor):
 			# BIOS with LH5-compressed option ROMs. Check the files just in case.
 			have_intelopt = have_intelbody = False
 			for dest_dir_file in dest_dir_files:
-				if dest_dir_file[:9] == 'intelopt_':
+				if dest_dir_file[:9] in ('intelopt_', 'intelunk_'):
 					have_intelopt = True
 				elif dest_dir_file[:10] == 'intelbody_':
 					have_intelbody = True
