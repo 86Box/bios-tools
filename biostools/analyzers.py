@@ -879,22 +879,20 @@ class AwardAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Award', *args, **kwargs)
 
-		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|Award Decompression Bios''')
+		# "COPYRIGHT AWARD SOFTWARE INC." (early XT/286)
+		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|COPYRIGHT AWARD SOFTWARE INC\\.|Award Decompression Bios''')
 		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}A w a r d Software Inc\\.''')
+		self._early_pattern = re.compile(b'''([0-9A-Z][\\x21-\\x7E]+) BIOS V([\\x21-\\x7E]+) COPYRIGHT''')
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
-		self._gigabyte_bif_pattern = re.compile(b'''\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
-		self._gigabyte_eval_pattern = re.compile('''\([a-zA-Z0-9]{1,8}\) EVALUATION ROM - NOT FOR SALE$''')
+		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
+		self._gigabyte_eval_pattern = re.compile('''\\([a-zA-Z0-9]{1,8}\\) EVALUATION ROM - NOT FOR SALE$''')
+		self._gigabyte_hefi_pattern = re.compile(b'''EFI CD/DVD Boot Option''')
 		self._id_block_pattern = re.compile(b'''(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}IBM COMPATIBLE |(?:[0-9]{2}/[0-9]{2}/[0-9]{4} {4})IBM COMPATIBLE [0-9]+ BIOS COPYRIGHT Award Software Inc\\.''')
-		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \(c\) (?:[^\r]+)\r\n)?Copyright \(c\) (?:NCR \& )?Award', re.M)
+		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \\(c\\) (?:[^\r]+)\r\n)?Copyright \\(c\\) (?:NCR \\& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
 		# "V" instead of "v" (286 Modular BIOS V3.03 NFS 11/10/87)
 		self._version_pattern = re.compile(''' (?:v([^-\\s]+)|V(?:ersion )?[^0-9]*([0-9]\\.(?:[0-9]{2}|[0-9][A-Z])))(?:[. ]([\\x20-\\x7E]+))?''')
-
-		self.register_check_list([
-			(self._version_pcxt,	RegexChecker),
-			(self._addons_uefi,		SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-		])
 
 	def can_handle(self, file_data, header_data):
 		if not self._award_pattern.search(file_data):
@@ -902,15 +900,18 @@ class AwardAnalyzer(Analyzer):
 
 		# Skip Windows 95 INF updates and Award VBIOS.
 		if self._ignore_pattern.search(file_data):
+			self.debug_print('Skipping INF or VBIOS', self.version)
 			return False
 
 		# The bulk of Award identification data has remained in one place for the longest time.
 		for match in self._id_block_pattern.finditer(file_data):
 			# Determine location of the identification block.
 			id_block_index = match.start(0)
+			self.debug_print('ID block starts at', hex(id_block_index))
 
 			# Extract version.
 			version_string = util.read_string(file_data[id_block_index + 0x61:id_block_index + 0xa1])
+			self.debug_print('Raw version string:', repr(version_string))
 			version_match = self._version_pattern.search(version_string)
 			if version_match:
 				self.version = 'v' + (version_match.group(1) or version_match.group(2))
@@ -929,15 +930,15 @@ class AwardAnalyzer(Analyzer):
 			# Extract sign-on.
 			signon = util.read_string(file_data[id_block_index + 0xc1:id_block_index + 0x10f])
 			if ' BUSINESS MACHINES CORP.' in signon: # alternative location (Acer 01/01/1988, Commodore PC 40)
+				self.debug_print('Using alternate sign-on location')
 				signon = util.read_string(file_data[id_block_index + 0x71a:id_block_index + 0x81a])
-
-			# Split sign-on lines.
-			# Vertical tab characters may be employed. (??? reported by BurnedPinguin)
-			self.signon = '\n'.join(x.strip() for x in signon.replace('\r', '\n').replace('\v', '\n').split('\n') if x.strip()).strip('\n')
+			self.debug_print('Raw sign-on:', repr(signon))
+			self.signon = signon
 
 			# Extract string, unless the version is known to be too old to have a string.
 			if self.version[:3] not in ('v2.', 'v3.'):
 				self.string = util.read_string(file_data[id_block_index + 0xc71:id_block_index + 0xce0])
+				self.debug_print('Raw string:', repr(version_string))
 
 				# Check if no string was inserted where it should
 				# have been. (Gateway/Swan Anigma Award v4.28/4.32)
@@ -962,20 +963,27 @@ class AwardAnalyzer(Analyzer):
 				# Move on to the next block if the string is too short.
 				# (PC Partner 440BX with remains of 1992 BIOS in Y segment)
 				if len(self.string) <= 11 and self.string[-1:] == '-':
+					self.debug_print('Bogus string, trying another ID block')
 					self.signon = ''
 					continue
+
+				# Flag Gigabyte Hybrid EFI as UEFI.
+				if self._gigabyte_hefi_pattern.search(file_data):
+					self.addons.append('UEFI')
 
 			if self.version == 'v6.00PG' and self._gigabyte_eval_pattern.match(self.signon):
 				# Reconstruct actual sign-on of a Gigabyte fork BIOS through
 				# the data in the $BIF area (presumably BIOS update data).
 				match = self._gigabyte_bif_pattern.search(file_data)
 				if match:
+					self.debug_print('Sign-on reconstructed from Gigabyte data')
 					self.signon = (match.group(1) + b' ' + match.group(2)).decode('cp437', 'ignore')
 			elif 'Award' not in version_string.split('\n')[0] or '8088 Modular' in version_string: # "386SX Modular BIOS v3.15", "i-8088 Modular BIOS Version 3.0F"
 				# Extract early Modular type as the string.
 				match = self._early_modular_prefix_pattern.match(version_string)
 				if match:
 					self.string = match.group(1)
+					self.debug_print('Using early Modular type:', repr(self.string))
 
 				# Append post-version data to the string.
 				if version_match:
@@ -983,6 +991,7 @@ class AwardAnalyzer(Analyzer):
 					if post_version:
 						post_version = post_version.strip()
 					if post_version:
+						self.debug_print('Raw post-version data:', repr(post_version))
 						if match:
 							self.string += '\n' + post_version
 						else:
@@ -993,6 +1002,9 @@ class AwardAnalyzer(Analyzer):
 		# Handle AST modified Award.
 		match = self._ast_pattern.search(file_data)
 		if match:
+			id_block_index = match.start(0)
+			self.debug_print('AST ID block found at', hex(id_block_index))
+
 			# Set static version.
 			self.version = 'AST'
 
@@ -1000,31 +1012,29 @@ class AwardAnalyzer(Analyzer):
 			ast_offset = match.start(0)
 			self.signon = util.read_string(file_data[ast_offset + 0x44:ast_offset + 0x144])
 			if self.signon[:1] != 'A':
+				self.debug_print('Using alternate sign-on location')
 				self.signon = util.read_string(file_data[ast_offset + 0x80:ast_offset + 0x180])
-			self.signon = self.signon.replace('\r', '\n')
+		else:
+			# Handle early XT/286 BIOS.
+			match = self._early_pattern.search(file_data)
+			if match:
+				id_block_index = match.start(0)
+				self.debug_print('Early ID block found at', hex(id_block_index))
 
-			# Split sign-on lines.
-			self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
+				# Extract version.
+				self.version = 'v' + match.group(2).decode('cp437', 'ignore')
 
-		return True
+				# Extract BIOS type as a string.
+				self.string = match.group(1).decode('cp437', 'ignore')
 
-	def _version_pcxt(self, line, match):
-		'''(PC|XT) BIOS V([^\s]+)'''
+				# Extract sign-on.
+				self.signon = util.read_string(file_data[id_block_index + 0x3b:id_block_index + 0x8c])
+			else:
+				return False
 
-		# Extract version if one wasn't already found.
-		if not self.version:
-			self.version = 'v' + match.group(2)
-
-			# Extract BIOS type as a string.
-			self.string = match.group(1)
-
-		return True
-
-	def _addons_uefi(self, line, match):
-		'''EFI CD/DVD Boot Option'''
-
-		# Flag Gigabyte Hybrid EFI as UEFI.
-		self.addons.append('UEFI')
+		# Split sign-on lines.
+		# Vertical tab characters may be employed. (??? reported by BurnedPinguin)
+		self.signon = '\n'.join(x.strip() for x in self.signon.replace('\r', '\n').replace('\v', '\n').split('\n') if x.strip()).strip('\n')
 
 		return True
 
