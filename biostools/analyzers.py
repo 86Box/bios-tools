@@ -1899,7 +1899,7 @@ class PhoenixAnalyzer(Analyzer):
 						self.signon = self.signon.replace(frm, to)
 
 					self.signon = self.signon.decode('cp437', 'ignore')
-					print('Raw sign-on (4R6+):', repr(self.signon))
+					self.debug_print('Raw sign-on (4R6+):', repr(self.signon))
 				else:
 					# Extract sign-on from Ax86 and older BIOSes.
 					match = self._rombios_signon_pattern.search(file_data)
@@ -1912,7 +1912,7 @@ class PhoenixAnalyzer(Analyzer):
 						end = match.end(0)
 						if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
 							self.signon = util.read_string(file_data[end:end + 256])
-							print('Raw sign-on', signon_log, repr(self.signon))
+							self.debug_print('Raw sign-on', signon_log, repr(self.signon))
 						else:
 							self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
 
