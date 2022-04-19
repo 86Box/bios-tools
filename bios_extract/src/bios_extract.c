@@ -283,6 +283,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Bruteforce Intel AMI Color fork LH5. */
+	unsigned char *tempbuf = NULL;
 	Offset2 = 1;
 	for (Offset1 = 0; Offset1 < (FileLength - 10); Offset1 += 0x1000) {
 		BIOSOffset = Offset1;
@@ -304,24 +305,36 @@ retry:	if (((fd = LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, Int
 				Offset2 = 0; /* main body found, all good */
 			}
 
-save:		Buffer = MMapOutputFile((char *) IntelAMI, len);
-			if (!Buffer)
-				return 1;
+save:		tempbuf = realloc(tempbuf, len);
+			memset(tempbuf, 0, len);
 
 			i = len;
-			while (((fd = LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, Buffer, i)) == -1) &&
-				(i > 16))
-				i--;
-			if (fd > 0) {
-				printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes)\n",
-		       			BIOSOffset, fd, IntelAMI, len);
-				SetRemainder(BIOSOffset, fd, FALSE);
+			int j = len / 2;
+			while (1) {
+				fd = LH5Decode(BIOSImage + BIOSOffset, FileLength - BIOSOffset, tempbuf, i);
+				if (fd == -1)
+					i -= j;
+				else if ((i == len) || (j == 1))
+					break;
+				else
+					i += j;
+				j /= 2;
+				if (j < 1)
+					j = 1;
 			}
 
-			munmap(Buffer, len);
+			if ((fd > 0) && (i > 0)) {
+				printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes)\n",
+		       			BIOSOffset, fd, IntelAMI, i);
+				SetRemainder(BIOSOffset, fd, FALSE);
 
-			/* There may be compressed data after the main body. (Advanced/EV VBIOS) */
-			if (fd > 0) {
+				Buffer = MMapOutputFile((char *) IntelAMI, i);
+				if (!Buffer)
+					return 1;
+				memcpy(Buffer, tempbuf, i);
+				munmap(Buffer, i);
+
+				/* There may be compressed data after the main body. (Advanced/EV VBIOS) */
 				if (fd & 1) /* padded to even byte */
 					fd++;
 				BIOSOffset += fd;
