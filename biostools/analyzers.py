@@ -729,9 +729,10 @@ class AMIDellAnalyzer(AMIAnalyzer):
 class AMIIntelAnalyzer(Analyzer):
 	_ami_pattern = re.compile(b'''AMIBIOS''')
 	_ami_version_pattern = re.compile(b'''AMIBIOSC(0[1-9][0-9]{2})''')
+	_phoenix_pattern = re.compile(b'''Phoenix Technologies Ltd''')
 
 	def __init__(self, *args, **kwargs):
-		super().__init__('AMIIntel', *args, **kwargs)
+		super().__init__('Intel', *args, **kwargs)
 
 	def can_handle(self, file_data, header_data):
 		# Handle Intel AMI BIOSes that could not be decompressed.
@@ -747,9 +748,9 @@ class AMIIntelAnalyzer(Analyzer):
 
 		# Extract the Intel version from the flash header.
 		if header_data[90:95] == b'FLASH':
-			# Start by assuming this is an unknown version of AMI.
-			if self.vendor_id == 'AMIIntel':
-				self.vendor = 'AMI'
+			# Start by assuming this is an unknown BIOS.
+			if self.vendor_id == 'Intel':
+				self.vendor = 'Intel'
 			self.version = 'Unknown Intel'
 
 			# Extract AMI version from compressed data.
@@ -758,8 +759,10 @@ class AMIIntelAnalyzer(Analyzer):
 			if match:
 				match = AMIIntelAnalyzer._ami_version_pattern.search(file_data[match.start(0):])
 				if match:
+					if self.vendor_id == 'Intel':
+						self.vendor = 'AMI'
 					self.version = match.group(1).decode('cp437', 'ignore') + '00'
-			elif self.vendor_id == 'AMIIntel':
+			elif self.vendor_id == 'Intel' and AMIIntelAnalyzer._phoenix_pattern.search(file_data):
 				self.vendor = 'Phoenix'
 
 			# Apply the version as a sign-on.
