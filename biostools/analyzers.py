@@ -416,6 +416,7 @@ class AMIAnalyzer(Analyzer):
 					self.debug_print('Version (Color):', repr(self.version))
 
 			# Extract string.
+			self.string = util.read_string(file_data[id_block_index + 0x78:id_block_index + 0xa0])
 			self.debug_print('Raw string:', repr(self.string))
 
 			# Add identification tag to the string if one is present.
