@@ -354,6 +354,7 @@ class AMIAnalyzer(Analyzer):
 		# "Ref. " (Everex EISA 386-BIOS) - let the code handle termination
 		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFD\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6}|\\x6D\\xD4\\xCC\\x8E\\xFE[\\x00-\\xFF]{1,64})''')
 		self._precolor_signon_pattern = re.compile(b'''BIOS \\(C\\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
+		self._precolor_type_pattern = re.compile(b'''([0-9]86|8(?:08)?8)-BIOS \\(C\\)''')
 		# Decoded: "\(C\)AMI, \(([^\)]{11,64})\)" (the 64 is arbitrary)
 		self._8088_string_pattern = re.compile(b'''\\xEC\\x5F\\x6C\\x60\\x5A\\x5C\\xEA\\xF0\\xEC([\\x00-\\x6B\\x6D-\\xFF]{11,64})\\x6C''')
 
@@ -544,6 +545,10 @@ class AMIAnalyzer(Analyzer):
 
 					# Split sign-on lines. (Video Technology Info-Tech 286-BIOS)
 					self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
+
+				# Extract BIOS type as an add-on.
+				for match in self._precolor_type_pattern.finditer(file_data):
+					self.addons.append(match.group(1).decode('cp437', 'ignore') + '-BIOS')
 			else:
 				# Assume this is not an AMI BIOS, unless we found Intel data above.
 				if is_intel:
@@ -1509,7 +1514,7 @@ class IBMSurePathAnalyzer(Analyzer):
 		self.vendor_id = 'IBMSurePath'
 
 		self._ibm_pattern = re.compile(b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4  AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD''')
-		self._ibm_later_pattern = re.compile(b''' Partnum \\(C\\) COPYRIGHT IBM CORPORATION 1981, 1998 ALL RIGHTS RESERVED \\x00{10}''')
+		self._ibm_later_pattern = re.compile(b''' Partnum \\(C\\) COPYRIGHT IBM CORPORATION 1981, 1998 ALL RIGHTS RESERVED \\x00{10}|\\xAA{8}\\x55{8}IBM PC Co\\. BIOS ''')
 		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
 		self._apricot_pattern = re.compile(b'''@\\(#\\)(?:Apricot .*|XEN-PC) BIOS [\\x20-\\x7E]+''')
 		self._apricot_version_pattern = re.compile(b'''@\\(#\\)Version [\\x20-\\x7E]+''')
