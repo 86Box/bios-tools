@@ -785,7 +785,7 @@ class AMIUEFIAnalyzer(Analyzer):
 		super().__init__('AMI', *args, **kwargs)
 		self.vendor_id = 'AMIUEFI'
 
-		self._identifier_pattern = re.compile(b'''Version %x\.%02x\.%04x\.|ALASKAA M I''')
+		self._identifier_pattern = re.compile(b'''Version %x\\.%02x\\.%04x\\.|ALASKAA M I|[Xx]-UEFI-AMI''')
 
 		self.register_check_list([
 			(self._string_csm,						RegexChecker),
@@ -824,7 +824,7 @@ class AMIUEFIAnalyzer(Analyzer):
 		return True
 
 	def _signon_trigger(self, line, match):
-		'''^Version %x\.%02x\.%04x. Copyright \(C\)'''
+		'''^Version %x\\.%02x\\.%04x. Copyright \\(C\\)'''
 
 		# Read sign-on on the next line if one wasn't already found.
 		if not self.signon:
@@ -850,7 +850,7 @@ class AMIUEFIAnalyzer(Analyzer):
 		return True
 
 	def _signon_prefixed(self, line, match):
-		'''^\$(?:(?:IBIOSI\$|UBI)([0-9A-Z]{8}\.[0-9A-Z]{3}(?:\.[0-9]{4}){4})|MSESGN\$(.+))'''
+		'''^\\$(?:(?:IBIOSI\\$|UBI)([0-9A-Z]{8}\\.[0-9A-Z]{3}(?:\\.[0-9]{4}){4})|MSESGN\\$(.+))'''
 		# "$IBIOSI$", "$UBI" (Intel)
 		# "$MSESGN$" (MSI)
 
