@@ -1106,8 +1106,8 @@ class BonusAnalyzer(Analyzer):
 
 		self._acpi_table_pattern = re.compile(b'''(?:DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})[\\x00-\\xFF]{24}[\\x00\\x20-\\x7E]{4}''')
 		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|([\\x20-\\x7E]+) BIOS )''')
-		self._ncr_pattern = re.compile(b''' SDMS \(TM\) V([0-9])''')
-		self._orom_pattern = re.compile(b'''\\x55\\xAA[^\\x00][\\x00-\\xFF]{21}([\\x00-\\xFF]{4})''')
+		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9])''')
+		self._orom_pattern = re.compile(b'''\\x55\\xAA[\\x01-\\xFF][\\x00-\\xFF]{21}([\\x00-\\xFF]{4})''')
 		self._phoenixnet_patterns = (
 			re.compile(b'''CPLRESELLERID'''),
 			re.compile(b'''BINCPUTBL'''),
@@ -1115,11 +1115,11 @@ class BonusAnalyzer(Analyzer):
 		)
 		self._pxe_patterns = (
 			re.compile(b'''PXE-M0F: Exiting '''),
-			re.compile(b'''PXE-EC6: UNDI driver image is invalid\.'''),
+			re.compile(b'''PXE-EC6: UNDI driver image is invalid\\.'''),
 		)
 		self._rpl_pattern = re.compile(b'''NetWare Ready ROM''')
 		self._sli_pattern = re.compile(b'''[0-9]{12}Genuine NVIDIA Certified SLI Ready Motherboard for ''')
-		self._vbios_pattern = re.compile(b'''IBM (?:VGA C(?:OMPAT[IA]BLE|ompatible)|COMPATIBLE PARADISE)|ATI Technologies Inc\.|SiS super VGA chip''')
+		self._vbios_pattern = re.compile(b'''IBM (?:VGA C(?:OMPAT[IA]BLE|ompatible)|COMPATIBLE PARADISE)|ATI Technologies Inc\\.|SiS super VGA chip''')
 
 	def can_handle(self, file_data, header_data):
 		# PhoenixNet
