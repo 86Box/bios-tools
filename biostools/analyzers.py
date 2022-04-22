@@ -1514,22 +1514,18 @@ class IBMSurePathAnalyzer(Analyzer):
 		super().__init__('IBM', *args, **kwargs)
 		self.vendor_id = 'IBMSurePath'
 
-		self._ibm_pattern = re.compile(b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4  AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD''')
-		self._ibm_later_pattern = re.compile(b''' Partnum \\(C\\) COPYRIGHT IBM CORPORATION 1981, 1998 ALL RIGHTS RESERVED \\x00{10}|\\xAA{8}\\x55{8}IBM PC Co\\. BIOS ''')
+		self._ibm_pattern = re.compile(
+			b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  (?:IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4|11998811,,  ([0-9])\\5([0-9])\\6([0-9])\\7([0-9])\\8  IIBBMM  CCOORRPPOORRAATTIIOONN)  (?:--  )?AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD|'''
+			b'''\\(C\\) COPYRIGHT (?:IBM CORPORATION 1981, [0-9]{4}|1981, [0-9]{4} IBM CORPORATION) (?:- )?ALL RIGHTS RESERVED[ \\x0D\\x0A]*\\x00'''
+		)
+		self._ibm_later_pattern = re.compile(b'''\\xAA{8}\\x55{8}IBM PC Co\\. BIOS ''')
 		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
 		self._apricot_pattern = re.compile(b'''@\\(#\\)(?:Apricot .*|XEN-PC) BIOS [\\x20-\\x7E]+''')
 		self._apricot_version_pattern = re.compile(b'''@\\(#\\)Version [\\x20-\\x7E]+''')
 
 	def can_handle(self, file_data, header_data):
 		if not self._ibm_pattern.search(file_data):
-			# Look for later compressed SurePath.
-			if self._ibm_later_pattern.search(file_data):
-				self.version = 'SurePath'
-			else:
-				return False
-
-		# Look for entrypoint dates.
-		NoInfoAnalyzer.get_entrypoint_dates(self, file_data)
+			return False
 
 		# Determine location of the version.
 		match = self._surepath_pattern.search(file_data)
@@ -1554,8 +1550,14 @@ class IBMSurePathAnalyzer(Analyzer):
 				match = self._apricot_version_pattern.search(file_data)
 				if match:
 					self.signon = self.signon.strip() + '\n' + match.group(0).decode('cp437', 'ignore')[4:].strip()
-			elif not self.version:
+			elif self._ibm_later_pattern.search(file_data):
+				# Later compressed SurePath. No further information.
+				self.version = 'SurePath'
+			else:
 				return False
+
+		# Look for entrypoint dates.
+		NoInfoAnalyzer.get_entrypoint_dates(self, file_data)
 
 		return True
 
