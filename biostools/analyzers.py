@@ -2531,7 +2531,7 @@ class SystemSoftAnalyzer(Analyzer):
 			match = self._signon_pattern.search(file_data)
 			if match:
 				signon_line = match.group(1)
-				if signon_line[:9] == 'Copyright' and ('SystemSoft' in signon_line or 'Insyde' in signon_line):
+				if signon_line[:9] == b'Copyright' and (b'SystemSoft' in signon_line or b'Insyde' in signon_line):
 					# Skip SystemSoft copyright line.
 					pass
 				elif signon_line:
