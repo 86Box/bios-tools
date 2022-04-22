@@ -333,9 +333,11 @@ class BIOSExtractor(Extractor):
 		dest_dir_files = os.listdir(dest_dir_0)
 		num_files_extracted = len(dest_dir_files)
 		if num_files_extracted < 1:
+			self.debug_print('Extraction produced no files:', file_path)
 			return False
 		elif num_files_extracted == 1 and dest_dir_files[0] == 'remainder.rom':
 			# Remove remainder file so that the destination directory can be rmdir'd later.
+			self.debug_print('Extraction only produced remainder file:', file_path)
 			util.remove_all(dest_dir_files, lambda x: os.path.join(dest_dir_0, x))
 			return False
 		elif proc and proc.returncode == 86:
@@ -351,13 +353,36 @@ class BIOSExtractor(Extractor):
 					break
 			if have_intelopt and not have_intelbody:
 				# Remove all files so that the destination directory can be rmdir'd later.
+				self.debug_print('Extraction produced Intel option ROM without main body:', file_path)
 				util.remove_all(dest_dir_files, lambda x: os.path.join(dest_dir_0, x))
 				return False
 
 		# A missing remainder.rom may indicate an extraction interrupted by a segfault
 		# or something else gone wrong. Copy the original file to its place for safety.
 		if 'remainder.rom' not in dest_dir_files:
+			self.debug_print('Creating remainder stand-in for:', file_path)
 			util.hardlink_or_copy(file_path, os.path.join(dest_dir_0, 'remainder.rom'))
+
+		# Remove extraneous files containing Intel body remains. (Batman's Revenge 04/15/1994)
+		if not proc or b'intelbody_' in proc.stdout:
+			intel_bodies = [dest_dir_file for dest_dir_file in dest_dir_files if dest_dir_file[:10] == 'intelbody_']
+			if len(intel_bodies) > 1:
+				# Get size for all body files.
+				for x in range(len(intel_bodies)):
+					try:
+						body_size = os.path.getsize(os.path.join(dest_dir_0, intel_bodies[x]))
+					except:
+						body_size = 0
+					intel_bodies[x] = (body_size, intel_bodies[x])
+
+				# Remove all but the largest body file.
+				intel_bodies.sort(reverse=True)
+				self.debug_print('Keeping Intel body file', intel_bodies[0], 'and discarding', intel_bodies[1:])
+				util.remove_all(intel_bodies[1:], lambda x: os.path.join(dest_dir_0, x[1]))
+
+				# Remove removed files from file list.
+				for _, body_name in intel_bodies[1:]:
+					dest_dir_files.remove(body_name)
 
 		# Extract Award BIOS PhoenixNet ROS filesystem.
 		if not proc or b'Found Award BIOS.' in proc.stdout:
@@ -368,6 +393,8 @@ class BIOSExtractor(Extractor):
 				dest_dir_file_header = in_f.read(3)
 
 				if dest_dir_file_header == b'ROS':
+					self.debug_print('Extracting PhoenixNet ROS:', dest_dir_file)
+
 					# Create new destination directory for the expanded ROS.
 					dest_dir_ros = os.path.join(dest_dir_0, dest_dir_file + ':')
 					if util.try_makedirs(dest_dir_ros):
@@ -402,6 +429,7 @@ class BIOSExtractor(Extractor):
 
 							# Write data.
 							if len(file_name) > 1:
+								self.debug_print('ROS file:', file_name)
 								out_f = open(os.path.join(dest_dir_ros, file_name), 'wb')
 								out_f.write(data)
 								out_f.close()
