@@ -913,6 +913,7 @@ class AwardAnalyzer(Analyzer):
 			return False
 
 		# The bulk of Award identification data has remained in one place for the longest time.
+		found = False
 		for match in self._id_block_pattern.finditer(file_data):
 			# Determine location of the identification block.
 			id_block_index = match.start(0)
@@ -921,6 +922,7 @@ class AwardAnalyzer(Analyzer):
 			# Extract version.
 			version_string = util.read_string(file_data[id_block_index + 0x61:id_block_index + 0xa1])
 			self.debug_print('Raw version string:', repr(version_string))
+			self.signon = ''
 			version_match = self._version_pattern.search(version_string)
 			if version_match:
 				self.version = 'v' + (version_match.group(1) or version_match.group(2))
@@ -942,7 +944,7 @@ class AwardAnalyzer(Analyzer):
 				self.debug_print('Using alternate sign-on location')
 				signon = util.read_string(file_data[id_block_index + 0x71a:id_block_index + 0x81a])
 			self.debug_print('Raw sign-on:', repr(signon))
-			self.signon = signon
+			self.signon += signon
 
 			# Extract string, unless the version is known to be too old to have a string.
 			if self.version[:3] not in ('v2.', 'v3.'):
@@ -1006,40 +1008,42 @@ class AwardAnalyzer(Analyzer):
 						else:
 							self.string = post_version
 
-			return True
+			found = True
+			break
 
-		# Handle AST modified Award.
-		match = self._ast_pattern.search(file_data)
-		if match:
-			id_block_index = match.start(0)
-			self.debug_print('AST ID block found at', hex(id_block_index))
-
-			# Set static version.
-			self.version = 'AST'
-
-			# Extract AST string as a sign-on.
-			ast_offset = match.start(0)
-			self.signon = util.read_string(file_data[ast_offset + 0x44:ast_offset + 0x144])
-			if self.signon[:1] != 'A':
-				self.debug_print('Using alternate sign-on location')
-				self.signon = util.read_string(file_data[ast_offset + 0x80:ast_offset + 0x180])
-		else:
-			# Handle early XT/286 BIOS.
-			match = self._early_pattern.search(file_data)
+		if not found:
+			# Handle AST modified Award.
+			match = self._ast_pattern.search(file_data)
 			if match:
 				id_block_index = match.start(0)
-				self.debug_print('Early ID block found at', hex(id_block_index))
+				self.debug_print('AST ID block found at', hex(id_block_index))
 
-				# Extract version.
-				self.version = 'v' + match.group(2).decode('cp437', 'ignore')
+				# Set static version.
+				self.version = 'AST'
 
-				# Extract BIOS type as a string.
-				self.string = match.group(1).decode('cp437', 'ignore')
-
-				# Extract sign-on.
-				self.signon = util.read_string(file_data[id_block_index + 0x3b:id_block_index + 0x8c])
+				# Extract AST string as a sign-on.
+				ast_offset = match.start(0)
+				self.signon = util.read_string(file_data[ast_offset + 0x44:ast_offset + 0x144])
+				if self.signon[:1] != 'A':
+					self.debug_print('Using alternate sign-on location')
+					self.signon = util.read_string(file_data[ast_offset + 0x80:ast_offset + 0x180])
 			else:
-				return False
+				# Handle early XT/286 BIOS.
+				match = self._early_pattern.search(file_data)
+				if match:
+					id_block_index = match.start(0)
+					self.debug_print('Early ID block found at', hex(id_block_index))
+
+					# Extract version.
+					self.version = 'v' + match.group(2).decode('cp437', 'ignore')
+
+					# Extract BIOS type as a string.
+					self.string = match.group(1).decode('cp437', 'ignore')
+
+					# Extract sign-on.
+					self.signon = util.read_string(file_data[id_block_index + 0x3b:id_block_index + 0x8c])
+				else:
+					return False
 
 		# Split sign-on lines.
 		# Vertical tab characters may be employed. (??? reported by BurnedPinguin)
