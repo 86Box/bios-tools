@@ -1377,10 +1377,10 @@ class IntelExtractor(Extractor):
 		# Determine header-related sizes and offsets.
 		start_offset = (file_header[90:95] != b'FLASH') and 512 or 0
 
-		version = util.read_string(file_header[start_offset + 112:]) # null-terminated string...
-		header_size = 112 + len(version) + 1
-		remaining = header_size & 31
-		if remaining: # ...aligning the header to 32 bytes
+		version = util.read_string(file_header[start_offset + 112:]) # this assumes the chain name is less than 32 characters
+		header_size = 112 + len(version) + 1                         # and the logical area name is less than 24 characters,
+		remaining = header_size & 31                                 # but there's no fast detection of Intel files otherwise
+		if remaining: # padded to 32 bytes
 			header_size += 32 - remaining
 
 		part_data_offset = start_offset + header_size
@@ -1427,6 +1427,7 @@ class IntelExtractor(Extractor):
 					logical_area = dest_offset = 0
 					logical_area_size = data_length = found_part_size
 				else:
+					f.seek(start_offset)
 					header = f.read(part_data_offset)
 					logical_area, logical_area_size = struct.unpack('<BI', header[32:37])
 					dest_offset, data_length, _, last_part = struct.unpack('<IIBB', header[80:90])
