@@ -448,6 +448,7 @@ class AMIAnalyzer(Analyzer):
 			return False
 		elif self._precolor_date_pattern.search(file_data):
 			self.debug_print('Found potential pre-Color')
+			self.debug_print([x.group(0) for x in self._precolor_date_pattern.finditer(file_data)])
 
 			# Check date, using a different pattern to differentiate core date from build date.
 			match = self._precolor_core_date_pattern.search(file_data)
@@ -2007,7 +2008,7 @@ class PhoenixAnalyzer(Analyzer):
 		additional_info = (match.group(5) or '').strip()
 		if additional_info:
 			if additional_info.lstrip() == additional_info:
-				additional_info = match.group(4).strip() + additional_info.strip()
+				additional_info = (match.group(4) or match.group(2)).strip() + additional_info.strip()
 			if self.signon:
 				if additional_info not in self.signon:
 					self.signon = additional_info + '\n' + self.signon
