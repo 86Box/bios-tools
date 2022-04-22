@@ -183,10 +183,7 @@ class NoInfoAnalyzer(Analyzer):
 	"""Special analyzer for BIOSes which can be identified,
 	   but contain no information to be extracted."""
 
-	def __init__(self, vendor, *args, **kwargs):
-		super().__init__(vendor, *args, **kwargs)
-
-		self._entrypoint_date_pattern = re.compile(b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2})''')
+	_entrypoint_date_pattern = re.compile(b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2})''')
 
 	def can_handle(self, file_data, header_data):
 		# Check if this file can be handled by this specific analyzer.
@@ -197,13 +194,17 @@ class NoInfoAnalyzer(Analyzer):
 		self.version = '?'
 
 		# Look for entrypoint dates.
-		for match in self._entrypoint_date_pattern.finditer(file_data):
+		self.get_entrypoint_dates(file_data)
+
+		return True
+
+	def get_entrypoint_dates(self, file_data):
+		"""Set string to the newest date found after an entrypoint."""
+		for match in NoInfoAnalyzer._entrypoint_date_pattern.finditer(file_data):
 			# Extract the date as a string if newer than any previously-found date.
 			date = match.group(1).decode('cp437', 'ignore')
 			if not self.string or util.date_gt(date, self.string, util.date_pattern_mmddyy):
 				self.string = date
-
-		return True
 
 	def has_strings(self, file_data):
 		"""Returns True if this analyzer can handle the given file data."""
@@ -1524,9 +1525,11 @@ class IBMSurePathAnalyzer(Analyzer):
 			# Look for later compressed SurePath.
 			if self._ibm_later_pattern.search(file_data):
 				self.version = 'SurePath'
-				return True
 			else:
 				return False
+
+		# Look for entrypoint dates.
+		NoInfoAnalyzer.get_entrypoint_dates(self, file_data)
 
 		# Determine location of the version.
 		match = self._surepath_pattern.search(file_data)
@@ -1551,7 +1554,7 @@ class IBMSurePathAnalyzer(Analyzer):
 				match = self._apricot_version_pattern.search(file_data)
 				if match:
 					self.signon = self.signon.strip() + '\n' + match.group(0).decode('cp437', 'ignore')[4:].strip()
-			else:
+			elif not self.version:
 				return False
 
 		return True
