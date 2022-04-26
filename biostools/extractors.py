@@ -2438,9 +2438,9 @@ class VMExtractor(ArchiveExtractor):
 				fn = in_f.read(12) # filename
 				if fn == None:
 					break
-				idx = fn.find(b'\x00')
-				if idx > -1:
-					fn = fn[:idx]
+				nul_index = fn.find(b'\x00')
+				if nul_index > -1:
+					fn = fn[:nul_index]
 				if len(fn) == 0:
 					break
 				fn = fn.decode('cp437', 'ignore')
