@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import array, codecs, datetime, io, itertools, math, os, re, shutil, struct, subprocess, sys, time
+import array, codecs, datetime, io, itertools, math, os, re, shutil, socket, struct, subprocess, sys, time
 try:
 	import PIL.Image
 except ImportError:
@@ -162,9 +162,9 @@ class ArchiveExtractor(Extractor):
 		# Remove duplicates and sort by total children count.
 		dirs = list(set(dirs))
 		dirs.sort(key=lambda x: (x[1], x[0]))
-		
+
 		# See where we can create a symlink.
-		temp_file_name = 'biostools_{0}_{1}'.format(hex(os.getpid())[2:], hex(id(self))[2:])
+		temp_file_name = 'biostools_{0}_{1}_{2}'.format(socket.gethostname(), hex(os.getpid())[2:], hex(id(self))[2:])
 		self._temp_paths = []
 		for dir_path, dir_children in dirs:
 			# Test symlink creation.
