@@ -269,8 +269,7 @@ int main(int argc, char *argv[])
 			Offset2 = Offset1;
 		}
 
-		if ((argv[0][0] != 0x01) || (argv[0][1] != 0x00))
-			InitRemainder(BIOSImage, FileLength);
+		InitRemainder(BIOSImage, FileLength);
 
 		len = BIOSIdentification[i].Handler
 		    (BIOSImage, FileLength, BIOSOffset, Offset1, Offset2);

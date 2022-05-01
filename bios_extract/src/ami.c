@@ -640,10 +640,11 @@ AFUDOSExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		SetRemainder(((unsigned char *)hdr) - BIOSImage, hdr->ROMSize, FALSE);
 		SaveRemainder(BIOSImage);
 		free(remainder_buf);
+		remainder_buf = NULL;
 		rename("remainder.rom", "afudos_remainder.rom");
 	}
 
-	char *argv[] = {"\x01", "afudos.bin"};
+	char *argv[] = {"", "afudos.bin"};
 	int ret = main(2, argv);
 	unlink("afudos.bin");
 
