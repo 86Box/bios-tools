@@ -119,9 +119,9 @@ class ArchiveExtractor(Extractor):
 			b'''Rar!\\x1A\\x07|''' # rar
 			b'''7z\\xBC\\xAF\\x27\\x1C|''' # 7z
 			b'''MSCF|''' # cab
-			b'''(\\x1F\\x8B|''' # gzip
+			b'''\\x1F\\x8B|''' # gzip
 			b'''BZh|''' # bzip2
-			b'''\\xFD7zXZ\\x00)|''' # xz
+			b'''\\xFD7zXZ\\x00|''' # xz
 			b'''LHA\\x20|''' # lha
 			b'''ZOO''' # zoo
 		)
@@ -193,9 +193,9 @@ class ArchiveExtractor(Extractor):
 			return False
 
 		# Do the actual extraction.
-		return self._extract_archive(file_path, dest_dir, rename=bool(match.group(1)))
+		return self._extract_archive(file_path, dest_dir)
 
-	def _extract_archive(self, file_path, dest_dir, remove=True, rename=False):
+	def _extract_archive(self, file_path, dest_dir, remove=True):
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
 			return True
@@ -236,12 +236,14 @@ class ArchiveExtractor(Extractor):
 		if len(files_extracted) < 1:
 			return False
 
-		# Rename single file if requested.
-		if rename and len(files_extracted) == 1:
-			try:
-				shutil.move(os.path.join(dest_dir, files_extracted[0]), os.path.join(dest_dir, os.path.splitext(os.path.basename(file_path))[0]))
-			except:
-				pass
+		# Rename single file. (gzip/bzip2/etc.)
+		if len(files_extracted) == 1 and link_path != file_path_abs:
+			link_name = os.path.splitext(os.path.basename(link_path))[0]
+			if files_extracted[0][:len(link_name)] == link_name:
+				try:
+					shutil.move(os.path.join(dest_dir, files_extracted[0]), os.path.join(dest_dir, os.path.splitext(os.path.basename(file_path))[0] + files_extracted[0][len(link_name):]))
+				except:
+					pass
 
 		# Remove archive file.
 		if remove:
@@ -676,12 +678,17 @@ class DiscardExtractor(Extractor):
 			b'''\\xFF\\xD8\\xFF|''' # JPEG
 			b'''GIF8|''' # GIF
 			b'''\\x89PNG|''' # PNG
-			# documents (a cursory check for HTML ought not to upset anyone)
-			b'''%PDF|\\xD0\\xCF\\x11\\xE0\\xA1\\xB1\\x1A\\xE1|\\x3F\\x5F\\x03\\x00|<(?:\![Dd][Oo][Cc][Tt][Yy][Pp][Ee]|[Hh][Tt][Mm][Ll])[ >]|'''
+			# documents
+			b'''%PDF|''' # PDF
+			b'''\\xD0\\xCF\\x11\\xE0\\xA1\\xB1\\x1A\\xE1|''' # Office (mszip)
+			b'''\\x3F\\x5F\\x03\\x00|''' # WinHelp
+			b'''<(?:\\![Dd][Oo][Cc][Tt][Yy][Pp][Ee]|[Hh][Tt][Mm][Ll])[ >]|''' # HTML (a cursory check ought not to upset anyone)
 			# executables
-			b'''(\\x7FELF)|'''
+			b'''(\\x7FELF)|''' # ELF
 			# reports
-			b'''CPU-Z TXT Report|\s{7}File:   A|-+\[ AIDA32 |HWiNFO64 Version |3DMARK2001 PROJECT|Report Dr. Hardware|\r\n(?:\s+HWiNFO v|\r\n\s+\r\n\s+Microsoft Diagnostics version )|SIV[^\s]+ - System Information Viewer V|UID,Name,Score,'''
+			b'''CPU-Z TXT Report|\\s{7}File:   A|-+\\[ AIDA32 |HWiNFO64 Version |3DMARK2001 PROJECT|Report Dr. Hardware|'''
+			b'''\\r\\n(?:\\s+HWiNFO v|\\r\\n\\s+\\r\\n\\s+Microsoft Diagnostics version )|'''
+			b'''SIV[^\\s]+ - System Information Viewer V|UID,Name,Score,'''
 		)
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
@@ -2367,11 +2374,8 @@ class VMExtractor(ArchiveExtractor):
 		exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'
 		exe_path = os.path.join(dest_dir, exe_name)
 		image_path = os.path.join(dest_dir, util.random_name(8) + '.img')
-		try:
-			shutil.copy2(file_path, exe_path)
-			shutil.copy2(os.path.join(self._dep_dir, floppy_media), image_path)
-		except:
-			return True
+		shutil.copy2(file_path, exe_path)
+		shutil.copy2(os.path.join(self._dep_dir, floppy_media), image_path)
 
 		# Create batch file for calling the executable.
 		bat_path = os.path.join(dest_dir, 'autoexec.bat')
@@ -2401,7 +2405,7 @@ class VMExtractor(ArchiveExtractor):
 			# Flag success.
 			ret = dest_dir
 		else:
-			ret = True
+			ret = False
 
 		# Remove image.
 		try:
