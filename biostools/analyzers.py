@@ -1518,7 +1518,7 @@ class IBMSurePathAnalyzer(Analyzer):
 			b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  (?:IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4|11998811,,  ([0-9])\\5([0-9])\\6([0-9])\\7([0-9])\\8  IIBBMM  CCOORRPPOORRAATTIIOONN)  (?:--  )?AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD|'''
 			b'''\\(C\\) COPYRIGHT (?:IBM CORPORATION 1981, [0-9]{4}|1981, [0-9]{4} IBM CORPORATION) (?:- )?ALL RIGHTS RESERVED[ \\x0D\\x0A]*(?:[\\x00\\xFF]|US Government Users)'''
 		)
-		self._ibm_later_pattern = re.compile(b'''\\xAA{8}\\x55{8}IBM PC Co\\. BIOS |PS/1 POWER MANAGEMENT\\x00''')
+		self._ibm_later_pattern = re.compile(b'''\\xAA{8}\\x55{8}IBM PC Co\\. BIOS |PS/1 POWER MANAGEMENT\\x00|  IBM Hibernation Code  ''')
 		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
 		self._apricot_pattern = re.compile(b'''@\\(#\\)(?:Apricot .*|XEN-PC) BIOS [\\x20-\\x7E]+''')
 		self._apricot_version_pattern = re.compile(b'''@\\(#\\)Version [\\x20-\\x7E]+''')
@@ -1691,7 +1691,7 @@ class MRAnalyzer(Analyzer):
 		return True
 
 	def _version_newer(self, line, match):
-		'''^[A-Z ]{7} \\((?:r|tm)\\)  (V(?:[^ ']+))(?: (.+))?$'''
+		'''[A-Z ]{7} \\((?:r|tm)\\)  (V[^ ']+)(?: (.+))?$'''
 
 		# Extract version.
 		self.version = match.group(1)
@@ -1699,12 +1699,12 @@ class MRAnalyzer(Analyzer):
 		# Extract part number as a string if one was found.
 		part_number = match.group(2)
 		if part_number:
-			self.string = part_number
+			self.string = part_number.strip()
 
 		return True
 
 	def _version_older(self, line, match):
-		'''^Ver: (V[^-]+)-(.+)'''
+		'''Ver:? (V[^-]+)(?:-| +Port )(.+)'''
 
 		# Extract version.
 		self.version = match.group(1)
