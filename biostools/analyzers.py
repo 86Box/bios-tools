@@ -1920,6 +1920,7 @@ class PhoenixAnalyzer(Analyzer):
 					if match:
 						end = match.end(0)
 						if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
+							self.version = '?' # there may be no version at all (Wearnes LPX)
 							self.signon = util.read_string(file_data[end:end + 256])
 							self.debug_print('Raw sign-on', signon_log, repr(self.signon))
 						else:
