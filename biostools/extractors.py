@@ -1065,7 +1065,20 @@ class ImageExtractor(Extractor):
 		self._write_type(dest_dir_0, image.format)
 
 		# Save output image.
-		return self._save_image(image, dest_dir_0)
+		if image.format in ('GIF', 'PNG', 'JPEG'):
+			if image.format == 'JPEG':
+				ext = 'jpg'
+			else:
+				ext = image.format.lower()
+			try:
+				f = open(os.path.join(dest_dir_0, 'image.' + ext), 'wb')
+				f.write(file_data)
+				f.close()
+				return True
+			except:
+				return False
+		else:
+			return self._save_image(image, dest_dir_0)
 
 	def _read_palette_epav2(self, file_data, rgbs_offset, rgb=True):
 		# Stop if this file has no palette.
