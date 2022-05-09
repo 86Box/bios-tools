@@ -748,27 +748,29 @@ class ImageExtractor(Extractor):
 	def convert_inline(self, dest_dir_files, dest_dir_0):
 		# Detect and convert image files.
 		for dest_dir_file in dest_dir_files:
-			# Read 8 bytes, which is enough to ascertain any potential logo type.
+			# Read 64 KB, which is enough to ascertain any potential logo type,
+			# even if embedded in the file. (Monorail SiS 550x: PCX in AMI module)
 			dest_dir_file_path = os.path.join(dest_dir_0, dest_dir_file)
 			if os.path.isdir(dest_dir_file_path):
 				continue
 			f = open(dest_dir_file_path, 'rb')
-			dest_dir_file_header = f.read(16)
+			dest_dir_file_header = f.read(65536)
 			f.close()
 
 			# Run ImageExtractor.
 			image_dest_dir = dest_dir_file_path + ':'
-			if self.extract(dest_dir_file_path, dest_dir_file_header, image_dest_dir, image_dest_dir):
+			if self.extract(dest_dir_file_path, dest_dir_file_header, image_dest_dir, image_dest_dir, any_offset=True):
 				# Remove destination directory if it was created but is empty.
 				util.rmdirs(image_dest_dir)
 
-	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0, any_offset=False):
 		# Stop if PIL is not available or this file is too small.
 		if not PIL.Image or len(file_header) < 16:
 			return False
 
 		# Determine if this is an image, and which type it is.
 		func = None
+		image_data_offset = 0
 		if file_header[:4] == b'AWBM':
 			# Get width and height for a v2 EPA.
 			width, height = struct.unpack('<HH', file_header[4:8])
@@ -808,8 +810,11 @@ class ImageExtractor(Extractor):
 				func = self._convert_epav1
 			else:
 				# Determine if this is a common image format.
-				if self._pil_pattern.match(file_header):
+				match = (any_offset and self._pil_pattern.search or self._pil_pattern.match)(file_header)
+				if match:
 					func = self._convert_pil
+					image_data_offset = match.start(0)
+					self.debug_print('PIL signature', match.group(0), 'on', file_path, '@', hex(image_data_offset))
 				else:
 					# Stop if this is not an image.
 					return False
@@ -818,26 +823,30 @@ class ImageExtractor(Extractor):
 		if not util.try_makedirs(dest_dir_0):
 			return True
 
-		# Read up to 16 MB as a safety net.
-		file_header += util.read_complement(file_path, file_header)
+		# Read up to 16 MB (+ data offset) as a safety net.
+		max_size = 16777216 + image_data_offset
+		file_header += util.read_complement(file_path, file_header, max_size)
 
 		# Stop if the file was cut off, preventing parsing exceptions.
-		if len(file_header) == 16777216:
+		if len(file_header) == max_size:
 			return True
 
 		# Run extractor function, and stop if it was not successful.
-		if not func(file_header, width, height, dest_dir_0):
+		self.debug_print('Calling', func.__name__, 'on', file_path)
+		ret = func(file_header, image_data_offset, width, height, dest_dir_0)
+		if not ret:
 			return True
 
-		# Remove original file.
-		try:
-			os.remove(file_path)
-		except:
-			pass
+		# Remove original file if it's the entire image (with a maximum margin of 1 byte).
+		if ret == True or len(file_header) - ret <= 1:
+			try:
+				os.remove(file_path)
+			except:
+				pass
 
 		return dest_dir_0
 
-	def _convert_epav1(self, file_data, width, height, dest_dir_0):
+	def _convert_epav1(self, file_data, image_data_offset, width, height, dest_dir_0):
 		# Write file type as a header.
 		self._write_type(dest_dir_0, 'EPA v1')
 
@@ -890,7 +899,7 @@ class ImageExtractor(Extractor):
 		# Save output image.
 		return self._save_image(image, dest_dir_0)
 
-	def _convert_epav2_4b(self, file_data, width, height, dest_dir_0):
+	def _convert_epav2_4b(self, file_data, image_data_offset, width, height, dest_dir_0):
 		# Read palette if the file contains one, while
 		# writing the file type as a header accordingly.
 		palette = self._read_palette_epav2(file_data, -52, False)
@@ -944,7 +953,7 @@ class ImageExtractor(Extractor):
 		# Save output image.
 		return self._save_image(image, dest_dir_0)
 
-	def _convert_epav2_8b(self, file_data, width, height, dest_dir_0):
+	def _convert_epav2_8b(self, file_data, image_data_offset, width, height, dest_dir_0):
 		# Read palette if the file contains one, while
 		# writing the file type as a header accordingly.
 		palette = self._read_palette_epav2(file_data, -772)
@@ -977,7 +986,7 @@ class ImageExtractor(Extractor):
 		# Save output image.
 		return self._save_image(image, dest_dir_0)
 
-	def _convert_pgx(self, file_data, width, height, dest_dir_0):
+	def _convert_pgx(self, file_data, image_data_offset, width, height, dest_dir_0):
 		# Read palette if the file contains one, while
 		# writing the file type as a header accordingly.
 		if width < 0:
@@ -1047,18 +1056,18 @@ class ImageExtractor(Extractor):
 		# Save output image.
 		return self._save_image(image, dest_dir_0)
 
-	def _convert_pil(self, file_data, width, height, dest_dir_0):
+	def _convert_pil(self, file_data, image_data_offset, width, height, dest_dir_0):
 		# Load image.
 		try:
-			image = PIL.Image.open(io.BytesIO(file_data))
-			if not image:
-				raise Exception('no image')
+			file_data_io = io.BytesIO(file_data[image_data_offset:])
+			image = PIL.Image.open(file_data_io)
 
 			# Don't save image if it's too small.
 			x, y = image.size
 			if (x * y) < 10000:
 				raise Exception('too small')
 		except:
+			self.debug_print('PIL open failed')
 			return False
 
 		# Write the file type as a header.
@@ -1072,13 +1081,16 @@ class ImageExtractor(Extractor):
 				ext = image.format.lower()
 			try:
 				f = open(os.path.join(dest_dir_0, 'image.' + ext), 'wb')
-				f.write(file_data)
+				f.write(file_data[image_data_offset:])
 				f.close()
 				return True
 			except:
+				self.debug_print('As-is copy failed')
 				return False
+		elif self._save_image(image, dest_dir_0):
+			return file_data_io.tell()
 		else:
-			return self._save_image(image, dest_dir_0)
+			return False
 
 	def _read_palette_epav2(self, file_data, rgbs_offset, rgb=True):
 		# Stop if this file has no palette.
@@ -1103,6 +1115,8 @@ class ImageExtractor(Extractor):
 			image.save(image_path)
 			return True
 		except:
+			self.debug_print('PIL save failed')
+
 			# Clean up.
 			try:
 				os.remove(image_path)
@@ -1115,6 +1129,7 @@ class ImageExtractor(Extractor):
 			return False
 
 	def _write_type(self, dest_dir_0, identifier):
+		self.debug_print('Type:', identifier)
 		try:
 			f = open(os.path.join(dest_dir_0, ':header:'), 'w')
 			f.write(identifier)
