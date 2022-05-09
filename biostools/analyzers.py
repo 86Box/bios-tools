@@ -1796,7 +1796,7 @@ class PhoenixAnalyzer(Analyzer):
 		super().__init__('Phoenix', *args, **kwargs)
 
 		# "Phoenix ROM BIOS" (Dell Latitude CP/CPI)
-		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess''')
+		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess''')
 		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved''')
 		self._hp_signon_pattern = re.compile(b'''Version +[\\x21-\\x7E]+ +HP [\\x20-\\x7E]+''')
 		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Ax86)
