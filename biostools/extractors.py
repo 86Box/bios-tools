@@ -1958,10 +1958,16 @@ class PEExtractor(ArchiveExtractor):
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Determine if this is a PE/MZ.
+		if file_header[:2] != b'MZ':
+			return False
+
 		# The MZ signature is way too short. Check extension as well to be safe.
 		# This also stops :header: files from being re-processed as flash tools.
-		if file_header[:2] != b'MZ' or file_path[-4:].lower() not in ('.exe', '.dll', '.scr'):
-			return False
+		if file_path[-4:].lower() not in ('.exe', '.dll', '.scr'):
+			# Cover PKZIP self-extractor (with PKLITE-compressed stub)
+			# with an incorrect extension. This does appear to happen.
+			if file_header[30:36] != b'PKLITE' or b'PK\x03\x04' not in file_header:
+				return False
 
 		# Read up to 16 MB as a safety net.
 		file_header += util.read_complement(file_path, file_header)
@@ -2294,7 +2300,8 @@ class VMExtractor(ArchiveExtractor):
 		self._floppy_pattern = re.compile(
 			b'''( FastPacket V[0-9])|''' # Siemens Nixdorf FastPacket
 			b''', Sydex, Inc\\. All Rights Reserved\\.|''' # IBM Sydex
-			b'''Disk eXPress Self-Extracting Diskette Image''' # HP DXP
+			b'''Disk eXPress Self-Extracting Diskette Image|''' # HP DXP
+			b'''(\\x00Diskette Image Decompression Utility\\.\\x00)''' # NEC in-house
 		)
 		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
 
@@ -2333,6 +2340,8 @@ class VMExtractor(ArchiveExtractor):
 		if file_header[:2] == b'MZ':
 			if file_header[28:32] == b'LZ91':
 				extractor = self._extract_lzexe
+			elif file_header[30:36] == b'PKLITE' and b'PK\x03\x04' not in file_header: # skip PKZIP self-extractor with PKLITE-compressed stub
+				extractor = self._extract_pklite
 			else:
 				match = self._floppy_pattern.search(file_header)
 				if match:
@@ -2350,6 +2359,7 @@ class VMExtractor(ArchiveExtractor):
 			return True
 
 		# Run extractor.
+		self.debug_print('Running', extractor.__name__)
 		return extractor(file_path, file_header, dest_dir, dest_dir_0, **extractor_kwargs)
 
 	def _run_qemu(self, hdd=None, hdd_snapshot=True, floppy=None, floppy_snapshot=True, vvfat=None, boot='c'):
@@ -2375,7 +2385,7 @@ class VMExtractor(ArchiveExtractor):
 		try:
 			subprocess.run(args, timeout=60, input=None, stdout=self._devnull, stderr=subprocess.STDOUT)
 		except:
-			pass
+			self.debug_print('Running QEMU failed (timed out?)')
 
 	def _extract_floppy(self, file_path, file_header, dest_dir, dest_dir_0, *, match):
 		"""Extract DOS-based floppy self-extractors."""
@@ -2393,6 +2403,17 @@ class VMExtractor(ArchiveExtractor):
 		# Create batch file for calling the executable.
 		bat_path = os.path.join(dest_dir, 'autoexec.bat')
 		f = open(bat_path, 'wb')
+		if match.group(2): # NEC in-house
+			# This SFX has trouble with (at least) the FreeDOS memory manager.
+			# Work around that by moving config.sys out of the way to disable the
+			# memory manager, rebooting the system, then executing the SFX proper.
+			f.write(b'c:\r\n')
+			f.write(b'if not exist config.sys goto sfx\r\n')
+			f.write(b'move /y config.sys config.old\r\n')
+			f.write(b'echo o cf9 6|debug\r\n') # TRC reset
+			f.write(b'exit\r\n') # just in case
+			f.write(b':sfx\r\n')
+			f.write(b'move /y config.old config.sys\r\n') # just in case again (snapshot shouldn't persist changes)
 		f.write(b'd:' + exe_name.encode('cp437', 'ignore'))
 		if match.group(1): # FastPacket
 			f.write(b' /b a:\r\n')
@@ -2461,6 +2482,7 @@ class VMExtractor(ArchiveExtractor):
 				if len(fn) == 0:
 					break
 				fn = fn.decode('cp437', 'ignore')
+				self.debug_print('ETI file:', fn)
 				in_f.read(5) # rest of header
 				size = struct.unpack('<I', in_f.read(4))[0] # size
 
@@ -2577,6 +2599,85 @@ class VMExtractor(ArchiveExtractor):
 			# Remove unpacked file.
 			try:
 				os.remove(unpacked_path)
+			except:
+				pass
+
+			return ret
+
+		# Keep the unpacked file around (with a dummy
+		# header file) for other extractors to process.
+		try:
+			open(os.path.join(dest_dir, ':header:'), 'wb').close()
+		except:
+			pass
+		return dest_dir
+
+	def _extract_pklite(self, file_path, file_header, dest_dir, dest_dir_0):
+		"""Extract PKLITE executables and run them through the same pipeline. This is
+		   required for the NEC in-house floppy extractor with its PKLITE-compressed stub."""
+
+		# Copy original file to the destination directory.
+		exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'
+		exe_path = os.path.join(dest_dir, exe_name)
+		try:
+			shutil.copy2(file_path, exe_path)
+		except:
+			return True
+
+		# Create batch file for extraction.
+		bat_path = os.path.join(dest_dir, 'autoexec.bat')
+		f = open(bat_path, 'wb')
+		f.write(b'd:\r\nc:pklite -x ' + exe_name.encode('cp437', 'ignore') + b'\r\n')
+		f.close()
+
+		# Run QEMU.
+		self._run_qemu(hdd=os.path.join(self._dep_dir, 'freedos.img'), vvfat=dest_dir)
+
+		# PKLITE creates a temporary file and tries to replace the original file with it.
+		# At least in my Windows-based testing, this triggers an assertion failure in
+		# vvfat. Therefore, check if the temporary file is present and move it into place.
+		for tmp_name in ('pktmp$$$.$$$', 'PKTMP$$$.$$$'):
+			tmp_path = os.path.join(dest_dir, tmp_name)
+			try:
+				tmp_size = os.path.getsize(tmp_path)
+			except:
+				continue
+			if tmp_size > 0:
+				self.debug_print('Using PKLITE temporary file:', tmp_path)
+				try:
+					os.remove(exe_path)
+				except:
+					pass
+				try:
+					shutil.move(tmp_path, exe_path)
+				except:
+					self.debug_print('PKLITE temporary file move failed')
+					exe_path = tmp_path
+
+		# Remove batch file.
+		util.remove_all((bat_path,))
+
+		# Read unpacked file.
+		decomp_file_data = util.read_complement(exe_path)
+
+		# Strip any remains of PKLITE to avoid infinite loops.
+		if decomp_file_data[30:36] == b'PKLITE':
+			decomp_file_data = decomp_file_data[:30] + b'\xFF' + decomp_file_data[31:]
+
+		# Run this same extractor with detectors pointed at the unpacked data.
+		ret = self.extract(file_path, decomp_file_data, dest_dir, dest_dir_0)
+
+		# Remove original file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		# Stop if extraction was successful.
+		if ret:
+			# Remove unpacked file.
+			try:
+				os.remove(exe_path)
 			except:
 				pass
 
