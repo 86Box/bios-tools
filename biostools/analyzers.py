@@ -2477,7 +2477,7 @@ class SystemSoftAnalyzer(Analyzer):
 		super().__init__('SystemSoft', *args, **kwargs)
 
 		self._systemsoft_pattern = re.compile(b'''(?:SystemSoft|Insyde Software Presto) BIOS ''')
-		self._version_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x7E]+) Vers(?:\\.|ion) 0?([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
+		self._version_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x7E]+) (?:Vers(?:\\.|ion) 0?([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?| *\\(c\\))''')
 		self._version_mobilepro_pattern = re.compile(b'''(Insyde Software Presto|SystemSoft MobilePRO) BIOS Version ([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
 		self._string_for_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x27\\x29-\\x7E]+)\\(''')
 		self._string_scu_pattern = re.compile(b''' SCU [Ff]or ([\\x20-\\x7E]+) [Cc]hipset''')
@@ -2491,8 +2491,10 @@ class SystemSoftAnalyzer(Analyzer):
 		# Look for the all-in-one version + chipset string.
 		aio_match = self._version_pattern.search(file_data)
 		if aio_match:
-			# Extract version.
-			self.version = aio_match.group(2).decode('cp437', 'ignore')
+			self.debug_print('All-in-one version string:', aio_match.group(0))
+
+			# Extract version, which may or may not exist. (HP OmniBook XE2)
+			self.version = (aio_match.group(2) or b'?').decode('cp437', 'ignore')
 
 			# Unknown version. (NCR Notepad 3130)
 			if len(self.version) <= 2:
@@ -2509,6 +2511,8 @@ class SystemSoftAnalyzer(Analyzer):
 		# Look for the MobilePRO/Presto version string.
 		mp_match = self._version_mobilepro_pattern.search(file_data)
 		if mp_match:
+			self.debug_print('MobilePRO version string:', mp_match.group(0))
+
 			# Extract version.
 			self.version = (mp_match.group(1).split(b' ')[-1] + b' ' + mp_match.group(2)).decode('cp437', 'ignore')
 
@@ -2529,6 +2533,8 @@ class SystemSoftAnalyzer(Analyzer):
 			if not match:
 				match = self._string_for_pattern.search(file_data)
 			if match:
+				self.debug_print('SCU/chipset string:', match.group(0))
+
 				# Prepend chipset into the string if not already found.
 				chipset = match.group(1).decode('cp437', 'ignore')
 				if self.string[:len(chipset)] != chipset:
