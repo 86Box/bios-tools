@@ -903,12 +903,12 @@ class AwardAnalyzer(Analyzer):
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\\([a-zA-Z0-9]{1,8}\\) EVALUATION ROM - NOT FOR SALE$''')
 		self._gigabyte_hefi_pattern = re.compile(b'''EFI CD/DVD Boot Option''')
-		self._id_block_pattern = re.compile(b'''(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}IBM COMPATIBLE |(?:[0-9]{2}/[0-9]{2}/[0-9]{4} {4})IBM COMPATIBLE [0-9]+ BIOS COPYRIGHT Award Software Inc\\.''')
+		self._id_block_pattern = re.compile(b'''(?:(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}| Award Softwar)|IBM COMPATIBLE |(?:[0-9]{2}/[0-9]{2}/[0-9]{4} {4})IBM COMPATIBLE [0-9]+ BIOS COPYRIGHT Award Software Inc\\.''')
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \\(c\\) (?:[^\r]+)\r\n)?Copyright \\(c\\) (?:NCR \\& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
 		# "V" instead of "v" (286 Modular BIOS V3.03 NFS 11/10/87)
-		self._version_pattern = re.compile(''' (?:v([^-\\s]+)|V(?:ersion )?[^0-9]*([0-9]\\.(?:[0-9]{2}|[0-9][A-Z])))(?:[. ]([\\x20-\\x7E]+))?''')
+		self._version_pattern = re.compile(''' (?:v([^-\\s]+)|V(?:ersion )?[^0-9]*([0-9]\\.[0-9][0-9A-Z]?))(?:[. ]([\\x20-\\x7E]+))?''')
 
 	def can_handle(self, file_data, header_data):
 		if not self._award_pattern.search(file_data):
