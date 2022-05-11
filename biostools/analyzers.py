@@ -183,7 +183,7 @@ class NoInfoAnalyzer(Analyzer):
 	"""Special analyzer for BIOSes which can be identified,
 	   but contain no information to be extracted."""
 
-	_entrypoint_date_pattern = re.compile(b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2})''')
+	_entrypoint_date_pattern = re.compile(b'''(?:\\xEA[\\x00-\\xFF]{2}\\x00\\xF0|\\xE9[\\x00-\\xFF]{2})((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2})''')
 
 	def can_handle(self, file_data, header_data):
 		# Check if this file can be handled by this specific analyzer.
@@ -1336,8 +1336,8 @@ class CompaqAnalyzer(NoInfoAnalyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Compaq', *args, **kwargs)
 
-		self._copyright_pattern = re.compile(b'''Copyright COMPAQ Computer Corporation''')
-		self._error_pattern = re.compile(b'''Insert (?:DIAGNOSTIC diskette in Drive |COMPAQ DOS diskette)|You must load COMPAQ BASIC''')
+		self._copyright_pattern = re.compile(b'''Copyright ([0-9]+ by )?COMPAQ Computer Corporation''')
+		self._error_pattern = re.compile(b'''Insert (?:DIAGNOSTIC diskette in Drive |COMPAQ DOS diskette)|You must load COMPAQ BASIC|[0-9]{2}/[0-9]{2}/[0-9]{2} +[^ ]+ +Copyright [0-9]+ by COMPAQ Computer Corporation''')
 
 	def has_strings(self, file_data):
 		return self._copyright_pattern.search(file_data) and self._error_pattern.search(file_data)
