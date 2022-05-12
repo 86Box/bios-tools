@@ -903,7 +903,7 @@ class AwardAnalyzer(Analyzer):
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\\([a-zA-Z0-9]{1,8}\\) EVALUATION ROM - NOT FOR SALE$''')
 		self._gigabyte_hefi_pattern = re.compile(b'''EFI CD/DVD Boot Option''')
-		self._id_block_pattern = re.compile(b'''(?:(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}| Award Softwar)|IBM COMPATIBLE |(?:[0-9]{2}/[0-9]{2}/[0-9]{4} {4})IBM COMPATIBLE [0-9]+ BIOS COPYRIGHT Award Software Inc\\.''')
+		self._id_block_pattern = re.compile(b'''(?:(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}| Award Softwar)IBM COMPATIBLE |[0-9]{2}/[0-9]{2}/[0-9]{4} {4}IBM COMPATIBLE [0-9]+ BIOS COPYRIGHT Award Software Inc\\.''')
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \\(c\\) (?:[^\r]+)\r\n)?Copyright \\(c\\) (?:NCR \\& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
@@ -924,7 +924,7 @@ class AwardAnalyzer(Analyzer):
 		for match in self._id_block_pattern.finditer(file_data):
 			# Determine location of the identification block.
 			id_block_index = match.start(0)
-			self.debug_print('ID block starts at', hex(id_block_index))
+			self.debug_print('ID block starts at', hex(id_block_index), match.group(0))
 
 			# Extract version.
 			version_string = util.read_string(file_data[id_block_index + 0x61:id_block_index + 0xa1])
@@ -1048,7 +1048,7 @@ class AwardAnalyzer(Analyzer):
 					self.string = match.group(1).decode('cp437', 'ignore')
 
 					# Extract sign-on.
-					self.signon = util.read_string(file_data[id_block_index + 0x3b:id_block_index + 0x8c])
+					self.signon = util.read_string(file_data[id_block_index + 0x3c:id_block_index + 0x8c])
 				else:
 					return False
 
