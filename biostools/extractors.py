@@ -1147,16 +1147,74 @@ class FATExtractor(ArchiveExtractor):
 		if len(file_header) < 512:
 			return False
 
-		# Stop if there's no bootstrap jump.
-		if (file_header[0] != 0xEB or file_header[2] != 0x90) and file_header[0] != 0xE9:
-			return False
+		# Stop if this doesn't appear to be a FAT filesystem.
+		if not self._is_fat(file_header):
+			# Check for 4-byte AST filesystem followed by FAT filesystem.
+			ast_size, unknown = struct.unpack('<HH', file_header[:4])
+			try:
+				file_size = os.path.getsize(file_path)
+			except:
+				file_size = 2 ** 32
+			if (ast_size * 512) <= (file_size - 4) and self._is_fat(file_header[4:]):
+				self.debug_print('AST size', hex(ast_size), 'sectors, unknown field', hex(unknown))
 
-		# Stop if there's no media descriptor type.
-		if file_header[21] < 0xF0:
+				# Create destination directory and stop if it couldn't be created.
+				if not util.try_makedirs(dest_dir):
+					return True
+
+				# Separate payload and header.
+				try:
+					# Open AST file.
+					in_f = open(file_path, 'rb')
+
+					# Read header.
+					header = in_f.read(4)
+
+					# Copy payload.
+					try:
+						out_f = open(os.path.join(dest_dir, 'ast.bin'), 'wb')
+						data = b' '
+						while data:
+							data = in_f.read(1048576)
+							out_f.write(data)
+
+						out_f.close()
+					except:
+						in_f.close()
+						return True
+
+					# Write header.
+					try:
+						out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
+						out_f.write(header)
+						out_f.close()
+					except:
+						pass
+
+					# Remove AST file.
+					in_f.close()
+					os.remove(file_path)
+				except:
+					pass
+
+				# Return destination directory.
+				return dest_dir
+
 			return False
 
 		# Extract this as an archive.
 		return self._extract_archive(file_path, dest_dir)
+
+	def _is_fat(self, file_header):
+		# Check for bootstrap jump.
+		if (file_header[0] != 0xEB or file_header[2] != 0x90) and file_header[0] != 0xE9:
+			return False
+
+		# Check for media descriptor type.
+		if file_header[21] < 0xF0:
+			return False
+
+		return True
 
 
 class HexExtractor(Extractor):
