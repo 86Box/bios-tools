@@ -2410,10 +2410,10 @@ class VMExtractor(ArchiveExtractor):
 		# All signatures should be within the first 32 KB or so.
 		extractor = None
 		extractor_kwargs = {}
-		if file_header[:2] == b'MZ':
+		if file_header[:2] == b'MZ' and b'PK\x03\x04' not in file_header: # skip self-extractors with compressed stubs
 			if file_header[28:32] == b'LZ91':
 				extractor = self._extract_lzexe
-			elif file_header[30:36] == b'PKLITE' and b'PK\x03\x04' not in file_header: # skip PKZIP self-extractor with PKLITE-compressed stub
+			elif file_header[30:36] == b'PKLITE':
 				extractor = self._extract_pklite
 			else:
 				match = self._floppy_pattern.search(file_header)
