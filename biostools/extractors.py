@@ -2685,6 +2685,10 @@ class VMExtractor(ArchiveExtractor):
 		# Keep the unpacked file around (with a dummy
 		# header file) for other extractors to process.
 		try:
+			shutil.move(exe_path, os.path.join(dest_dir, os.path.basename(file_path)))
+		except:
+			pass
+		try:
 			open(os.path.join(dest_dir, ':header:'), 'wb').close()
 		except:
 			pass
@@ -2763,6 +2767,10 @@ class VMExtractor(ArchiveExtractor):
 
 		# Keep the unpacked file around (with a dummy
 		# header file) for other extractors to process.
+		try:
+			shutil.move(exe_path, os.path.join(dest_dir, os.path.basename(file_path)))
+		except:
+			pass
 		try:
 			open(os.path.join(dest_dir, ':header:'), 'wb').close()
 		except:
