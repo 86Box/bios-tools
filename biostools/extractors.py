@@ -24,6 +24,9 @@ except ImportError:
 from . import util
 
 class Extractor:
+	def __init__(self):
+		self.debug = True
+
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract the given file into one of the destination directories:
 		   dest_dir allows extracted files to be reprocessed in the next run,
@@ -2375,7 +2378,8 @@ class VMExtractor(ArchiveExtractor):
 			b''', Sydex, Inc\\. All Rights Reserved\\.|''' # IBM Sydex
 			b'''Disk eXPress Self-Extracting Diskette Image|''' # HP DXP
 			b'''(\\x00Diskette Image Decompression Utility\\.\\x00)|''' # NEC in-house
-			b'''(Copyright Daniel Valot |\\x00ARDI -  \\x00)''' # IBM ARDI
+			b'''(Copyright Daniel Valot |\\x00ARDI -  \\x00)|''' # IBM ARDI
+			b'''(Ready to build distribution image with the following attributes:)''' # Zenith in-house
 		)
 		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
 
@@ -2438,7 +2442,9 @@ class VMExtractor(ArchiveExtractor):
 
 	def _run_qemu(self, hdd=None, hdd_snapshot=True, floppy=None, floppy_snapshot=True, vvfat=None, boot='c'):
 		# Build QEMU arguments.
-		args = [self._qemu_path, '-m', '32', '-display', 'none', '-vga', 'none', '-boot', boot]
+		args = [self._qemu_path, '-m', '32', '-boot', boot]
+		if not self.debug:
+			args += ['-display', 'none', '-vga', 'none']
 		for drive, drive_snapshot, drive_if in ((floppy, floppy_snapshot, 'floppy'), (hdd, hdd_snapshot, 'ide')):
 			# Don't add this drive if an image was not specified.
 			if not drive:
@@ -2490,11 +2496,15 @@ class VMExtractor(ArchiveExtractor):
 			f.write(b'move /y config.old config.sys\r\n') # just in case again (snapshot shouldn't persist changes)
 		elif match.group(3): # ARDI
 			f.write(b'echo.|')
+		elif match.group(4): # Zenith in-house
+			f.write(b'a:\r\n')
 		f.write(b'd:' + exe_name.encode('cp437', 'ignore'))
 		if match.group(1): # FastPacket
 			f.write(b' /b a:\r\n')
 		elif match.group(3): # ARDI
 			f.write(b'\r\n')
+		elif match.group(4): # Zenith in-house
+			f.write(b' <c:\\agreed.txt\r\n')
 		else:
 			f.write(b' a: <c:\\y.txt\r\n')
 		f.close()
@@ -2695,8 +2705,8 @@ class VMExtractor(ArchiveExtractor):
 		return dest_dir
 
 	def _extract_pklite(self, file_path, file_header, dest_dir, dest_dir_0):
-		"""Extract PKLITE executables and run them through the same pipeline. This is
-		   required for the NEC in-house floppy extractor with its PKLITE-compressed stub."""
+		"""Extract PKLITE executables and run them through the same pipeline. This is required
+		   for the NEC and Zenith in-house floppy extractors with their PKLITE-compressed stubs."""
 
 		# Copy original file to the destination directory.
 		exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'

@@ -127,6 +127,7 @@ def extract_process(queue, abort_flag, dir_number_path, next_dir_number_path, op
 	if not options['debug']:
 		dummy_func = lambda self, *args: None
 		for extractor in file_extractors:
+			extractor.debug = False
 			extractor.debug_print = dummy_func
 
 	# Raise exceptions on no space if requested.
