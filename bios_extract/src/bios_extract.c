@@ -179,7 +179,6 @@ static struct {
 			 uint32_t Offset1, uint32_t Offset2);
 } BIOSIdentification[] = {
 	{
-	"AMIBIOS (C)1993 American Megatrends Inc.,", "AMIBIOSC", AMI940725Extract}, {
 	"AMIBIOS W 04 ", "AMIBIOSC", AMI940725Extract}, {
 	"AMIBIOS W 05 ", "AMIBIOSC", AMI941010Extract}, {
 	"AMIBIOS W 05 ", "OSC10/10/94", AMI941010Extract}, { /* NexGen */
@@ -191,6 +190,7 @@ static struct {
 	"AMIBIOSC07", NULL, AMI95Extract}, {
 	"AMIBIOSC08", NULL, AMI95Extract}, {
 	"AMIBIOSC09", NULL, AMI95Extract}, { /* Hyper-V legacy BIOS */
+	"(AAMMIIBBIIOOSS)", "AMIBIOSC", AMI940725Extract}, { /* 12/15/93 */
 	"AMI Flash Utility for DOS Command mode.", "@ROM", AFUDOSExtract}, {
 	"= Award Decompression Bios =", NULL, AwardExtract}, {
 	"awardext.rom", NULL, AwardExtract}, {
