@@ -1518,7 +1518,7 @@ class IBMSurePathAnalyzer(Analyzer):
 			b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  (?:IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4|11998811,,  ([0-9])\\5([0-9])\\6([0-9])\\7([0-9])\\8  IIBBMM  CCOORRPPOORRAATTIIOONN)  (?:--  )?AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD|'''
 			b'''\\(C\\) COPYRIGHT (?:IBM CORPORATION 1981, [0-9]{4}|1981, [0-9]{4} IBM CORPORATION) (?:- )?ALL RIGHTS RESERVED[ \\x0D\\x0A]*(?:[\\x00\\xFF]|US Government Users)'''
 		)
-		self._ibm_later_pattern = re.compile(b'''\\xAA{8}\\x55{8}IBM PC Co\\. BIOS |PS/1 POWER MANAGEMENT\\x00|  IBM Hibernation Code  ''')
+		self._ibm_later_pattern = re.compile(b'''\\xAA{8}\\x55{8}IBM PC Co\\. BIOS |PS/1 POWER MANAGEMENT\\x00|  IBM Hibernation Code  |SERIAL#SYSTEMBOARDMACHINE''')
 		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
 		self._apricot_pattern = re.compile(b'''@\\(#\\)(?:Apricot .*|XEN-PC) BIOS [\\x20-\\x7E]+''')
 		self._apricot_version_pattern = re.compile(b'''@\\(#\\)Version [\\x20-\\x7E]+''')

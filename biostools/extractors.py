@@ -2374,7 +2374,8 @@ class VMExtractor(ArchiveExtractor):
 			b'''( FastPacket V[0-9])|''' # Siemens Nixdorf FastPacket
 			b''', Sydex, Inc\\. All Rights Reserved\\.|''' # IBM Sydex
 			b'''Disk eXPress Self-Extracting Diskette Image|''' # HP DXP
-			b'''(\\x00Diskette Image Decompression Utility\\.\\x00)''' # NEC in-house
+			b'''(\\x00Diskette Image Decompression Utility\\.\\x00)|''' # NEC in-house
+			b'''(Copyright Daniel Valot |\\x00ARDI -  \\x00)''' # IBM ARDI
 		)
 		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
 
@@ -2487,9 +2488,13 @@ class VMExtractor(ArchiveExtractor):
 			f.write(b'exit\r\n') # just in case
 			f.write(b':sfx\r\n')
 			f.write(b'move /y config.old config.sys\r\n') # just in case again (snapshot shouldn't persist changes)
+		elif match.group(3): # ARDI
+			f.write(b'echo.|')
 		f.write(b'd:' + exe_name.encode('cp437', 'ignore'))
 		if match.group(1): # FastPacket
 			f.write(b' /b a:\r\n')
+		elif match.group(3): # ARDI
+			f.write(b'\r\n')
 		else:
 			f.write(b' a: <c:\\y.txt\r\n')
 		f.close()
