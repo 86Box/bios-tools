@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import multiprocessing, os, math, random, re, shutil, traceback, urllib.request
+import errno, multiprocessing, os, math, random, re, shutil, traceback, urllib.request
 from biostools.pciutil import *
 
 date_pattern_mmddyy = re.compile('''(?P<month>[0-9]{2})/(?P<day>[0-9]{2})/(?P<year>[0-9]{2,4})''')
@@ -28,6 +28,8 @@ fn_symbols = '$%\'-_@~`!(){}^#&.+,;=[]'
 base62 = digits + lowercase + uppercase
 random_name_symbols = lowercase + digits + fn_symbols + uppercase
 random_name_nosymbols = lowercase + digits + uppercase
+
+raise_enospc = False
 
 _error_log_lock = multiprocessing.Lock()
 
@@ -147,7 +149,9 @@ def hardlink_or_copy(src, dest):
 	except:
 		try:
 			shutil.copy2(src, dest)
-		except:
+		except Exception as e:
+			if raise_enospc and getattr(e, 'errno', None) == errno.ENOSPC:
+				raise
 			return False
 	return True
 
@@ -204,7 +208,9 @@ def rmdirs(dir_path):
 			dir_path = os.path.dirname(dir_path)
 		except OSError:
 			break
-		except:
+		except Exception as e:
+			if raise_enospc and getattr(e, 'errno', None) == errno.ENOSPC:
+				raise
 			continue
 	return removed_count
 
@@ -218,8 +224,9 @@ def remove_all(files, func=lambda x: x):
 		for subfile in file:
 			try:
 				os.remove(subfile)
-			except:
-				pass
+			except Exception as e:
+				if raise_enospc and getattr(e, 'errno', None) == errno.ENOSPC:
+					raise
 
 def remove_extension(file_name):
 	"""Remove file_name's extension, if one is present."""
@@ -233,6 +240,7 @@ def try_makedirs(dir_path):
 	"""Try to create dir_path. Returns True if successful, False if not."""
 	try:
 		os.makedirs(dir_path)
-	except:
-		pass
+	except Exception as e:
+		if raise_enospc and getattr(e, 'errno', None) == errno.ENOSPC:
+			raise
 	return os.path.isdir(dir_path)
