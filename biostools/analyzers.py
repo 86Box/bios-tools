@@ -903,7 +903,7 @@ class AwardAnalyzer(Analyzer):
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\\([a-zA-Z0-9]{1,8}\\) EVALUATION ROM - NOT FOR SALE$''')
 		self._gigabyte_hefi_pattern = re.compile(b'''EFI CD/DVD Boot Option''')
-		self._id_block_pattern = re.compile(b'''(?:(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}| Award Softwar)IBM COMPATIBLE |[0-9]{2}/[0-9]{2}/[0-9]{4} {4}IBM COMPATIBLE [0-9]+ BIOS COPYRIGHT Award Software Inc\\.''')
+		self._id_block_pattern = re.compile(b'''(?:(?:Award | Award|Phoeni)[\\x00-\\xFF]{8}| Award Softwar)IBM COMPATIBLE |[0-9]{2}/[0-9]{2}/[0-9]{4} {4}IBM COMPATIBLE [0-9]+ BIOS COPYRIGHT Award Software Inc\\.|Award SoftwareIBM COMPATIBLEftware Inc\\.''')
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \\(c\\) (?:[^\r]+)\r\n)?Copyright \\(c\\) (?:NCR \\& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
@@ -1961,6 +1961,10 @@ class PhoenixAnalyzer(Analyzer):
 							self.version = '?' # there may be no version at all (Wearnes LPX)
 							self.signon = util.read_string(file_data[end:end + 256])
 							self.debug_print('Raw sign-on', signon_log, repr(self.signon))
+
+							if len(self.signon) <= 2: # Phoenix video BIOS (Commodore SL386SX25), bogus data (NEC Powermate V)
+								self.signon = ''
+								self.debug_print('Ignored bogus sign-on (too short)')
 						else:
 							self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
 
