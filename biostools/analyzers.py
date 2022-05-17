@@ -1104,7 +1104,7 @@ class BonusAnalyzer(Analyzer):
 		self._pci_ids = {}
 
 		self._acpi_table_pattern = re.compile(b'''(?:DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})[\\x00-\\xFF]{24}[\\x00\\x20-\\x7E]{4}''')
-		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|([\\x20-\\x7E]+) BIOS )''')
+		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|[\\x20-\\x7E]+ BIOS )''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9])''')
 		self._orom_pattern = re.compile(b'''\\x55\\xAA[\\x01-\\xFF][\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
 		self._phoenixnet_patterns = (

@@ -260,7 +260,9 @@ class ArchiveExtractor(Extractor):
 
 
 class ASTExtractor(Extractor):
-	"""Extract AST BIOS flash files."""
+	"""Extract AST BIOS flash floppy images. These appear to contain a specially
+	   crafted FAT filesystem, likely with static sector offsets for the payload,
+	   so we work on the entire image before FATExtractor has a chance to claim it."""
 
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -282,12 +284,13 @@ class ASTExtractor(Extractor):
 		if not util.try_makedirs(dest_dir):
 			return True
 
-		# Open AST file.
+		# Open AST image.
 		with open(file_path, 'rb') as in_f:
-			# Read the initial 72 sectors as header data.
-			header = in_f.read(0x9000)
+			# Skip the initial 72 sectors.
+			in_f.seek(0x9000)
 
 			# Copy payload.
+			header = b''
 			dest_file_path = os.path.join(dest_dir, 'ast.bin')
 			try:
 				with open(dest_file_path, 'wb') as out_f:
@@ -297,10 +300,10 @@ class ASTExtractor(Extractor):
 						if data == True:
 							# Check the header on the first payload sector.
 							header += in_f.read(0x83)
-							if not self._ast_payload_pattern.match(header[0x9000:0x9010]):
+							if not self._ast_payload_pattern.match(header[:0x10]):
 								raise Exception('missing header')
 
-							# Add to the header data.
+							# Subtract header from payload.
 							remaining, = struct.unpack('<I', header[-5:-1])
 							payload_size -= 0x83
 
@@ -325,7 +328,7 @@ class ASTExtractor(Extractor):
 			except:
 				pass
 
-		# Remove AST file.
+		# Remove AST image.
 		os.remove(file_path)
 
 		# Return destination directory path.
