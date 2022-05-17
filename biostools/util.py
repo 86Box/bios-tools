@@ -219,7 +219,9 @@ def remove_all(files, func=lambda x: x):
 	   func can return a string or iterable object."""
 	for file in files:
 		file = func(file)
-		if type(file) == str:
+		if not file:
+			continue
+		elif type(file) == str:
 			file = [file]
 		for subfile in file:
 			try:
