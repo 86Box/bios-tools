@@ -897,7 +897,7 @@ class AwardAnalyzer(Analyzer):
 
 		# "COPYRIGHT AWARD SOFTWARE INC." (early XT/286)
 		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|COPYRIGHT AWARD SOFTWARE INC\\.|Award Decompression Bios''')
-		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}A w a r d Software Inc\\.''')
+		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}A w a r d Software Inc\\.|IBM COMPATIBLE A(S)T BIOS''')
 		self._early_pattern = re.compile(b'''([0-9A-Z][\\x21-\\x7E]+) BIOS V([0-9.]+)[\\x21-\\x7E]* COPYRIGHT''')
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
@@ -1022,18 +1022,17 @@ class AwardAnalyzer(Analyzer):
 			# Handle AST modified Award.
 			match = self._ast_pattern.search(file_data)
 			if match:
-				id_block_index = match.start(0)
+				id_block_index = match.group(1) and match.start(1) or match.start(0)
 				self.debug_print('AST ID block found at', hex(id_block_index))
 
 				# Set static version.
 				self.version = 'AST'
 
 				# Extract AST string as a sign-on.
-				ast_offset = match.start(0)
-				self.signon = util.read_string(file_data[ast_offset + 0x44:ast_offset + 0x144])
+				self.signon = util.read_string(file_data[id_block_index + 0x44:id_block_index + 0x144])
 				if self.signon[:1] != 'A':
 					self.debug_print('Using alternate sign-on location')
-					self.signon = util.read_string(file_data[ast_offset + 0x80:ast_offset + 0x180])
+					self.signon = util.read_string(file_data[id_block_index + 0x80:id_block_index + 0x180])
 			else:
 				# Handle early XT/286 BIOS.
 				match = self._early_pattern.search(file_data)
