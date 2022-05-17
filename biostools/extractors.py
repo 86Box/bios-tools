@@ -2577,8 +2577,18 @@ class VMExtractor(ArchiveExtractor):
 		# Run QEMU.
 		self._run_qemu(hdd=os.path.join(self._dep_dir, 'freedos.img'), floppy=image_path, floppy_snapshot=False, vvfat=dest_dir, monitor_cmd=monitor_cmd, monitor_flag_file=flag_path)
 
+		# Detect and recover from a Softpaq crash.
+		if match.group(5):
+			temp_image_path = os.path.join(dest_dir, 'image')
+			if os.path.exists(temp_image_path) and os.path.getsize(temp_image_path) > 0:
+				try:
+					os.remove(image_path)
+				except:
+					pass
+				image_path = temp_image_path
+
 		# Remove temporary files. (exename.tmp = FastPacket)
-		util.remove_all((bat_path, os.path.join(dest_dir, 'monflag.dat'), exe_path, exe_path[:-3] + 'tmp', os.path.join(dest_dir, exe_name[:-3].upper() + 'TMP'), flag_path))
+		util.remove_all((bat_path, exe_path, exe_path[:-3] + 'tmp', os.path.join(dest_dir, exe_name[:-3].upper() + 'TMP'), flag_path))
 
 		# Extract image as an archive.
 		ret = self._extract_archive(image_path, dest_dir, remove=False)
