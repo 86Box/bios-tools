@@ -381,10 +381,6 @@ class BIOSExtractor(Extractor):
 		if not os.path.exists(self._bios_extract_path):
 			self._bios_extract_path = None
 
-		# Built-in instance of ImageExtractor for converting
-		# any extracted BIOS logo images that were found.
-		self._image_extractor = ImageExtractor()
-
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if bios_extract is not available.
 		if not self._bios_extract_path:
@@ -516,7 +512,7 @@ class BIOSExtractor(Extractor):
 								out_f.close()
 
 						# Run image converter on the desstination directory.
-						self._image_extractor.convert_inline(os.listdir(dest_dir_ros), dest_dir_ros)
+						self.image_extractor.convert_inline(os.listdir(dest_dir_ros), dest_dir_ros)
 
 						# Don't remove ROS as the analyzer uses it for PhoenixNet detection.
 						# Just remove the destination directory if it's empty.
@@ -525,7 +521,7 @@ class BIOSExtractor(Extractor):
 				in_f.close()
 
 		# Convert any BIOS logo images in-line (to the same destination directory).
-		self._image_extractor.convert_inline(dest_dir_files, dest_dir_0)
+		self.image_extractor.convert_inline(dest_dir_files, dest_dir_0)
 
 		# Create flag file on the destination directory for the analyzer to
 		# treat it as a big chunk of data.
@@ -2332,10 +2328,6 @@ class UEFIExtractor(Extractor):
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
 
-		# Built-in instance of ImageExtractor for converting
-		# any extracted BIOS logo images that were found.
-		self._image_extractor = ImageExtractor()
-
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Stop if UEFIExtract is not available.
 		if not self._uefiextract_path:
@@ -2417,7 +2409,7 @@ class UEFIExtractor(Extractor):
 			return False
 
 		# Convert any BIOS logo images in-line (to the same destination directory).
-		self._image_extractor.convert_inline(os.listdir(dest_dir_0), dest_dir_0)
+		self.image_extractor.convert_inline(os.listdir(dest_dir_0), dest_dir_0)
 
 		# Create header file with a dummy string, to tell the analyzer
 		# this BIOS went through this extractor.

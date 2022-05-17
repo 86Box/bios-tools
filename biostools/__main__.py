@@ -98,6 +98,7 @@ def extract_process(queue, abort_flag, dir_number_path, next_dir_number_path, op
 	"""Main loop for the extraction multiprocessing pool."""
 
 	# Set up extractors.
+	image_extractor = extractors.ImageExtractor()
 	file_extractors = [
 		extractors.DiscardExtractor(),
 		extractors.ISOExtractor(),
@@ -110,7 +111,7 @@ def extract_process(queue, abort_flag, dir_number_path, next_dir_number_path, op
 		extractors.ArchiveExtractor(),
 		extractors.CPUZExtractor(),
 		extractors.HexExtractor(),
-		extractors.ImageExtractor(),
+		image_extractor,
 		extractors.ApricotExtractor(),
 		extractors.IntelNewExtractor(),
 		# extractors from here on down may read more than the header during detection
@@ -124,10 +125,11 @@ def extract_process(queue, abort_flag, dir_number_path, next_dir_number_path, op
 		extractors.MBRUnsafeExtractor(),
 	]
 
-	# Disable debug mode on extractors.
-	if not options['debug']:
-		dummy_func = lambda self, *args: None
-		for extractor in file_extractors:
+	# Disable debug mode and add a reference to the image extractor on all extractors.
+	dummy_func = lambda self, *args: None
+	for extractor in file_extractors:
+		extractor.image_extractor = image_extractor
+		if not options['debug']:
 			extractor.debug = False
 			extractor.debug_print = dummy_func
 
@@ -568,7 +570,7 @@ def analyze_process(queue, formatter, scan_base, options):
 		analyzers.ZenithAnalyzer(),
 	]
 
-	# Disable debug mode on analyzers.
+	# Disable debug mode on all analyzers.
 	if not options['debug']:
 		dummy_func = lambda self, *args: None
 		for analyzer in file_analyzers:
