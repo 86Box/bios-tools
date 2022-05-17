@@ -2562,21 +2562,24 @@ class VMExtractor(ArchiveExtractor):
 		# Run QEMU.
 		self.debug_print('Running QEMU with args:', args)
 		try:
-			proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=self._devnull, stderr=subprocess.STDOUT)
+			if monitor_cmd and monitor_flag_file:
+				proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=self._devnull, stderr=subprocess.STDOUT)
 
-			# Wait for flag file if one was specified.
-			if monitor_flag_file:
-				spins = 0
-				while not os.path.exists(monitor_flag_file) and spins < 60:
-					time.sleep(1)
-					spins += 1
-				if spins < 60:
-					self.debug_print('Monitor flag file found')
-				else:
-					self.debug_print('Monitor flag file timed out')
+				# Wait for flag file if one was specified.
+				if monitor_flag_file:
+					spins = 0
+					while not os.path.exists(monitor_flag_file) and spins < 60:
+						time.sleep(1)
+						spins += 1
+					if spins < 60:
+						self.debug_print('Monitor flag file found')
+					else:
+						self.debug_print('Monitor flag file timed out')
 
-			# Send monitor command if one was specified, and wait for the QEMU process.
-			proc.communicate(input=monitor_cmd, timeout=60)
+				# Send monitor command if one was specified, and wait for the QEMU process.
+				proc.communicate(input=monitor_cmd, timeout=60)
+			else:
+				subprocess.run(args, input=monitor_cmd, timeout=60, stdout=self._devnull, stderr=subprocess.STDOUT)
 		except:
 			self.debug_print('Running QEMU failed (timed out?)')
 
