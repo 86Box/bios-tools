@@ -1831,6 +1831,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._rombios_signon_pattern = re.compile(b'''\\x0D\\x0AAll Rights Reserved\\x0D\\x0A(?:\\x0A(?:\\x00(?:[\\x90\\xF4]\\x01)?)?|\\x0D\\x0A\\x0D\\x0A)''')
 		# No "All Rights Reserved" (Yangtech 2.27 / pxxt)
 		self._rombios_signon_alt_pattern = re.compile(b'''\\(R\\)eboot, other keys to continue\\x00\\xFF+''')
+		self._rombios_signon_dec_pattern = re.compile(b'''Copyright \\(C\\) [0-9]{4} Digital Equipment Corporation''')
 		self._bcpsys_pattern = re.compile(b'''BCPSYS([\\x00-\\xFF]{6})''')
 		self._bcpsys_datetime_pattern = re.compile('''[0-9]{2}/[0-9]{2}/[0-9]{2} ''')
 		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''')
@@ -1945,7 +1946,12 @@ class PhoenixAnalyzer(Analyzer):
 					# Extract sign-on from Ax86 and older BIOSes.
 					match = self._rombios_signon_pattern.search(file_data)
 					if match:
-						signon_log = '(old std):'
+						copyright_index = match.start(0)
+						if self._rombios_signon_dec_pattern.match(file_data[copyright_index - 48:copyright_index]):
+							self.debug_print('Ignored bogus sign-on on DEC BIOS')
+							match = None
+						else:
+							signon_log = '(old std):'
 					else:
 						match = self._rombios_signon_alt_pattern.search(file_data)
 						signon_log = '(old alt):'
