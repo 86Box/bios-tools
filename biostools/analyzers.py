@@ -1106,7 +1106,7 @@ class BonusAnalyzer(Analyzer):
 		self._acpi_table_pattern = re.compile(b'''(?:DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})[\\x00-\\xFF]{24}[\\x00\\x20-\\x7E]{4}''')
 		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|([\\x20-\\x7E]+) BIOS )''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9])''')
-		self._orom_pattern = re.compile(b'''\\x55\\xAA[\\x01-\\xFF][\\x00-\\xFF]{21}([\\x00-\\xFF]{4})''')
+		self._orom_pattern = re.compile(b'''\\x55\\xAA[\\x01-\\xFF][\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
 		self._phoenixnet_patterns = (
 			re.compile(b'''CPLRESELLERID'''),
 			re.compile(b'''BINCPUTBL'''),
@@ -1118,7 +1118,6 @@ class BonusAnalyzer(Analyzer):
 		)
 		self._rpl_pattern = re.compile(b'''NetWare Ready ROM''')
 		self._sli_pattern = re.compile(b'''[0-9]{12}Genuine NVIDIA Certified SLI Ready Motherboard for ''')
-		self._vbios_pattern = re.compile(b'''IBM (?:VGA C(?:OMPAT[IA]BLE|ompatible)|COMPATIBLE PARADISE)|ATI Technologies Inc\\.|SiS super VGA chip''')
 
 	def can_handle(self, file_data, header_data):
 		# PhoenixNet
@@ -1155,23 +1154,25 @@ class BonusAnalyzer(Analyzer):
 		if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
 			self.addons.append('UEFI')
 
-		# VGA BIOS
-		if self._vbios_pattern.search(file_data):
-			self.addons.append('VGA')
-
 		# Look for PCI/PnP option ROMs.
 		for match in self._orom_pattern.finditer(file_data):
+			# Check for the VGA BIOS compatibility marker.
+			if match.group(2):
+				self.addons.append('VGA')
+
 			# Extract PCI and PnP data structure pointers.
 			pci_header_ptr, pnp_header_ptr = struct.unpack('<HH', match.group(1))
 
 			# Check for a valid PCI data structure.
 			if pci_header_ptr >= 26:
 				pci_header_ptr += match.start()
-				if file_data[pci_header_ptr:pci_header_ptr + 4] == b'PCIR':
+				pci_magic = file_data[pci_header_ptr:pci_header_ptr + 4]
+				if pci_magic == b'PCIR':
 					pci_header_data = file_data[pci_header_ptr + 4:pci_header_ptr + 16]
 					if len(pci_header_data) == 12:
 						# Read PCI header data.
 						vendor_id, device_id, device_list_ptr, _, revision, progif, subclass, class_code = struct.unpack('<HHHHBBBB', pci_header_data)
+						self.debug_print('PCI header: vendor', hex(vendor_id), 'device', hex(device_id), 'class', class_code, 'subclass', subclass, 'progif', progif)
 
 						# Make sure the vendor ID is not bogus.
 						if vendor_id not in (0x0000, 0xffff):
@@ -1195,6 +1196,7 @@ class BonusAnalyzer(Analyzer):
 							while len(file_data[device_list_ptr:device_list_ptr + 2]) == 2:
 								# Read ID and stop if this is a terminator.
 								device_id, = struct.unpack('<H', file_data[device_list_ptr:device_list_ptr + 2])
+								self.debug_print('PCI header: additional device', hex(device_id))
 								if device_id == 0x0000:
 									break
 
@@ -1225,6 +1227,7 @@ class BonusAnalyzer(Analyzer):
 							device = util.read_string(file_data[match.start() + device_ptr:])
 						else:
 							device = None
+						self.debug_print('PnP header: vendor', repr(vendor), 'device', repr(device))
 
 						# Take valid data only.
 						if device_id[:2] != b'\x00\x00' and (vendor or device):
