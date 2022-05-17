@@ -103,6 +103,7 @@ def extract_process(queue, abort_flag, dir_number_path, next_dir_number_path, op
 		extractors.ISOExtractor(),
 		extractors.VMExtractor(),
 		extractors.PEExtractor(),
+		extractors.ASTExtractor(),
 		extractors.FATExtractor(),
 		extractors.MBRSafeExtractor(),
 		extractors.TarExtractor(),

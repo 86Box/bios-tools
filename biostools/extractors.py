@@ -259,6 +259,79 @@ class ArchiveExtractor(Extractor):
 		return dest_dir
 
 
+class ASTExtractor(Extractor):
+	"""Extract AST BIOS flash files."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		# AST flash signature.
+		self._ast_start_pattern = re.compile(b'''This is a flash update from AST Research, Inc\\.''')
+		self._ast_payload_pattern = re.compile(b'''AST FLASH UPDATE''')
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if this file is too small.
+		if os.path.getsize(file_path) <= 0x9083:
+			return False
+
+		# Look for the AST signatures.
+		if not self._ast_start_pattern.match(file_header[0x4200:0x422e]):
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Open AST file.
+		with open(file_path, 'rb') as in_f:
+			# Read the initial 72 sectors as header data.
+			header = in_f.read(0x9000)
+
+			# Copy payload.
+			dest_file_path = os.path.join(dest_dir, 'ast.bin')
+			try:
+				with open(dest_file_path, 'wb') as out_f:
+					data = remaining = True
+					while data and remaining > 0:
+						payload_size = 15 * 512
+						if data == True:
+							# Check the header on the first payload sector.
+							header += in_f.read(0x83)
+							if not self._ast_payload_pattern.match(header[0x9000:0x9010]):
+								raise Exception('missing header')
+
+							# Add to the header data.
+							remaining, = struct.unpack('<I', header[-5:-1])
+							payload_size -= 0x83
+
+						# Copy the next 15 sectors of payload.
+						data = in_f.read(min(payload_size, remaining))
+						out_f.write(data)
+						remaining -= len(data)
+
+						# Skip the next 3 blank sectors.
+						in_f.seek(3 * 512, 1)
+			except:
+				try:
+					os.remove(dest_file_path)
+				except:
+					pass
+				return True
+
+			# Write header.
+			try:
+				with open(os.path.join(dest_dir, ':header:'), 'wb') as out_f:
+					out_f.write(header)
+			except:
+				pass
+
+		# Remove AST file.
+		os.remove(file_path)
+
+		# Return destination directory path.
+		return dest_dir
+
+
 class BIOSExtractor(Extractor):
 	"""Extract a bios_extract-compatible BIOS file."""
 
