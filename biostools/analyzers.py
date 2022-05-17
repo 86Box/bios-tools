@@ -1411,38 +1411,41 @@ class DTKGoldStarAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('DTKGoldStar', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version,	RegexChecker),
-		])
+		self._dtk_pattern = re.compile(b'''Datatech Enterprises Co\\., Ltd\\.|DATATECH ENTERPRISES CO\\., LTD\\.|\\x0ADTK Corp\\.|\\(C\\) Copyright by GoldStar Co\\.,Ltd\\.|GOLDSTAR  SYSTEM  SETUP''')
+		self._version_pattern = re.compile(b'''(?:(DTK|GoldStar) ([\\x20-\\x7E]+) BIOS Ver(?:sion)? |(DTK)/([^/]+)/BIOS )([^\s]+)(?: ([^\s]+))?''')
 
 	def reset(self):
 		super().reset()
 		self._dtk = False
 
 	def can_handle(self, file_data, header_data):
-		return b'Datatech Enterprises Co., Ltd.' in file_data or b'(C) Copyright by GoldStar Co.,Ltd.' in file_data or b'GOLDSTAR  SYSTEM  SETUP' in file_data
+		if not self._dtk_pattern.search(file_data):
+			return False
 
-	def _version(self, line, match):
-		'''^(?:(DTK|GoldStar) (.+) ROM BIOS Version |VER )([^\s]+)(?: ([^\s]+))?'''
+		# Locate version string.
+		match = self._version_pattern.search(file_data)
+		if match:
+			self.debug_print('Found DTK version:', match.group(0))
 
-		# Extract vendor.
-		self.vendor = match.group(1) or 'GoldStar'
+			# Extract vendor.
+			self.vendor = (match.group(1) or match.group(3) or b'GoldStar').decode('cp437', 'ignore')
 
-		# Extract version.
-		self.version = match.group(3)
+			# Extract version.
+			self.version = match.group(5).decode('cp437', 'ignore')
 
-		# Extract string.
-		self.string = match.group(2) or ''
+			# Extract string.
+			self.string = (match.group(2) or match.group(4) or b'').decode('cp437', 'ignore')
+			if self.string[-4:] == ' ROM':
+				self.string = self.string[:-4]
 
-		# Add revision to string.
-		revision = match.group(4)
-		if revision:
-			if self.string:
-				self.string += '\n'
-			self.string += revision
+			# Add revision to string.
+			revision = (match.group(6) or b'').decode('cp437', 'ignore')
+			if revision and revision != '(C)':
+				self.string += '\n' + revision
 
-		return True
+			return True
 
+		return False
 
 class GeneralSoftwareAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
