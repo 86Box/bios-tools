@@ -1831,7 +1831,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._rombios_signon_pattern = re.compile(b'''\\x0D\\x0AAll Rights Reserved\\x0D\\x0A(?:\\x0A(?:\\x00(?:[\\x90\\xF4]\\x01)?)?|\\x0D\\x0A\\x0D\\x0A)''')
 		# No "All Rights Reserved" (Yangtech 2.27 / pxxt)
 		self._rombios_signon_alt_pattern = re.compile(b'''\\(R\\)eboot, other keys to continue\\x00\\xFF+''')
-		self._bcpsys_pattern = re.compile(b'''BCPSYS([\\x00-\\xFF]{8})''')
+		self._bcpsys_pattern = re.compile(b'''BCPSYS([\\x00-\\xFF]{6})''')
 		self._bcpsys_datetime_pattern = re.compile('''[0-9]{2}/[0-9]{2}/[0-9]{2} ''')
 		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''')
 		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
@@ -1881,8 +1881,8 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Read build code, date and time from BCPSYS on 4.0 and newer BIOSes.
 		for match in self._bcpsys_pattern.finditer(file_data):
-			# Skip bogus BCPSYS in ACFG (DEC Venturis 466)
-			if match.group(1) == b'\x00\x00\x00\x00\x00\x00\x00\x00':
+			# Skip bogus BCPSYS in ACFG (DEC Venturis 466, other DEC 4.0x)
+			if match.group(1) == b'\x00\x00\x00\x00\x00\x00':
 				continue
 			offset = match.start(0)
 
