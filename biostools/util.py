@@ -238,6 +238,20 @@ def remove_extension(file_name):
 	else:
 		return file_name
 
+def rotate_pattern(s, length):
+	"""Generate a regex pattern to match all rotated permutations of s for length characters."""
+	if type(s) == bytes:
+		regex_sanitize = lambda x: x.replace(b'\\', b'\\\\').replace(b'.', b'\\.')
+	else:
+		regex_sanitize = lambda x: x.replace('\\', '\\\\').replace('.', '\\.')
+	ret = []
+	for offset in range(len(s)):
+		this_offset = s[offset:offset + length]
+		while len(this_offset) < length:
+			this_offset += s[:length - len(this_offset)]
+		ret.append(regex_sanitize(this_offset))
+	return (type(s) == bytes and b'|' or '|').join(ret)
+
 def try_makedirs(dir_path):
 	"""Try to create dir_path. Returns True if successful, False if not."""
 	try:
