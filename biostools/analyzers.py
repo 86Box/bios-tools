@@ -1835,7 +1835,7 @@ class PhoenixAnalyzer(Analyzer):
 		# No "All Rights Reserved" (Yangtech 2.27 / pxxt)
 		self._rombios_signon_alt_pattern = re.compile(b'''\\(R\\)eboot, other keys to continue\\x00\\xFF+''')
 		self._rombios_signon_dec_pattern = re.compile(b'''Copyright \\(C\\) [0-9]{4} Digital Equipment Corporation''')
-		self._bcpsys_pattern = re.compile(b'''BCPSYS([\\x00-\\xFF]{6})''')
+		self._bcpsys_pattern = re.compile(b'''BCPSYS''')
 		self._bcpsys_datetime_pattern = re.compile('''[0-9]{2}/[0-9]{2}/[0-9]{2} ''')
 		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''')
 		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
@@ -1885,10 +1885,10 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Read build code, date and time from BCPSYS on 4.0 and newer BIOSes.
 		for match in self._bcpsys_pattern.finditer(file_data):
-			# Skip bogus BCPSYS in ACFG (DEC Venturis 466, other DEC 4.0x)
-			if match.group(1) == b'\x00\x00\x00\x00\x00\x00':
-				continue
+			# Skip bogus BCPSYS in ACFG (DEC Venturis 466, other DEC 4.0x, Micronics M54Li 07)
 			offset = match.start(0)
+			if file_data[offset - 10:offset] == b'BCPSEGMENT':
+				continue
 
 			# Extract the build code as a string.
 			build_code = self.string = util.read_string(file_data[offset + 55:offset + 63].replace(b'\x00', b'\x20')).strip()
