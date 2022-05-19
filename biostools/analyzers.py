@@ -1540,13 +1540,13 @@ class IBMSurePathAnalyzer(Analyzer):
 		if match:
 			# Extract version.
 			self.version = match.group(1)
-			self._debug_print('Found uncompressed version:', self.version)
+			self.debug_print('Found uncompressed version:', self.version)
 			self.version = 'SurePath ' + self.version.decode('cp437', 'ignore').strip()
 
 			# Extract customization as a sign-on if found. (AT&T Globalyst)
 			customization = match.group(2)
 			if customization:
-				self._debug_print('Found AT&T customization:', customization)
+				self.debug_print('Found AT&T customization:', customization)
 				self.signon = customization.decode('cp437', 'ignore')
 		else:
 			# Special case for Apricot-licensed SurePath.
@@ -1558,7 +1558,7 @@ class IBMSurePathAnalyzer(Analyzer):
 
 				# Extract Apricot customization as a sign-on.
 				customization = match.group(0)
-				self._debug_print('Found Apricot customization:', customization)
+				self.debug_print('Found Apricot customization:', customization)
 				self.signon = customization.decode('cp437', 'ignore')[4:]
 				match = self._apricot_version_pattern.search(file_data)
 				if match:
