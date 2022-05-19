@@ -23,9 +23,16 @@ except ImportError:
 	PIL.Image = None
 from . import util
 
+
+class MultifileStaleException(Exception):
+	"""Exception raised by Extractor.multifile_lock_acquire() if the
+	   file has gone missing after the multi-file lock was acquired."""
+	pass
+
 class Extractor:
 	def __init__(self):
 		self.debug = True
+		self.multifile_locked = False
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract the given file into one of the destination directories:
@@ -39,6 +46,16 @@ class Extractor:
 	def debug_print(self, *args):
 		"""Print a log line if debug output is enabled."""
 		print(self.__class__.__name__ + ':', *args, file=sys.stderr)
+
+	def multifile_lock_acquire(self, file_path):
+		"""Acquire the global multi-file lock. The lock is automatically released
+		   by the main module after extract() returns or raises an exception."""
+		self.multifile_lock.acquire()
+		self.multifile_locked = True
+
+		# Raise the special exception if another extractor already processed this file.
+		if not os.path.exists(file_path):
+			raise MultifileStaleException()
 
 
 class ApricotExtractor(Extractor):
@@ -1473,10 +1490,11 @@ class IntelExtractor(Extractor):
 			try:
 				os.remove(file_path)
 			except:
-				import traceback
-				traceback.print_exc()
 				pass
 			return True
+
+		# Acquire the multi-file lock.
+		self.multifile_lock_acquire(file_path)
 
 		# Scan this directory's contents.
 		dir_path = os.path.dirname(file_path)
@@ -1866,6 +1884,9 @@ class InterleaveExtractor(Extractor):
 		if not counterpart_string_sets:
 			return False
 
+		# Acquire the multi-file lock.
+		self.multifile_lock_acquire(file_path)
+
 		# Create temporary interleaved data array.
 		part_size = min(os.path.getsize(file_path), 16777216)
 		data = []
@@ -1886,20 +1907,10 @@ class InterleaveExtractor(Extractor):
 
 				# Skip any files which differ in size.
 				file_in_dir_size = 0
-				for retry in range(10): # mergerfs hack
-					try:
-						file_in_dir_size = os.path.getsize(file_in_dir_path)
-						try:
-							if retry > 0:
-								with util._error_log_lock:
-									f = open('biostools_retry.log', 'a')
-									f.write('{0} => {1} (took {2} retries)\n'.format(file_path, file_in_dir, retry))
-									f.close()
-						except:
-							pass
-						break
-					except:
-						time.sleep(retry)
+				try:
+					file_in_dir_size = os.path.getsize(file_in_dir_path)
+				except:
+					continue
 				if file_in_dir_size != file_size:
 					continue
 
@@ -2240,6 +2251,9 @@ class TrimondExtractor(Extractor):
 		if pow2 - file_size not in (8192, 16384, 32768):
 			return False
 
+		# Acquire the multi-file lock.
+		self.multifile_lock_acquire(file_path)
+
 		# As a second safety layer, check for Trimond's flasher files.
 		dir_path, file_name = os.path.split(file_path)
 		dir_files = os.listdir(dir_path)
@@ -2489,6 +2503,9 @@ class VMExtractor(ArchiveExtractor):
 			if file_header[28:32] == b'LZ91':
 				extractor = self._extract_lzexe
 			elif file_header[30:36] == b'PKLITE':
+				# Acquire the multi-file lock. This is required for ROMPAQ below.
+				self.multifile_lock_acquire(file_path)
+
 				extractor = self._extract_pklite
 			else:
 				match = self._floppy_pattern.search(file_header)
@@ -2498,12 +2515,14 @@ class VMExtractor(ArchiveExtractor):
 		elif self._eti_pattern.match(file_header):
 			extractor = self._extract_eti
 		elif self._rompaq_pattern.match(file_header):
+			# Acquire the multi-file lock.
+			self.multifile_lock_acquire(file_path)
+
 			# The ROMPAQ format appears to be version specific in some way.
 			# We will only extract files that have a ROMPAQ.EXE next to them.
 			dir_path = os.path.dirname(file_path)
 			rompaq_path = None
 			for file_in_dir in os.listdir(dir_path):
-			
 				if file_in_dir.lower() == 'rompaq.exe':
 					rompaq_path = os.path.join(dir_path, file_in_dir)
 					break

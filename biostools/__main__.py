@@ -26,75 +26,76 @@ DEFAULT_REMOTE_PORT = 8620
 
 # Extraction module.
 
-def extract_dir(file_extractors, subdir_trim_index, path_trim_index, next_dir_number_path, scan_dir_path, scan_file_names):
-	"""Process a given directory for extraction."""
+def extract_file(file_extractors, subdir_trim_index, path_trim_index, next_dir_number_path, scan_dir_path, scan_file_name):
+	"""Process a given file for extraction."""
 
-	# Determine the destination subdirectory.
+	# Build source file path.
+	file_path = os.path.join(scan_dir_path, scan_file_name)
+
+	# Remove links.
+	if os.path.islink(file_path):
+		try:
+			os.remove(file_path)
+		except:
+			try:
+				os.rmdir(file_path)
+			except:
+				pass
+		return
+
+	# Read header.
+	try:
+		f = open(file_path, 'rb')
+		file_data = f.read(32782) # upper limit set by ISOExtractor
+		f.close()
+	except:
+		# The file might have been removed after the fact by an extractor.
+		return
+
+	# Come up with a destination directory for this file.
 	dest_subdir = scan_dir_path[subdir_trim_index:]
 	while dest_subdir[:len(os.sep)] == os.sep:
 		dest_subdir = dest_subdir[len(os.sep):]
+	dest_file_path = os.path.join(dest_subdir, scan_file_name + ':')
+	dest_dir = os.path.join(next_dir_number_path, dest_file_path)
+	dest_dir_0 = os.path.join(os.path.dirname(next_dir_number_path), '0', dest_file_path)
 
-	# Iterate through files.
-	for scan_file_name in scan_file_names:
-		file_path = os.path.join(scan_dir_path, scan_file_name)
-
-		# Remove links.
-		if os.path.islink(file_path):
-			try:
-				os.remove(file_path)
-			except:
-				try:
-					os.rmdir(file_path)
-				except:
-					pass
-			continue
-
-		# Read header.
+	# Run through file extractors until one succeeds.
+	for extractor in file_extractors:
+		# Run the extractor.
 		try:
-			f = open(file_path, 'rb')
-			file_data = f.read(32782) # upper limit set by ISOExtractor
-			f.close()
-		except:
-			# Permission issues or after-the-fact removal of other files by
-			# extractors can cause this. Give up.
+			extractor_result = extractor.extract(file_path, file_data, dest_dir, dest_dir_0)
+		except extractors.MultifileStaleException:
+			# This file has gone missing between the multi-file lock being
+			# requested and successfully acquired. Stop extraction immediately.
+			break
+		except Exception as e:
+			if util.raise_enospc and getattr(e, 'errno', None) == errno.ENOSPC:
+				# Abort on no space if requested.
+				print('{0} => aborting extraction due to disk space\n'.format(file_path[path_trim_index:]), end='')
+				raise
+
+			# Log an error.
+			util.log_traceback('extracting', file_path)
 			continue
+		finally:
+			if extractor.multifile_locked:
+				extractor.multifile_locked = False
+				extractor.multifile_lock.release()
 
-		# Come up with a destination directory for this file.
-		dest_file_path = os.path.join(dest_subdir, scan_file_name + ':')
-		dest_dir = os.path.join(next_dir_number_path, dest_file_path)
-		dest_dir_0 = os.path.join(os.path.dirname(next_dir_number_path), '0', dest_file_path)
+		# Check if the extractor produced any results.
+		if extractor_result:
+			# Handle the line break ourselves, since Python prints the main
+			# body and line break separately, causing issues when multiple
+			# threads/processes are printing simultaneously.
+			print('{0} => {1}{2}\n'.format(file_path[path_trim_index:], extractor.__class__.__name__, (extractor_result == True) and ' (skipped)' or ''), end='')
+			break
 
-		# Run through file extractors until one succeeds.
-		for extractor in file_extractors:
-			# Run the extractor.
-			try:
-				extractor_result = extractor.extract(file_path, file_data, dest_dir, dest_dir_0)
-			except Exception as e:
-				if util.raise_enospc and getattr(e, 'errno', None) == errno.ENOSPC:
-					# Abort on no space if requested.
-					print('{0} => aborting extraction due to disk space\n'.format(file_path[path_trim_index:]), end='')
-					raise
+	# Remove destination directories if they were created but are empty.
+	for to_remove in (dest_dir, dest_dir_0):
+		util.rmdirs(to_remove)
 
-				# Log an error.
-				util.log_traceback('extracting', file_path)
-				continue
-
-			# Check if the extractor produced any results.
-			if extractor_result:
-				# Handle the line break ourselves, since Python prints the main
-				# body and line break separately, causing issues when multiple
-				# threads/processes are printing simultaneously.
-				print('{0} => {1}{2}\n'.format(file_path[path_trim_index:], extractor.__class__.__name__, (extractor_result == True) and ' (skipped)' or ''), end='')
-				break
-
-		# Remove destination directories if they were created but are empty.
-		for to_remove in (dest_dir, dest_dir_0):
-			util.rmdirs(to_remove)
-
-	# Remove this directory if it ends up empty.
-	util.rmdirs(scan_dir_path)
-
-def extract_process(queue, abort_flag, dir_number_path, next_dir_number_path, options):
+def extract_process(queue, abort_flag, multifile_lock, dir_number_path, next_dir_number_path, options):
 	"""Main loop for the extraction multiprocessing pool."""
 
 	# Set up extractors.
@@ -125,9 +126,10 @@ def extract_process(queue, abort_flag, dir_number_path, next_dir_number_path, op
 		extractors.MBRUnsafeExtractor(),
 	]
 
-	# Disable debug mode and add a reference to the image extractor on all extractors.
+	# Disable debug mode and add a reference to some common objects on all extractors.
 	dummy_func = lambda self, *args: None
 	for extractor in file_extractors:
+		extractor.multifile_lock = multifile_lock
 		extractor.image_extractor = image_extractor
 		if not options['debug']:
 			extractor.debug = False
@@ -149,7 +151,7 @@ def extract_process(queue, abort_flag, dir_number_path, next_dir_number_path, op
 		elif abort_flag.value:
 			continue
 		try:
-			extract_dir(file_extractors, subdir_trim_index, path_trim_index, next_dir_number_path, *item)
+			extract_file(file_extractors, subdir_trim_index, path_trim_index, next_dir_number_path, *item)
 		except Exception as e:
 			if util.raise_enospc and getattr(e, 'errno', None) == errno.ENOSPC:
 				# Abort all threads if ENOSPC was raised.
@@ -196,7 +198,7 @@ def extract(dir_path, _, options):
 		queue_size = options['threads'] + len(options['remote_servers'])
 		queue = multiprocessing.Queue(maxsize=queue_size * 8)
 		abort_flag = multiprocessing.Value('B', 0)
-		initargs = (queue, abort_flag, dir_number_path, next_dir_number_path, options)
+		initargs = (queue, abort_flag, multiprocessing.Lock(), dir_number_path, next_dir_number_path, options)
 		mp_pool = multiprocessing.Pool(options['threads'], initializer=extract_process, initargs=initargs)
 		print(flush=True)
 
@@ -209,14 +211,12 @@ def extract(dir_path, _, options):
 		if not os.path.isdir(next_dir_number_path):
 			os.makedirs(next_dir_number_path)
 
-		# Scan directory structure. I really wanted this to have file-level
-		# granularity, but IntelExtractor and InterleaveBIOSExtractor
-		# both require directory-level granularity for inspecting other files.
+		# Scan directory structure.
 		found_any_files = False
 		for scan_dir_path, scan_dir_names, scan_file_names in os.walk(dir_number_path):
-			if len(scan_file_names) > 0:
+			for scan_file_name in scan_file_names:
 				found_any_files = True
-				queue.put((scan_dir_path, scan_file_names))
+				queue.put((scan_dir_path, scan_file_name))
 				if abort_flag.value: # stop feeding queue if a thread abort was requested
 					break
 
