@@ -959,7 +959,7 @@ class AwardAnalyzer(Analyzer):
 			# Extract string, unless the version is known to be too old to have a string.
 			if self.version[:3] not in ('v2.', 'v3.'):
 				self.string = util.read_string(file_data[id_block_index + 0xc71:id_block_index + 0xce0])
-				self.debug_print('Raw string:', repr(version_string))
+				self.debug_print('Raw string:', repr(self.string))
 
 				# Check if no string was inserted where it should
 				# have been. (Gateway/Swan Anigma Award v4.28/4.32)
