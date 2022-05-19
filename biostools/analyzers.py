@@ -1036,6 +1036,14 @@ class AwardAnalyzer(Analyzer):
 				if self.signon[:1] != 'A':
 					self.debug_print('Using alternate sign-on location')
 					self.signon = util.read_string(file_data[id_block_index + 0x80:id_block_index + 0x180])
+
+				# Remove extraneous AST copyright from the sign-on.
+				lines = self.signon.split('\n')
+				self.signon = ''
+				for line in lines:
+					if line[:10] == 'Copyright ' or line[:19] == 'All Rights Reserved':
+						continue
+					self.signon += line + '\n'
 			else:
 				# Handle early XT/286 BIOS.
 				match = self._early_pattern.search(file_data)
