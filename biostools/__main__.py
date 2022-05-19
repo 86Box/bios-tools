@@ -275,34 +275,32 @@ def extract(dir_path, _, options):
 
 # Analysis module.
 
-def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_names):
-	"""Process a given directory for analysis."""
+amipci_pattern = re.compile('''amipci_([0-9A-F]{4})_([0-9A-F]{4})\\.rom$''')
 
-	# Sort file names for better predictability. The key= function forces
-	# "original.tm1" to be combined after "original.tmp" for if the Award
-	# identification data spans across both files (AOpen AX6B(+) R2.00)
-	scan_file_names.sort(key=lambda fn: (fn == 'original.tm1') and 'original.tmq' or fn)
+def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_names):
+	"""Process the given files for analysis."""
 
 	# Set up caches.
 	files_flags = {}
 	files_data = {}
 	combined_oroms = []
 	header_data = None
-	
+
 	# In combined mode (enabled by InterleaveExtractor and BIOSExtractor), we
 	# handle all files in the directory as a single large blob, to avoid any doubts.
 	combined = ':combined:' in scan_file_names
 	if combined:
 		files_data[''] = b''
 
+	# Sort file names for better predictability. The key= function forces
+	# "original.tm1" to be combined after "original.tmp" for if the Award
+	# identification data spans across both files (AOpen AX6B(+) R2.00)
+	if len(scan_file_names) > 1:		
+		scan_file_names.sort(key=lambda fn: (fn == 'original.tm1') and 'original.tmq' or fn)
+
 	# Read files into the cache.
 	cache_quota = ANALYZER_MAX_CACHE_MB * 1073741824
 	for scan_file_name in scan_file_names:
-		# Skip known red herrings. This check is legacy code with an unknown impact.
-		scan_file_name_lower = scan_file_name.lower()
-		if 'post.string' in scan_file_name_lower or 'poststr.rom' in scan_file_name_lower:
-			continue
-
 		# Read up to 16 MB as a safety net.
 		file_data = util.read_complement(os.path.join(scan_dir_path, scan_file_name))
 
@@ -314,7 +312,7 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 
 			# Add PCI option ROM IDs extracted from AMI BIOSes by bios_extract, since the ROM might not
 			# contain a valid PCI header to begin with. (Apple PC Card with OPTi Viper and AMIBIOS 6)
-			match = re.match('''amipci_([0-9a-f]{4})_([0-9a-f]{4})\.rom$''', scan_file_name_lower)
+			match = amipci_pattern.match(scan_file_name)
 			if match:
 				combined_oroms.append((int(match.group(1), 16), int(match.group(2), 16)))
 		else:
@@ -328,11 +326,14 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 	# Prepare combined-mode analysis.
 	if combined:
 		# Set interleaved flag on de-interleaved blobs.
-		flag_size = os.path.getsize(os.path.join(scan_dir_path, ':combined:'))
-		if flag_size >= 2:
-			combined = 'Interleaved'
-			if flag_size > 2:
-				combined += str(flag_size)
+		try:
+			flag_size = os.path.getsize(os.path.join(scan_dir_path, ':combined:'))
+			if flag_size >= 2:
+				combined = 'Interleaved'
+				if flag_size > 2:
+					combined += str(flag_size)
+		except:
+			pass
 
 		# Commit to only analyzing the large blob.
 		scan_file_names = ['']
@@ -422,7 +423,7 @@ def analyze_dir(formatter, scan_base, file_analyzers, scan_dir_path, scan_file_n
 		# Clean up the file path.
 		scan_file_path_full = os.path.join(scan_dir_path, scan_file_name)
 
-		# Remove combined directories.
+		# Remove combined directories from the path.
 		found_flag_file = True
 		while found_flag_file:
 			# Find archive indicator.
@@ -582,7 +583,7 @@ def analyze_process(queue, formatter, scan_base, options):
 		item = queue.get()
 		if item == None: # special item to stop the loop
 			break
-		analyze_dir(formatter, scan_base, file_analyzers, *item)
+		analyze_files(formatter, scan_base, file_analyzers, *item)
 
 def analyze(dir_path, formatter_args, options):
 	"""Main function for analysis."""
@@ -620,7 +621,11 @@ def analyze(dir_path, formatter_args, options):
 	if os.path.isdir(dir_path):
 		# Scan directory structure.
 		for scan_dir_path, scan_dir_names, scan_file_names in os.walk(dir_path):
-			queue.put((scan_dir_path, scan_file_names))
+			if ':combined:' in scan_file_names or ':header:' in scan_file_names: # combined mode: process entire directory at once
+				queue.put((scan_dir_path, scan_file_names))
+			else: # regular mode: process individual files
+				for scan_file_name in scan_file_names:
+					queue.put((scan_dir_path, [scan_file_name]))
 	else:
 		# Scan single file.
 		queue.put(('', [dir_path]))
