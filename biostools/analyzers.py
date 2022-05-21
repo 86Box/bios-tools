@@ -2442,12 +2442,9 @@ class QuadtelAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Quadtel', *args, **kwargs)
 
-		self._id_block_pattern = re.compile(b'''Copyright 19..-.... Quadtel Corp\. Version''')
+		self._id_block_pattern = re.compile(b'''Copyright 19..-.... Quadtel Corp\\. Version''')
 		self._version_pattern = re.compile('''(?:(?:Quadtel|QUADTEL|PhoenixBIOS) )?(.+) BIOS Version ([^\\r\\n]+)''')
-
-		self.register_check_list([
-			(self._string_date,	RegexChecker),
-		])
+		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
 
 	def can_handle(self, file_data, header_data):
 		if b' Quadtel Corp. Version ' not in file_data:
@@ -2476,23 +2473,17 @@ class QuadtelAnalyzer(Analyzer):
 			# Split sign-on lines.
 			self.signon = '\n'.join(x.rstrip('\r').strip() for x in self.signon.split('\n') if x != '\r').strip('\n')
 
-		return True
-
-	def _string_date(self, line, match):
-		'''^[0-9]{2}/[0-9]{2}/[0-9]{2}$'''
-
-		# Add date to string, or replace any previously-found date with a newer one.
-		linebreak_index = self.string.find('\n')
-		if linebreak_index > -1:
-			if util.date_gt(line, self.string[linebreak_index + 1:], util.date_pattern_mmddyy):
-				self.string = self.string[:linebreak_index + 1] + match.group(0)
-		else:
-			if self.string:
-				self.string += '\n'
-			self.string += line
-
-		# Disarm sign-on trap if armed.
-		self._trap_signon = False
+		# Add newest date found to the string.
+		for match in self._date_pattern.finditer(file_data):
+			date = match.group(1)
+			linebreak_index = self.string.find('\n')
+			if linebreak_index > -1:
+				if util.date_gt(date, self.string[linebreak_index + 1:], util.date_pattern_mmddyy):
+					self.string = self.string[:linebreak_index + 1] + match.group(0)
+			else:
+				if self.string:
+					self.string += '\n'
+				self.string += date
 
 		return True
 
