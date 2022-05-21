@@ -1372,6 +1372,8 @@ class CorebootAnalyzer(Analyzer):
 		# Locate and extract version.
 		match = self._version_coreboot_pattern.search(file_data)
 		if match: # coreboot
+			self.debug_print('coreboot tag:', match.group(0))
+
 			# Reset vendor to coreboot.
 			self.vendor = self.vendor_id
 
@@ -1387,6 +1389,8 @@ class CorebootAnalyzer(Analyzer):
 			# Locate build tag.
 			match = self._string_build_pattern.search(file_data)
 			if match:
+				self.debug_print('coreboot build': match.group(0))
+
 				# Add build tag to string.
 				if self.string:
 					self.string += '\n'
@@ -1396,6 +1400,8 @@ class CorebootAnalyzer(Analyzer):
 		else:
 			match = self._version_linuxbios_pattern.search(file_data)
 			if match: # LinuxBIOS
+				self.debug_print('LinuxBIOS banner:', match.group(0))
+
 				# Set vendor to LinuxBIOS if required.
 				self.vendor = match.group(1).decode('cp437', 'ignore')
 
