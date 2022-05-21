@@ -95,8 +95,8 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 
 ### Phoenix
 
-* Identification is **not perfect**, as the location of identification data varies from version to version, and a lot of OEMs mess with it.
-* Phoenix has no concept of a string. Any date or time found in the BIOS is interpreted as the string.
+* Phoenix has no concept of a string. The BCPSYS build information is extracted as one.
+* OEM modifications which may interfere with detection: **DEC** (sign-on), potentially others where the version information was modified.
 
 ### SystemSoft
 
@@ -117,5 +117,5 @@ Depending on the contents of each BIOS, the following tags may be displayed on t
 
 ### BIOS-specific add-ons
 
-* AMIBIOS (Color through 7) setup types: **Color**, **EasySetup**, **HiFlex**, **NewSetup**, **SimpleSetup**, **WinBIOS**.
+* AMIBIOS (Color through 7) setup types: **Color**, **EasySetup**, **HiFlex**, **IntelSetup**, **NewSetup**, **SimpleSetup**, **WinBIOS**.
 * Award: **PhoenixNet** indicates the presence of PhoenixNet features, even if those were disabled by the OEM. **UEFI** indicates Gigabyte Hybrid EFI.

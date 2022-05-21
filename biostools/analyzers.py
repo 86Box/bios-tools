@@ -1572,14 +1572,14 @@ class IBMSurePathAnalyzer(Analyzer):
 				if match:
 					self.signon = self.signon.strip() + '\n' + match.group(0).decode('cp437', 'ignore')[4:].strip()
 
-		# Extract BIOS string from the VPD area if present.
+		# Extract BIOS ID string from the VPD area if present.
 		match = self._vpd_pattern.search(file_data)
 		if match:
-			# Later compressed SurePath. No further information,
-			# except for an ID string at the end of some of them.
+			# Later compressed SurePath provides no version clues.
 			if not self.version:
 				self.version = 'SurePath'
 
+			# Extract string.
 			id_string = match.group(1)
 			self.debug_print('VPD ID string:', id_string)
 			self.string = id_string.decode('cp437', 'ignore')
