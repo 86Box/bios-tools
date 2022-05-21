@@ -334,7 +334,7 @@ class AMIAnalyzer(Analyzer):
 
 		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC| Access Methods Inc\\.|AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) (?:IBM is a TM of IBM|[\\x00-\\xFF]{2}   AMI-[^-]+-BIOS )''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
-		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-[0-9]{6}-Chipset$''')
+		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-[0-9]{6}-Chipset-0AAAA000$''')
 		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 		# The "All Rights Reserved" is important to not catch the same header on other files.
 		# "All<Rights Reserved" (Tatung TCS-9850 9600x9, corrupted during production?)
@@ -428,7 +428,11 @@ class AMIAnalyzer(Analyzer):
 				self.string = self.string.rstrip() + '-' + id_tag[4:].lstrip()
 
 			# Stop if this BIOS is actually Aptio UEFI CSM.
-			if self._uefi_csm_pattern.match(self.string):
+			if isinstance(self, AMIUEFIAnalyzer):
+				# This is the UEFI sub-class, we actually want the string and nothing more.
+				self.debug_print('Returning to UEFI analyzer')
+				return True
+			elif self._uefi_csm_pattern.match(self.string):
 				self.debug_print('String matches UEFI CSM, aborting')
 				return False
 
@@ -780,82 +784,66 @@ class AMIIntelAnalyzer(Analyzer):
 		return False
 
 
-class AMIUEFIAnalyzer(Analyzer):
+class AMIUEFIAnalyzer(AMIAnalyzer):
 	def __init__(self, *args, **kwargs):
-		super().__init__('AMI', *args, **kwargs)
+		super().__init__(*args, **kwargs)
 		self.vendor_id = 'AMIUEFI'
 
-		self._identifier_pattern = re.compile(b'''Version %x\\.%02x\\.%04x\\.|ALASKAA M I|[Xx]-UEFI-AMI''')
-
-		self.register_check_list([
-			(self._string_csm,						RegexChecker),
-			((self._signon_precheck, self._signon),	AlwaysRunChecker),
-			(self._signon_trigger,					RegexChecker),
-			(self._signon_asus,						RegexChecker),
-			(self._signon_prefixed,					RegexChecker),
-		])
-
-	def reset(self):
-		super().reset()
-		self._trap_signon = False
-
-	def _signon_precheck(self, line):
-		return self._trap_signon
+		self._identifier_pattern = re.compile(b'''\\$SGN\\$|ALASKAA M I|[Xx]-UEFI-AMI''')
+		self._signon_asus_pattern = re.compile(b''' ACPI BIOS Rev''')
+		self._signon_intel_msi_pattern = re.compile(b'''\\$((?:IBIOSI|MSESGN)\\$|UBI)([\\x20-\\x7E]{4,})''')
+		self._signon_sgn_pattern = re.compile(b'''\\$SGN\\$[\\x01-\\xFF][\\x00-\\xFF]{2}''')
 
 	def can_handle(self, file_data, header_data):
 		# Only handle files sent through UEFIExtractor.
 		if header_data != b'\x00\xFFUEFIExtract\xFF\x00':
 			return False
 
-		# Check for version format string or "ALASKA" ACPI table identifier.
+		# Check for one of the identifiers.
 		if not self._identifier_pattern.search(file_data):
 			return False
 
+		# Get CSM string from AMIAnalyzer.
+		super().can_handle(file_data, header_data)
+		self.signon = ''
+
+		# Would be nice to easily know the difference between Aptio IV, V and such...
 		self.version = 'UEFI'
 
-		return True
+		# Locate and extract different types of sign-on.
+		match = self._signon_intel_msi_pattern.search(file_data)
+		if match: # Intel (4D84F7CA-37D8-42DB-87F0-5F43A0469F3B 12D58591-E491-4E89-A081-3A3CE413181C) and MSI (GUID varies)
+			self.debug_print('$' + match.group(1).decode('cp437', 'ignore'), 'sign-on:', match.group(2))
 
-	def _string_csm(self, line, match):
-		'''^63-0100-000001-00101111-......-Chipset$'''
+			# Extract text as a sign-on.
+			self.signon = match.group(2).decode('cp437', 'ignore')
 
-		# Extract string from the AMIBIOS 8-based CSM, just because.
-		self.string = line
+			return True
 
-		return True
+		match = self._signon_asus_pattern.search(file_data)
+		if match: # ASUSPostMessage (177B2C74-9674-45F4-AAEB-43F5506AE0FE)
+			# Locate the string's actual beginning.
+			string_index = match.start(0)
+			string_index = file_data.rfind(b'\x00', string_index - 256, string_index) + 1
 
-	def _signon_trigger(self, line, match):
-		'''^Version %x\\.%02x\\.%04x. Copyright \\(C\\)'''
+			if string_index > 0:
+				# Extract sign-on.
+				self.signon = util.read_string(file_data[string_index:string_index + 256])
+				self.debug_print('ASUS sign-on at', hex(string_index) + ':', repr(self.signon))
 
-		# Read sign-on on the next line if one wasn't already found.
-		if not self.signon:
-			self._trap_signon = True
+				return True
 
-		return True
+		match = self._signon_sgn_pattern.search(file_data)
+		if match: # standard AMI (2EBE0275-6458-4AF9-91ED-D3F4EDB100AA A59A0056-3341-44B5-9C9C-6D76F7673817)
+			# Skip first string (version/copyright format string)
+			string_index = match.end(0)
+			first_string = util.read_string(file_data[string_index:string_index + 256])
+			string_index += len(first_string) + 1
+			self.debug_print('AMI $SGN$ first line:', repr(first_string))
 
-	def _signon(self, line, match):
-		# Extract sign-on.
-		self.signon = line
-
-		# Disarm trap.
-		self._trap_signon = False
-
-		return True
-
-	def _signon_asus(self, line, match):
-		'''. ACPI BIOS Revision .'''
-
-		# Extract sign-on.
-		self.signon = line
-
-		return True
-
-	def _signon_prefixed(self, line, match):
-		'''^\\$(?:(?:IBIOSI\\$|UBI)([0-9A-Z]{8}\\.[0-9A-Z]{3}(?:\\.[0-9]{4}){4})|MSESGN\\$(.+))'''
-		# "$IBIOSI$", "$UBI" (Intel)
-		# "$MSESGN$" (MSI)
-
-		# Extract sign-on.
-		self.signon = match.group(1) or match.group(2)
+			# Extract sign-on from the second string.
+			self.signon = util.read_string(file_data[string_index:string_index + 256])
+			self.debug_print('AMI $SGN$ sign-on:', repr(self.signon))
 
 		return True
 
@@ -917,7 +905,9 @@ class AwardAnalyzer(Analyzer):
 		if not self._award_pattern.search(file_data):
 			return False
 
-		# Skip Windows 95 INF updates and Award VBIOS.
+		# Skip:
+		# - Windows 95 INF updates
+		# - Award VBIOS
 		if self._ignore_pattern.search(file_data):
 			self.debug_print('Skipping INF or VBIOS', self.version)
 			return False
@@ -1833,6 +1823,7 @@ class PhoenixAnalyzer(Analyzer):
 
 		# "Phoenix ROM BIOS" (Dell Latitude CP/CPI)
 		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess''')
+		self._ignore_pattern = re.compile(b'''search=f000,0,ffff,S,"|\\x00\\xC3\\x82as Ltd. de Phoenix del \\xC2\\x83 de Tecnolog\\xC3\\x83\\x00''')
 		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved''')
 		self._hp_signon_pattern = re.compile(b'''Version +[\\x21-\\x7E]+ +HP [\\x20-\\x7E]+''')
 		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Ax86)
@@ -1887,8 +1878,10 @@ class PhoenixAnalyzer(Analyzer):
 		if not self._phoenix_pattern.search(file_data):
 			return False
 
-		# Skip Windows 95 INF updates.
-		if b'search=f000,0,ffff,S,"' in file_data:
+		# Skip:
+		# - Windows 95 INF updates
+		# - Intel UEFI with PCI device list (UTF-8 encoded)
+		if self._ignore_pattern.search(file_data):
 			return False
 
 		# Read build code, date and time from BCPSYS on 4.0 and newer BIOSes.
