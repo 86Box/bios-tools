@@ -453,7 +453,7 @@ class AMIAnalyzer(Analyzer):
 			self.debug_print('False positive by size of', len(file_data), 'bytes')
 			return False
 		elif self._precolor_date_pattern.search(file_data):
-			self.debug_print('Found potential pre-Color')
+			self.debug_print('Potential pre-Color')
 			self.debug_print([x.group(0) for x in self._precolor_date_pattern.finditer(file_data)])
 
 			# Check date, using a different pattern to differentiate core date from build date.
@@ -1436,7 +1436,7 @@ class DTKGoldStarAnalyzer(Analyzer):
 		# Locate version string.
 		match = self._version_pattern.search(file_data)
 		if match:
-			self.debug_print('Found DTK version:', match.group(0))
+			self.debug_print('DTK version:', match.group(0))
 
 			# Extract vendor.
 			self.vendor = (match.group(1) or match.group(3) or b'GoldStar').decode('cp437', 'ignore')
@@ -1534,7 +1534,7 @@ class IBMSurePathAnalyzer(Analyzer):
 			b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  (?:IIBBMM  CCOORRPPOORRAATTIIOONN  11998811,,  ([0-9])\\1([0-9])\\2([0-9])\\3([0-9])\\4|11998811,,  ([0-9])\\5([0-9])\\6([0-9])\\7([0-9])\\8  IIBBMM  CCOORRPPOORRAATTIIOONN)  (?:--  )?AALLLL  RRIIGGHHTTSS  RREESSEERRVVEEDD|'''
 			b'''\\(C\\) COPYRIGHT (?:IBM CORPORATION 1981, [0-9]{4}|1981, [0-9]{4} IBM CORPORATION) (?:- )?ALL RIGHTS RESERVED[ \\x0D\\x0A]*(?:[\\x00\\xFF]|US Government Users)'''
 		)
-		self._ibm_later_pattern = re.compile(b'''\\xAA\\x55VPD0RESERVE([0-9A-Z]{7})''')
+		self._vpd_pattern = re.compile(b'''\\xAA\\x55VPD0RESERVE([0-9A-Z]{7})''')
 		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
 		self._apricot_pattern = re.compile(b'''@\\(#\\)(?:Apricot .*|XEN-PC) BIOS [\\x20-\\x7E]+''')
 		self._apricot_version_pattern = re.compile(b'''@\\(#\\)Version [\\x20-\\x7E]+''')
@@ -1548,13 +1548,13 @@ class IBMSurePathAnalyzer(Analyzer):
 		if match:
 			# Extract version.
 			self.version = match.group(1)
-			self.debug_print('Found uncompressed version:', self.version)
+			self.debug_print('Uncompressed version:', self.version)
 			self.version = 'SurePath ' + self.version.decode('cp437', 'ignore').strip()
 
 			# Extract customization as a sign-on if found. (AT&T Globalyst)
 			customization = match.group(2)
 			if customization:
-				self.debug_print('Found AT&T customization:', customization)
+				self.debug_print('AT&T customization:', customization)
 				self.signon = customization.decode('cp437', 'ignore')
 		else:
 			# Special case for Apricot-licensed SurePath.
@@ -1566,23 +1566,27 @@ class IBMSurePathAnalyzer(Analyzer):
 
 				# Extract Apricot customization as a sign-on.
 				customization = match.group(0)
-				self.debug_print('Found Apricot customization:', customization)
+				self.debug_print('Apricot customization:', customization)
 				self.signon = customization.decode('cp437', 'ignore')[4:]
 				match = self._apricot_version_pattern.search(file_data)
 				if match:
 					self.signon = self.signon.strip() + '\n' + match.group(0).decode('cp437', 'ignore')[4:].strip()
-			else:
-				match = self._ibm_later_pattern.search(file_data)
-				if match:
-					# Later compressed SurePath. No further information,
-					# except for an ID string at the end of some of them.
-					self.version = 'SurePath'
 
-					id_string = match.group(1)
-					self.debug_print('Found VPD ID string:', id_string)
-					self.string = id_string.decode('cp437', 'ignore')
-				else:
-					return False
+		# Extract BIOS string from the VPD area if present.
+		match = self._vpd_pattern.search(file_data)
+		if match:
+			# Later compressed SurePath. No further information,
+			# except for an ID string at the end of some of them.
+			if not self.version:
+				self.version = 'SurePath'
+
+			id_string = match.group(1)
+			self.debug_print('VPD ID string:', id_string)
+			self.string = id_string.decode('cp437', 'ignore')
+
+		# Stop if nothing was found.
+		if not self.version:
+			return False
 
 		# Look for entrypoint dates.
 		old_string = self.string
@@ -1590,7 +1594,7 @@ class IBMSurePathAnalyzer(Analyzer):
 		NoInfoAnalyzer.get_entrypoint_dates(self, file_data)
 		if old_string:
 			if self.string:
-				self.debug_print('Found entry point date:', self.string)
+				self.debug_print('entry point date:', self.string)
 				self.string = old_string + '\n' + self.string
 			else:
 				self.string = old_string
