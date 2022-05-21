@@ -1360,52 +1360,56 @@ class CorebootAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('coreboot', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version_coreboot,	RegexChecker),
-			(self._version_linuxbios,	RegexChecker),
-			(self._string_coreboot,		RegexChecker),
-		])
+		self._identifier_pattern = re.compile(b'''coreboot-%s%s |Sage_coreboot-|Jumping to LinuxBIOS\\.''')
+		self._version_coreboot_pattern = re.compile(b'''#(?: This image was built using coreboot|define COREBOOT_VERSION ")([^"]+)''')
+		self._version_linuxbios_pattern = re.compile(b'''(LinuxBIOS|coreboot)-([^_ ]+)[_ ](?:Normal |Fallback )?(.* )?starting\\.\\.\\.''')
+		self._string_build_pattern = re.compile(b'''#define COREBOOT_BUILD "([^"]+)"''')
 
 	def can_handle(self, file_data, header_data):
-		return b'coreboot-%s%s ' in file_data or b'Jumping to LinuxBIOS.' in file_data
+		if not self._identifier_pattern.search(file_data):
+			return False
 
-	def _version_coreboot(self, line, match):
-		'''^#(?: This image was built using coreboot|define COREBOOT_VERSION ")([^"]+)'''
+		# Locate and extract version.
+		match = self._version_coreboot_pattern.search(file_data)
+		if match: # coreboot
+			# Reset vendor to coreboot.
+			self.vendor = self.vendor_id
 
-		# Extract version.
-		self.version = match.group(1)
+			# Extract version.
+			self.version = match.group(1).decode('cp437', 'ignore')
 
-		# Extract any additional information after the version as a string.
-		dash_index = self.version.find('-')
-		if dash_index > -1:
-			self.string = self.version[dash_index + 1:]
-			self.version = self.version[:dash_index]
+			# Extract any additional information after the version as a string.
+			dash_index = self.version.find('-')
+			if dash_index > -1:
+				self.string = self.version[dash_index + 1:]
+				self.version = self.version[:dash_index]
 
-		return True
+			# Locate build tag.
+			match = self._string_build_pattern.search(file_data)
+			if match:
+				# Add build tag to string.
+				if self.string:
+					self.string += '\n'
+				self.string += match.group(1).decode('cp437', 'ignore')
 
-	def _version_linuxbios(self, line, match):
-		'''^LinuxBIOS-([^_ ]+)[_ ](?:Normal |Fallback )(.+) starting\.\.\.$'''
+			return True
+		else:
+			match = self._version_linuxbios_pattern.search(file_data)
+			if match: # LinuxBIOS
+				# Set vendor to LinuxBIOS if required.
+				self.vendor = match.group(1).decode('cp437', 'ignore')
 
-		# Set vendor to LinuxBIOS instead.
-		self.vendor = 'LinuxBIOS'
+				# Extract version.
+				self.version = match.group(2).decode('cp437', 'ignore')
 
-		# Extract version.
-		self.version = match.group(1)
+				# Extract any additional information after the version as a string.
+				additional_info = match.group(3)
+				if additional_info:
+					self.string = additional_info.decode('cp437', 'ignore')
 
-		# Extract any additional information after the version as a string.
-		self.string = match.group(2)
+				return True
 
-		return True
-
-	def _string_coreboot(self, line, match):
-		'''^#define COREBOOT_BUILD "([^"]+)"'''
-
-		# Add build date to string.
-		if self.string:
-			self.string += '\n'
-		self.string += match.group(1)
-
-		return True
+		return False
 
 
 class DTKGoldStarAnalyzer(Analyzer):
