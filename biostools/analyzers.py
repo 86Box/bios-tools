@@ -2475,7 +2475,7 @@ class QuadtelAnalyzer(Analyzer):
 
 		# Add newest date found to the string.
 		for match in self._date_pattern.finditer(file_data):
-			date = match.group(1)
+			date = match.group(1).decode('cp437', 'ignore')
 			linebreak_index = self.string.find('\n')
 			if linebreak_index > -1:
 				if util.date_gt(date, self.string[linebreak_index + 1:], util.date_pattern_mmddyy):
@@ -2625,31 +2625,37 @@ class TinyBIOSAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('tinyBIOS', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version,								RegexChecker),
-			((self._noversion_precheck, self._signon),	AlwaysRunChecker),
-		])
+		self._version_pattern = re.compile(b'''tinyBIOS (V(?:[^\\s]+))''')
 
 	def can_handle(self, file_data, header_data):
-		return b'tinyBIOS V' in file_data and b' PC Engines' in file_data
+		if b' PC Engines' not in file_data:
+			return False
 
-	def _noversion_precheck(self, line):
-		return not self.version
-
-	def _version(self, line, match):
-		'''^tinyBIOS (V(?:[^\s]+))'''
+		# Locate version.
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
 
 		# Extract version.
-		self.version = match.group(1)
+		self.version = match.group(1).decode('cp437', 'ignore')
+
+		# Locate sign-on, the last string before the version.
+		version_index = match.start(0)
+		signon_index = version_index - 1
+		if signon_index > -1 and file_data[signon_index:version_index] == b'"':
+			# Ignore MESSAGE.8 in the source code.
+			return False
+		while signon_index > -1 and file_data[signon_index] in (0x00, 0x0a, 0x0d):
+			signon_index -= 1
+		while signon_index > -1 and file_data[signon_index] >= 0x0a and file_data[signon_index] <= 0x7e:
+			signon_index -= 1
+		signon_index += 1
+		if version_index - signon_index <= 256:
+			# Extract sign-on.
+			self.signon = util.read_string(file_data[signon_index:version_index])
+			self.debug_print('Sign-on at', hex(signon_index) + ':', repr(self.signon))
 
 		return True
-
-	def _signon(self, line, match):
-		# Extract the last line before the version as a sign-on.
-		self.signon = line
-
-		return False
-
 
 class ToshibaAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
