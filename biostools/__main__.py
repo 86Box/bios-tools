@@ -16,7 +16,7 @@
 #                Copyright 2021 RichardG.
 #
 
-import errno, getopt, os, pickle, multiprocessing, re, socket, subprocess, sys, threading
+import errno, getopt, multiprocessing, os, pickle, re, socket, subprocess, sys, threading
 from . import analyzers, extractors, formatters, util
 
 # Constants.

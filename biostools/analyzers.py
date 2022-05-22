@@ -1389,7 +1389,7 @@ class CorebootAnalyzer(Analyzer):
 			# Locate build tag.
 			match = self._string_build_pattern.search(file_data)
 			if match:
-				self.debug_print('coreboot build': match.group(0))
+				self.debug_print('coreboot build:', match.group(0))
 
 				# Add build tag to string.
 				if self.string:
