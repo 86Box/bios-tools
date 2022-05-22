@@ -7,7 +7,7 @@
 #
 #                This file is part of the 86Box BIOS Tools distribution.
 #
-#                Docker container entry point for running the tools.
+#                Docker container entrypoint for running the tools.
 #
 #
 #

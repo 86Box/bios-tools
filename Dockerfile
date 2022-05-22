@@ -37,6 +37,10 @@ COPY . /biostools
 RUN cd /biostools/bios_extract && \
 	make
 
+# Compile deark.
+RUN cd /biostools/deark && 
+	make
+
 # Create final image.
 FROM debian:bullseye
 
@@ -57,5 +61,5 @@ RUN pip install -r /biostools/requirements.txt
 VOLUME /bios
 WORKDIR /biostools
 
-# Run our entry point script.
+# Run our entrypoint script.
 ENTRYPOINT ["/bin/sh", "/biostools/docker-entrypoint.sh"]

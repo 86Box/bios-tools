@@ -5,6 +5,7 @@ Fork of the [coreboot bios_extract tool](https://github.com/coreboot/bios_extrac
 ## Modifications
 
 * Added some sanity checks
+* Added automatic saving of parts of the image that were not processed, like PHOEDECO
 * Improved AMI, Award and Phoenix BIOS detection
 * Improved AMIBIOS extraction
 * Improved Award extraction on semi-compressed v4.50 BIOSes

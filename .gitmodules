@@ -1,0 +1,3 @@
+[submodule "deark"]
+	path = deark
+	url = https://github.com/jsummers/deark.git

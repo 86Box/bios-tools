@@ -34,12 +34,11 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 ### Installation
 
 1. Clone this repository.
-2. Build the `bios_extract` tool:
+2. Build the `bios_extract` and `deark` tools:
 
 ```
-cd bios_extract
+cd /path/to/bios-tools
 make
-cd ..
 ```
 
 3. Download the `UEFIExtract` tool from its [GitHub repository](https://github.com/LongSoft/UEFITool/releases) and place its executable on the repository's root directory. Prebuilt versions are only available for `x86_64`, but this tool is optional, and only required for UEFI extraction.
