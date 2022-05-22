@@ -2579,14 +2579,12 @@ class VMExtractor(PEExtractor):
 			if match:
 				extractor = self._extract_floppy
 				extractor_kwargs['match'] = match
-			elif allow_deark: # avoid infinite loops
-				module = self.extract_deark(file_path, file_header, None)
-				if module:
-					# Acquire the multi-file lock if this is a ROMPAQ.EXE.
-					if os.path.basename(file_path).lower() == 'rompaq.exe':
-						self.multifile_lock_acquire(file_path)
+			elif allow_deark and self.extract_deark(file_path, file_header, None): # avoid infinite loops
+				# Acquire the multi-file lock if this is a ROMPAQ.EXE.
+				if os.path.basename(file_path).lower() == 'rompaq.exe':
+					self.multifile_lock_acquire(file_path)
 
-					extractor = self._extract_deark
+				extractor = self._extract_deark
 		elif self._eti_pattern.match(file_header):
 			extractor = self._extract_eti
 		elif self._rompaq_pattern.match(file_header):
