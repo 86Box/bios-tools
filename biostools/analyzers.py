@@ -885,7 +885,7 @@ class AwardAnalyzer(Analyzer):
 
 		# "COPYRIGHT AWARD SOFTWARE INC." (early XT/286)
 		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|COPYRIGHT AWARD SOFTWARE INC\\.|Award Decompression Bios''')
-		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}A w a r d Software Inc\\.|IBM COMPATIBLE A(S)T BIOS''')
+		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}(?:A w a r d|Award) Software Inc\\.|IBM COMPATIBLE A(S)T BIOS''')
 		self._early_pattern = re.compile(b'''([0-9A-Z][\\x21-\\x7E]+) BIOS V([0-9.]+)[\\x21-\\x7E]* COPYRIGHT''')
 		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
