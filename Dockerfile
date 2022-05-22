@@ -38,7 +38,7 @@ RUN cd /biostools/bios_extract && \
 	make
 
 # Compile deark.
-RUN cd /biostools/deark && 
+RUN cd /biostools/deark && \
 	make
 
 # Create final image.
