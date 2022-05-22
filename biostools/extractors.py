@@ -2558,7 +2558,7 @@ class VMExtractor(ArchiveExtractor):
 	def _run_qemu(self, hdd=None, hdd_snapshot=True, floppy=None, floppy_snapshot=True, vvfat=None, boot='c', monitor_cmd=None, monitor_flag_file=None):
 		# Build QEMU arguments.
 		args = [self._qemu_path, '-m', '32', '-boot', boot]
-		if not self.debug:
+		if not self.debug or not os.getenv('DISPLAY'):
 			args += ['-display', 'none', '-vga', 'none']
 		if monitor_cmd:
 			args += ['-monitor', 'stdio']
