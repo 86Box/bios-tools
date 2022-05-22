@@ -2116,9 +2116,6 @@ class PEExtractor(ArchiveExtractor):
 			b'''Micro Firmware, Incorporated \\* ''' # Micro Firmware (Intel Monsoon surfaced so far)
 		)
 
-		# Signatures for compressed executables.
-		self._exepack_pattern = re.compile(b'''\\xCD\\x21\\xB8\\xFF\\x4C\\xCD\\x21''')
-
 		# Path to the deark utility.
 		self._deark_path = os.path.abspath(os.path.join('deark', 'deark'))
 		if not os.path.exists(self._deark_path):
@@ -2161,28 +2158,25 @@ class PEExtractor(ArchiveExtractor):
 		if not self._deark_path:
 			return False
 
-		# Determine deark module to use, and stop if nothing matches.
-		if file_header[28:32] == b'LZ91':
-			module = 'lzexe'
-		elif file_header[30:36] == b'PKLITE':
-			module = 'pklite'
-		elif self._exepack_pattern.search(file_header):
-			module = 'exepack'
-		else:
-			return False
-		self.debug_print('Using deark module:', module)
+		# Determine if deark can extract this file as an executable, and stop if it can't.
+		file_path_abs = os.path.abspath(file_path)
+		if not delegated:
+			proc = subprocess.run([self._deark_path, '-opt', 'execomp', '-l', file_path_abs], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+			if proc.stdout[:12] != b'Module: exe\n' or proc.stdout[-16:] != b'\noutput.000.exe\n':
+				return False
+			self.debug_print('Using deark')
 
-		# Stop and return the module name if this is a dry run.
+		# Stop if this is a dry run.
 		if not dest_dir:
-			return module
+			return True
 
 		# Create destination directory and stop if it couldn't be created.
 		if not util.try_makedirs(dest_dir):
 			return True
 
 		# Run deark command to extract the executable.
-		orig_basename, orig_ext = os.path.splitext(os.path.basename(file_path))
-		subprocess.run([self._deark_path, '-m', module, '-o', orig_basename, os.path.abspath(file_path)], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+		orig_basename, orig_ext = os.path.splitext(os.path.basename(file_path_abs))
+		subprocess.run([self._deark_path, '-opt', 'execomp', '-o', orig_basename, file_path_abs], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
 
 		# Assume failure if nothing was extracted.
 		files_extracted = os.listdir(dest_dir)
@@ -2537,7 +2531,8 @@ class VMExtractor(PEExtractor):
 			b'''(\\x00Diskette Image Decompression Utility\\.\\x00)|''' # NEC in-house
 			b'''(Copyright Daniel Valot |\\x00ARDI -  \\x00)|''' # IBM ARDI
 			b'''(Ready to build distribution image with the following attributes:)|''' # Zenith in-house
-			b'''(Error reading the Softpaq File information)''' # Compaq Softpaq
+			b'''(Error reading the Softpaq File information)|''' # Compaq Softpaq
+			b'''(DELLXBIOS[\\x00-\\xFF]+;C_FILE_INFO[\\x00-\\xFF]+<<NMSG>>)''' # Dell in-house
 		)
 		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
 		self._rompaq_pattern = re.compile(b'''[\\x00-\\xFF]{12}[A-Z0-9]{7}\\x00[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00''')
@@ -2575,12 +2570,16 @@ class VMExtractor(PEExtractor):
 		extractor = None
 		extractor_kwargs = {}
 		if file_header[:2] == b'MZ' and b'PK\x03\x04' not in file_header: # skip ZIP self-extractors with compressed stubs
+			# Read up to 16 MB as a safety net.
+			file_header += util.read_complement(file_path, file_header)
+
 			match = self._floppy_pattern.search(file_header)
 			if match:
 				extractor = self._extract_floppy
 				extractor_kwargs['match'] = match
 			elif allow_deark and self.extract_deark(file_path, file_header, None): # avoid infinite loops
 				# Acquire the multi-file lock if this is a ROMPAQ.EXE.
+				# This is required for ROMPAQ extraction below.
 				if os.path.basename(file_path).lower() == 'rompaq.exe':
 					self.multifile_lock_acquire(file_path)
 
@@ -2682,7 +2681,10 @@ class VMExtractor(PEExtractor):
 		floppy_media = 'floppy.144'
 
 		# Copy original file and blank floppy image to the destination directory.
-		exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'
+		if match.group(6): # Dell in-house names the extracted file after the executable
+			exe_name = 'dell.exe'
+		else:
+			exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'
 		exe_path = os.path.join(dest_dir, exe_name)
 		image_path = os.path.join(dest_dir, util.random_name(8) + '.img')
 		shutil.copy2(file_path, exe_path)
@@ -2705,7 +2707,7 @@ class VMExtractor(PEExtractor):
 			f.write(b'move /y config.old config.sys\r\n') # just in case again (snapshot shouldn't persist changes)
 		elif match.group(3): # ARDI
 			f.write(b'echo.|')
-		elif match.group(4): # Zenith in-house
+		elif match.group(4) or match.group(6): # Zenith in-house, Dell in-house
 			f.write(b'a:\r\n')
 		elif match.group(5): # Compaq Softpaq
 			# Create flag file for sending the monitor commands.
@@ -2719,6 +2721,8 @@ class VMExtractor(PEExtractor):
 			f.write(b'\r\n')
 		elif match.group(4): # Zenith in-house
 			f.write(b' <c:\\agreed.txt\r\n')
+		elif match.group(6): # Dell in-house
+			f.write(b' -writeromfile\r\n')
 		else:
 			f.write(b' a: <c:\\y.txt\r\n')
 		f.close()
@@ -2874,6 +2878,7 @@ class VMExtractor(PEExtractor):
 		"""Extract compressed executables with deark and run them through the same pipeline.
 		   This is required for the following self-extractors, which contain a compressed stub:
 		   - Compaq Softpaq (PKLITE)
+		   - Dell in-house (LZEXE with no LZ91 signature)
 		   - NEC in-house (PKLITE)
 		   - Siemens Nixdorf FastPacket (LZEXE)
 		   - Zenith in-house (PKLITE)
