@@ -341,7 +341,7 @@ class AMIAnalyzer(Analyzer):
 		# AMIBIOS 6+ version corner cases:
 		# - Second digit not 0 (I forget which one had 000000)
 		# - Can be 4-digit instead of 6-digit (Biostar)
-		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))([0-9]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)''')
+		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))([\\x00-\\xFF]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)''')
 		# Weird TGem identifier (TriGem 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS)|( Access Methods Inc\\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
