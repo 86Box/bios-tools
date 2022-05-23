@@ -2493,7 +2493,7 @@ class QuadtelAnalyzer(Analyzer):
 			linebreak_index = self.string.find('\n')
 			if linebreak_index > -1:
 				if util.date_gt(date, self.string[linebreak_index + 1:], util.date_pattern_mmddyy):
-					self.string = self.string[:linebreak_index + 1] + match.group(0)
+					self.string = self.string[:linebreak_index + 1] + match.group(0).decode('cp437', 'ignore')
 			else:
 				if self.string:
 					self.string += '\n'
