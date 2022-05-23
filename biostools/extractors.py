@@ -1487,6 +1487,9 @@ class IntelExtractor(Extractor):
 		# Stop if this file has an irrelevant extension.
 		file_name_lower = file_name.lower()
 		if file_name_lower[-3:] not in self._part_extensions:
+			# Acquire the multi-file lock.
+			self.multifile_lock_acquire(file_path)
+
 			# Remove file.
 			try:
 				os.remove(file_path)
