@@ -115,14 +115,18 @@ def extract_process(queue, abort_flag, multifile_lock, dir_number_path, next_dir
 		image_extractor,
 		extractors.ApricotExtractor(),
 		extractors.IntelNewExtractor(),
-		# extractors from here on down may read more than the header during detection
 		extractors.DellExtractor(),
 		extractors.IntelExtractor(),
 		extractors.OMFExtractor(),
 		extractors.TrimondExtractor(),
 		extractors.InterleaveExtractor(),
-		extractors.BIOSExtractor(),
-		extractors.UEFIExtractor(),
+	]
+	if not options['unpack-only']:
+		file_extractors += [
+			extractors.BIOSExtractor(),
+			extractors.UEFIExtractor(),
+		]
+	file_extractors += [
 		extractors.MBRUnsafeExtractor(),
 	]
 
@@ -891,13 +895,14 @@ def main():
 		'headers': True,
 		'hyperlink': False,
 		'threads': 0,
+		'unpack-only': False,
 		'docker-usage': False,
 		'remote_servers': [],
 		'remote_port': 0,
 	}
 
 	# Parse arguments.
-	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xadf:hnrt', ['extract', 'analyze', 'debug', 'format=', 'hyperlink', 'no-headers', 'array', 'threads', 'remote=', 'remote-server', 'docker-usage'])
+	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xadf:hnrtu', ['extract', 'analyze', 'debug', 'format=', 'hyperlink', 'no-headers', 'array', 'threads', 'unpack-only', 'remote=', 'remote-server', 'docker-usage'])
 	for opt, arg in args:
 		if opt in ('-x', '--extract'):
 			mode = extract
@@ -919,6 +924,8 @@ def main():
 				options['threads'] = int(arg)
 			except:
 				pass
+		elif opt in ('-u', '--unpack-only'):
+			options['unpack-only'] = True
 		elif opt == '--remote':
 			options['remote_servers'].append(arg)
 		elif opt == '--remote-server':
@@ -952,12 +959,13 @@ Usage: docker run -v directory:/bios biostools [-d] [-f output_format] [-h] [-n]
 '''
 	else:
 		usage = '''
-Usage: python3 -m biostools [-d] [-n] [-t threads] -x directory
+Usage: python3 -m biostools [-d] [-n] [-t threads] [-u] -x directory
        python3 -m biostools [-d] [-f output_format] [-h] [-n] [-r] [-t threads]
                             -a directory|single_file [formatter_options]
 
        -x    Extract archives and BIOS images recursively in the given directory
        -n    Abort extraction if disk space runs out.
+       -u    Extract archives only, don't extract BIOS images.
 
        -a    Analyze extracted BIOS images in the given directory, or a single
              extracted file (extracting with -x first is recommended)'''
