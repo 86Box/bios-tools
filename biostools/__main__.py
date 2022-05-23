@@ -100,8 +100,13 @@ def extract_process(queue, abort_flag, multifile_lock, dir_number_path, next_dir
 
 	# Set up extractors.
 	image_extractor = extractors.ImageExtractor()
-	file_extractors = [
-		extractors.DiscardExtractor(),
+	if options['unpack-only']:
+		file_extractors = []
+	else:
+		file_extractors = [
+			extractors.DiscardExtractor(),
+		]
+	file_extractors += [
 		extractors.ISOExtractor(),
 		extractors.VMExtractor(),
 		extractors.PEExtractor(),
