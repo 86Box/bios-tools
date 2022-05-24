@@ -122,10 +122,8 @@ LH5HeaderParse(unsigned char *Buffer, int BufferSize,
 
 	/* verify checksum */
 	checksum = Buffer[1];
-	if (calc_sum(Buffer + 2, header_size) != checksum) {
-		fprintf(stderr, "Error: Invalid lha header checksum.\n");
-		return 0;
-	}
+	if (calc_sum(Buffer + 2, header_size) != checksum)
+		fprintf(stderr, "Warning: Invalid lha header checksum.\n");
 
 	*packed_size = le32toh(*(unsigned int *)(Buffer + 7));
 	*original_size = le32toh(*(unsigned int *)(Buffer + 11));
@@ -149,8 +147,9 @@ LH5HeaderParse(unsigned char *Buffer, int BufferSize,
 
 		if (BufferSize < offset) {
 			fprintf(stderr,
-				"Error: Buffer to small to contain extended header.\n");
-			return 0;
+				"Warning: Buffer to small to contain extended header.\n");
+			offset = header_size + 2;
+			break;
 		}
 	}
 
