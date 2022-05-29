@@ -842,7 +842,7 @@ class AMIUEFIAnalyzer(AMIAnalyzer):
 			self.debug_print('AMI $SGN$ first line:', repr(first_string))
 
 			# Extract sign-on from the second string.
-			self.signon = util.read_string(file_data[string_index:string_index + 256])
+			self.signon = util.read_string(file_data[string_index:string_index + 256]).replace('\r', '')
 			self.debug_print('AMI $SGN$ sign-on:', repr(self.signon))
 
 		return True
