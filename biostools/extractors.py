@@ -1484,21 +1484,18 @@ class IntelExtractor(Extractor):
 		if file_name[-4:-3] != '.':
 			return True
 
+		# Acquire the multi-file lock.
+		self.multifile_lock_acquire(file_path)
+
 		# Stop if this file has an irrelevant extension.
 		file_name_lower = file_name.lower()
 		if file_name_lower[-3:] not in self._part_extensions:
-			# Acquire the multi-file lock.
-			self.multifile_lock_acquire(file_path)
-
 			# Remove file.
 			try:
 				os.remove(file_path)
 			except:
 				pass
 			return True
-
-		# Acquire the multi-file lock.
-		self.multifile_lock_acquire(file_path)
 
 		# Scan this directory's contents.
 		dir_path = os.path.dirname(file_path)
@@ -1929,6 +1926,7 @@ class InterleaveExtractor(Extractor):
 					if string in file_in_dir_data:
 						counterpart = True
 						break
+				del file_in_dir_data
 
 				# Move on if this is not a counterpart.
 				if not counterpart:
@@ -2042,12 +2040,12 @@ class OMFExtractor(Extractor):
 	"""Extract Fujitsu/ICL OMF BIOS files."""
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
-		# Stop if this is not an OMF file.
-		if file_header[0:1] != b'\xB2':
-			return False
-
 		# Stop if this file is too small (may be a copied header).
 		if len(file_header) <= 112:
+			return False
+
+		# Stop if this is not an OMF file.
+		if file_header[0] != 0xb2:
 			return False
 
 		# Stop if the OMF payload is incomplete or the sizes are invalid.
@@ -2762,7 +2760,7 @@ class VMExtractor(PEExtractor):
 
 		# Extract image as an archive.
 		ret = self._extract_archive(image_path, dest_dir, remove=False)
-		if type(ret) == str and len(os.listdir(dest_dir)) > 2:
+		if type(ret) == str and len(os.listdir(dest_dir)) > 1:
 			# Remove original file.
 			try:
 				os.remove(file_path)
