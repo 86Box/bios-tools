@@ -54,7 +54,9 @@ class Extractor:
 		self.multifile_locked = True
 
 		# Raise the special exception if another extractor already processed this file.
-		if not os.path.exists(file_path):
+		try:
+			return os.path.getsize(file_path)
+		except:
 			raise MultifileStaleException()
 
 
@@ -1886,10 +1888,10 @@ class InterleaveExtractor(Extractor):
 			return False
 
 		# Acquire the multi-file lock.
-		self.multifile_lock_acquire(file_path)
+		file_size = self.multifile_lock_acquire(file_path)
 
 		# Create temporary interleaved data array.
-		part_size = min(os.path.getsize(file_path), 16777216)
+		part_size = min(file_size, 16777216)
 		data = []
 
 		# Look for each counterpart.
