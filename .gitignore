@@ -19,3 +19,7 @@ biostools_*_*
 
 # UEFIExtract
 UEFIExtract
+
+# Local development
+/testcorpus
+/testdir
