@@ -2186,184 +2186,195 @@ class PhoenixAnalyzer(Analyzer):
 		# Save post-version sign-on to be restored later.
 		post_version = self.signon
 
-		# Determine if this is a Dell BIOS.
-		match = self._dell_system_pattern.search(file_data)
-		if match:
-			# Backup in case no Phoenix version is found, which is possible given compression.
-			if not self.version:
-				self.version = 'Dell'
-
-			# Extract the model as a sign-on.
-			self.signon = match.group(0).decode('cp437', 'ignore')
-			self.debug_print('Dell model:', self.signon)
-
-			# Add version information to the sign-on, looking at the data after the model first...
-			version_index = match.start(0) + 0x20
-			match = self._dell_version_code_pattern.match(file_data[version_index:version_index + 3])
-			if not match:
-				# ...then the version strings...
-				match = self._dell_version_pattern.search(file_data)
-				if not match:
-					# ...then on byte 48 of some files.
-					match = self._dell_version_code_pattern.match(file_data[0x30:0x33])
-			if match:
-				version_string = match.group(1)
-				self.signon += '\nBIOS Version: ' + version_string.decode('cp437', 'ignore')
-				self.debug_print('Dell version:', version_string)
+		# Extract sign-on from BCPOST on 4.0x and newer BIOSes.
+		if bios_maj != None and bios_min != None and code_segment != None:
+			bcpost = bcp.get('BCPOST', [None])[0]
 		else:
-			# Determine if this is some sort of HP Vectra BIOS.
-			match = self._hp_pattern.search(file_data)
-			if match:
-				self.version = 'HP'
+			bcpost = None
+		if bcpost and len(bcpost.data) >= 0x25:
+			# BCPOST versions observed:
+			# - 0.1 (4.01)
+			# - 0.3 (4.02-4.05)
+			# - 0.4 (4.04-4.05)
+			# - 1.3 (4.0R6)
+			# - 1.4 (SecureCore)
+			self.debug_print('BCPOST version:', bcpost.version_maj, bcpost.version_min)
 
-				# Extract code as a string.
-				self.string = match.group(1).decode('cp437', 'ignore')
+			# If this is a compressed BIOS, load decompressed segments.
+			segment_ranges = []
+			strings_files = []
+			if compressed:
+				# Go through extracted files.
+				for file_in_dir in os.listdir(file_path):
+					match = self._segment_pattern.match(file_in_dir)
+					if match:
+						# Read segment data.
+						try:
+							f = open(os.path.join(file_path, file_in_dir), 'rb')
+							data = f.read()
+							f.close()
+						except:
+							self.debug_print('Could not load segment file:', file_in_dir)
+							continue
 
-				# Extract the version number as a sign-on.
-				match = self._hp_signon_pattern.search(file_data)
-				if match:
-					self.signon = match.group(0).decode('cp437', 'ignore')
-					self.debug_print('HP version:', self.signon)
-			else:
-				# Extract sign-on from Ax86 and older BIOSes.
-				match = self._rombios_signon_pattern.search(file_data)
-				if match:
-					copyright_index = match.start(0)
-					if self._rombios_signon_dec_pattern.match(file_data[copyright_index - 48:copyright_index]):
-						self.debug_print('Ignored bogus sign-on on DEC BIOS')
-						match = None
-					else:
-						signon_log = 'std'
-				else:
-					match = self._rombios_signon_alt_pattern.search(file_data)
-					signon_log = 'alt'
-				if match:
-					end = match.end(0)
-					if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
-						signon = util.read_string(file_data[end:end + 256])
-						if len(signon) <= 3: # Phoenix video BIOS (Commodore SL386SX25), bogus data (NEC Powermate V)
-							match = None
-							self.debug_print('Ignored bogus sign-on (too short)')
+						# Load segment data into the virtual memory space.
+						self.debug_print('Loaded segment file:', file_in_dir)
+						offset = int(match.group(1), 16) << 4
+						target_len = min(len(virtual_mem) - offset, len(data))
+						if target_len >= 0:
+							virtual_mem[offset:offset + target_len] = data[:target_len]
+							segment_ranges.append((offset, offset + target_len))
+					elif self._strings_pattern.match(file_in_dir):
+						# Read string data.
+						try:
+							f = open(os.path.join(file_path, file_in_dir), 'rb')
+							data = f.read()
+							f.close()
+						except:
+							self.debug_print('Could not load strings file:', file_in_dir)
+							continue
+
+						# SecureCore may have 4 bytes before the STRPACK header.
+						offset = data.find(b'STRPACK-BIOS')
+						if offset > -1:
+							strings_files.append(data[offset:])
+							self.debug_print('Loaded strings file:', file_in_dir)
 						else:
-							self.signon = signon
-							self.debug_print('Raw old', signon_log, 'sign-on:', repr(self.signon))
-					else:
-						self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
-						match = None
-
-				if not match and bios_maj != None and bios_min != None and code_segment != None:
-					# Extract sign-on from BCPOST on 4.0x and newer BIOSes.
-					bcpost = bcp.get('BCPOST', [None])[0]
-					if bcpost and len(bcpost.data) >= 0x25:
-						# BCPOST versions observed:
-						# - 0.1 (4.01)
-						# - 0.3 (4.02-4.05)
-						# - 0.4 (4.04-4.05)
-						# - 1.3 (4.0R6)
-						# - 1.4 (SecureCore)
-						self.debug_print('BCPOST version:', bcpost.version_maj, bcpost.version_min)
-
-						# If this is a compressed BIOS, load decompressed segments.
-						segment_ranges = []
-						strings_files = []
-						if compressed:
-							# Go through extracted files.
-							for file_in_dir in os.listdir(file_path):
-								match = self._segment_pattern.match(file_in_dir)
-								if match:
-									# Read segment data.
-									try:
-										f = open(os.path.join(file_path, file_in_dir), 'rb')
-										data = f.read()
-										f.close()
-									except:
-										self.debug_print('Could not load segment file:', file_in_dir)
-										continue
-
-									# Load segment data into the virtual memory space.
-									self.debug_print('Loaded segment file:', file_in_dir)
-									offset = int(match.group(1), 16) << 4
-									target_len = min(len(virtual_mem) - offset, len(data))
-									if target_len >= 0:
-										virtual_mem[offset:offset + target_len] = data[:target_len]
-										segment_ranges.append((offset, offset + target_len))
-								elif self._strings_pattern.match(file_in_dir):
-									# Read string data.
-									try:
-										f = open(os.path.join(file_path, file_in_dir), 'rb')
-										data = f.read()
-										f.close()
-									except:
-										self.debug_print('Could not load strings file:', file_in_dir)
-										continue
-
-									# SecureCore may have 4 bytes before the STRPACK header.
-									offset = data.find(b'STRPACK-BIOS')
-									if offset > -1:
-										strings_files.append(data[offset:])
-										self.debug_print('Loaded strings file:', file_in_dir)
-									else:
-										self.debug_print('Bad strings file:', file_in_dir)
-
-						# Sort strings files, prioritizing the "us" (English) language.
-						strings_files.sort(key=lambda x: x[0x20:0x22] == b'us' and b'\x00\x00' or x[0x20:0x22])
-
-						# Read sign-on string pointer.
-						signon_segment = code_segment
-						signon_offset, = struct.unpack('<H', bcpost.data[0x23:0x25])
-
-						# Handle 4.04+ where the string pointer points to a string table pointer instead of a string.
-						signon = None
-						if bios_maj >= 6 or (bios_maj == 4 and bios_min >= 6):
-							# 4.0R6+: string table pointer is relative to string table file minus header.
-							signon_offset += 0x1c
-							self.debug_print('BCPOST sign-on points to string table file offset', hex(signon_offset))
-
-							# Make sure we have a strings file first.
-							if len(strings_files) > 0:
-								string_table_offset = strings_files[0][signon_offset:signon_offset + 2]
-								if len(string_table_offset) == 2:
-									signon_offset, = struct.unpack('<H', string_table_offset)
-									signon_offset += 0x1c
-									self.debug_print('BCPOST sign-on string table entry points to file offset', hex(signon_offset))
-
-									# Phoenix allowed for some line drawing that is not quite CP437.
-									# The actual characters used haven't been confirmed in hardware.
-									signon = strings_files[0][signon_offset:signon_offset + 256]
-									for args in ((b'\x91', b'\xDA'), (b'\x92', b'\xC4'), (b'\x87', b'\xBF'), (b'\x86', b'\xB3'), (b'\x90', b'\xC0'), (b'\x88', b'\xD9')):
-										signon = signon.replace(*args)
-								else:
-									self.debug_print('BCPOST sign-on string table short read')
+							# Try to ascertain the string table location from the language code
+							# and next 2 bytes if no STRPACK header is present. (HP B013300I)
+							offset = data.find(b'us\x14\x00')
+							if offset > -1:
+								header = data[offset - 0x20:offset]
+								if len(header) < 0x20:
+									header = (b'\x00' * (0x20 - len(header))) + header
+								strings_files.append(header + data[offset:])
 							else:
-								self.debug_print('BCPOST missing strings file')
+								self.debug_print('Bad strings file:', file_in_dir)
+
+			# Sort strings files, prioritizing the "us" (English) language.
+			strings_files.sort(key=lambda x: x[0x20:0x22] == b'us' and b'\x00\x00' or x[0x20:0x22])
+
+			# Read sign-on string pointer.
+			signon_segment = code_segment
+			signon_offset, = struct.unpack('<H', bcpost.data[0x23:0x25])
+
+			# Handle 4.04+ where the string pointer points to a string table pointer instead of a string.
+			signon = None
+			if bios_maj >= 6 or (bios_maj == 4 and bios_min >= 6):
+				# 4.0R6+: string table pointer is relative to string table file minus header.
+				signon_offset += 0x1c
+				self.debug_print('BCPOST sign-on points to string table file offset', hex(signon_offset))
+
+				# Make sure we have a strings file first.
+				if len(strings_files) > 0:
+					string_table_offset = strings_files[0][signon_offset:signon_offset + 2]
+					if len(string_table_offset) == 2:
+						signon_offset, = struct.unpack('<H', string_table_offset)
+						signon_offset += 0x1c
+						self.debug_print('BCPOST sign-on string table entry points to file offset', hex(signon_offset))
+
+						# Phoenix allowed for some line drawing that is not quite CP437.
+						# The actual characters used haven't been confirmed in hardware.
+						signon = strings_files[0][signon_offset:signon_offset + 256]
+						for args in ((b'\x91', b'\xDA'), (b'\x92', b'\xC4'), (b'\x87', b'\xBF'), (b'\x86', b'\xB3'), (b'\x90', b'\xC0'), (b'\x88', b'\xD9')):
+							signon = signon.replace(*args)
+					else:
+						self.debug_print('BCPOST sign-on string table short read')
+				else:
+					self.debug_print('BCPOST missing strings file')
+			else:
+				self.debug_print('BCPOST sign-on points to', hex(signon_segment), ':', hex(signon_offset))
+
+				if bios_maj >= 5 or (bios_maj == 4 and bios_min >= 4):
+					# 4.04-4.05: string table pointer is relative to string table segment.
+					signon_offset = (signon_segment << 4) + signon_offset
+					string_table_offset = virtual_mem[signon_offset:signon_offset + 2]
+					if len(string_table_offset) == 2:
+						# Look for a string table segment overlapping the string pointer's segment and offset.
+						for start, end in segment_ranges:
+							if signon_offset >= start and signon_offset < end:
+								signon_segment = start >> 4
+								break
+
+						# Now we should have a pointer to the actual string.
+						signon_offset, = struct.unpack('<H', string_table_offset)
+						self.debug_print('BCPOST sign-on string table entry points to', hex(signon_segment), ':', hex(signon_offset))
+					else:
+						self.debug_print('BCPOST sign-on string table short read')
+
+				# Add segment to pointer.
+				signon_offset += signon_segment << 4
+				signon = virtual_mem[signon_offset:signon_offset + 256]
+
+			# Read string if one was found.
+			if signon:
+				self.signon = util.read_string(signon)
+				self.debug_print('Raw BCPOST sign-on:', repr(self.signon))
+		else:
+			# Determine if this is a Dell BIOS.
+			match = self._dell_system_pattern.search(file_data)
+			if match:
+				# Backup in case no Phoenix version is found, which is possible given compression.
+				if not self.version:
+					self.version = 'Dell'
+
+				# Extract the model as a sign-on.
+				self.signon = match.group(0).decode('cp437', 'ignore')
+				self.debug_print('Dell model:', self.signon)
+
+				# Add version information to the sign-on, looking at the data after the model first...
+				version_index = match.start(0) + 0x20
+				match = self._dell_version_code_pattern.match(file_data[version_index:version_index + 3])
+				if not match:
+					# ...then the version strings...
+					match = self._dell_version_pattern.search(file_data)
+					if not match:
+						# ...then on byte 48 of some files.
+						match = self._dell_version_code_pattern.match(file_data[0x30:0x33])
+				if match:
+					version_string = match.group(1)
+					self.signon += '\nBIOS Version: ' + version_string.decode('cp437', 'ignore')
+					self.debug_print('Dell version:', version_string)
+			else:
+				# Determine if this is some sort of HP Vectra BIOS.
+				match = self._hp_pattern.search(file_data)
+				if match:
+					self.version = 'HP'
+
+					# Extract code as a string.
+					self.string = match.group(1).decode('cp437', 'ignore')
+
+					# Extract the version number as a sign-on.
+					match = self._hp_signon_pattern.search(file_data)
+					if match:
+						self.signon = match.group(0).decode('cp437', 'ignore')
+						self.debug_print('HP version:', self.signon)
+				else:
+					# Extract sign-on from Ax86 and older BIOSes.
+					match = self._rombios_signon_pattern.search(file_data)
+					if match:
+						copyright_index = match.start(0)
+						if self._rombios_signon_dec_pattern.match(file_data[copyright_index - 48:copyright_index]):
+							self.debug_print('Ignored bogus sign-on on DEC BIOS')
+							match = None
 						else:
-							self.debug_print('BCPOST sign-on points to', hex(signon_segment), ':', hex(signon_offset))
-
-							if bios_maj >= 5 or (bios_maj == 4 and bios_min >= 4):
-								# 4.04-4.05: string table pointer is relative to string table segment.
-								signon_offset = (signon_segment << 4) + signon_offset
-								string_table_offset = virtual_mem[signon_offset:signon_offset + 2]
-								if len(string_table_offset) == 2:
-									# Look for a string table segment overlapping the string pointer's segment and offset.
-									for start, end in segment_ranges:
-										if signon_offset >= start and signon_offset < end:
-											signon_segment = start >> 4
-											break
-
-									# Now we should have a pointer to the actual string.
-									signon_offset, = struct.unpack('<H', string_table_offset)
-									self.debug_print('BCPOST sign-on string table entry points to', hex(signon_segment), ':', hex(signon_offset))
-								else:
-									self.debug_print('BCPOST sign-on string table short read')
-
-							# Add segment to pointer.
-							signon_offset += signon_segment << 4
-							signon = virtual_mem[signon_offset:signon_offset + 256]
-
-						# Read string if one was found.
-						if signon:
-							self.signon = util.read_string(signon)
-							self.debug_print('Raw BCPOST sign-on:', repr(self.signon))
+							signon_log = 'std'
+					else:
+						match = self._rombios_signon_alt_pattern.search(file_data)
+						signon_log = 'alt'
+					if match:
+						end = match.end(0)
+						if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
+							signon = util.read_string(file_data[end:end + 256])
+							if len(signon) <= 3: # Phoenix video BIOS (Commodore SL386SX25), bogus data (NEC Powermate V)
+								match = None
+								self.debug_print('Ignored bogus sign-on (too short)')
+							else:
+								self.signon = signon
+								self.debug_print('Raw old', signon_log, 'sign-on:', repr(self.signon))
+						else:
+							self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
+							match = None
 
 		# Restore post-version sign-on.
 		if post_version != self.signon:
