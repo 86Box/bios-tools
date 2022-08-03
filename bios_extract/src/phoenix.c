@@ -395,7 +395,7 @@ valid_signature:
 
 		memcpy(ModuleData, BIOSImage + Offset + Module->HeadLen,
 		       FragLength);
-		SetRemainder(Offset, Module->HeadLen + FragLength, FALSE);
+		//SetRemainder(Offset, Module->HeadLen + FragLength, FALSE);
 
 		Packed = FragLength;
 		FragOffset = le32toh(Module->NextFrag) & (BIOSLength - 1);
@@ -417,7 +417,7 @@ valid_signature:
 			Remain = BIOSLength - ((ModuleData + Packed) - BIOSImage);
 			memcpy(ModuleData + Packed, BIOSImage + FragOffset + 9,
 			       (Remain < FragLength) ? Remain : FragLength);
-			SetRemainder(FragOffset + 9, (Remain < FragLength) ? Remain : FragLength, FALSE);
+			//SetRemainder(FragOffset + 9, (Remain < FragLength) ? Remain : FragLength, FALSE);
 			Packed += FragLength;
 			FragOffset =
 			    le32toh(Fragment->NextFrag) & (BIOSLength - 1);
@@ -533,8 +533,8 @@ Uncompressed:
 
 	if (IsFragment)
 		free(ModuleData);
-	else
-		SetRemainder(Offset, Module->HeadLen + Packed, FALSE);
+	/*else
+		SetRemainder(Offset, Module->HeadLen + Packed, FALSE);*/
 
 	if (le16toh(Module->Offset) || le16toh(Module->Segment)) {
 		if (!Module->Compression)
@@ -1097,7 +1097,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		if (!Buffer)
 			break;
 
-		SetRemainder(p - BIOSImage, sizeof(struct PhoenixBCD6F1) + le32toh(BCD6F1->FragLength), FALSE);
+		//SetRemainder(p - BIOSImage, sizeof(struct PhoenixBCD6F1) + le32toh(BCD6F1->FragLength), FALSE);
 
 		p += sizeof(struct PhoenixBCD6F1);
 		if (phx.compression == 0)
@@ -1138,7 +1138,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
-		SetRemainder(p - BIOSImage, Length, FALSE);
+		//SetRemainder(p - BIOSImage, Length, FALSE);
 		p += Length;
 	}
 
@@ -1170,7 +1170,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
-		SetRemainder(p - BIOSImage, Length, FALSE);
+		//SetRemainder(p - BIOSImage, Length, FALSE);
 		p += Length;
 	}
 
@@ -1215,7 +1215,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
-		SetRemainder(p - BIOSImage, Length, FALSE);
+		//SetRemainder(p - BIOSImage, Length, FALSE);
 		p += Length;
 	}
 
@@ -1249,7 +1249,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		write(fd, p, Length);
 		close(fd);
 
-		SetRemainder(p - BIOSImage, Length, FALSE);
+		//SetRemainder(p - BIOSImage, Length, FALSE);
 		p += Length;
 	}
 
@@ -1279,11 +1279,12 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		       Offset, Length);
 		write(fd, BIOSImage + Offset, Length);
 		close(fd);
-		SetRemainder(Offset, Length, FALSE);
+		//SetRemainder(Offset, Length, FALSE);
 	}
 
-	/* Manually flag BCPSEGMENT data as remaining, just in case */
-	SetRemainder(BCPSegmentOffset, ((unsigned char *)ID) - (BIOSImage + BCPSegmentOffset), TRUE);
+	/* Manually flag all data as remaining, which is required for register table
+	   and 4.0x sign-on analysis, as those use ROM-relative segments and offsets. */
+	SetRemainder(0, BIOSLength, TRUE);
 
 	return TRUE;
 }

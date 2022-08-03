@@ -304,7 +304,7 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 	# Sort file names for better predictability. The key= function forces
 	# "original.tm1" to be combined after "original.tmp" for if the Award
 	# identification data spans across both files (AOpen AX6B(+) R2.00)
-	if len(scan_file_names) > 1:		
+	if len(scan_file_names) > 1:
 		scan_file_names.sort(key=lambda fn: (fn == 'original.tm1') and 'original.tmq' or fn)
 
 	# Read files into the cache.
@@ -316,7 +316,7 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 		# Write data to cache.
 		if scan_file_name == ':header:':
 			header_data = file_data
-		elif combined:
+		elif combined and scan_file_name != ':combined:':
 			files_data[''] += file_data
 
 			# Add PCI option ROM IDs extracted from AMI BIOSes by bios_extract, since the ROM might not
@@ -360,7 +360,8 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 			file_data = util.read_complement(scan_file_path)
 
 		# Check for an analyzer which can handle this file.
-		bonus_analyzer_addons = bonus_analyzer_oroms = None
+		analyzer_file_path = combined and scan_dir_path or scan_file_path
+		bonus_analyzer_metadata = bonus_analyzer_oroms = None
 		file_analyzer = None
 		strings = None
 		for analyzer in file_analyzers:
@@ -370,7 +371,7 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 
 			# Check if the analyzer can handle this file.
 			try:
-				analyzer_result = analyzer.can_handle(file_data, header_data)
+				analyzer_result = analyzer.can_handle(analyzer_file_path, file_data, header_data)
 			except:
 				# Log an error.
 				util.log_traceback('searching for analyzers for', os.path.join(scan_dir_path, scan_file_name))
@@ -378,9 +379,9 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 
 			# Move on if the analyzer responded negatively.
 			if not analyzer_result:
-				# Extract add-ons and option ROMs from the bonus analyzer.
-				if bonus_analyzer_addons == None:
-					bonus_analyzer_addons = analyzer.addons
+				# Extract metadata and option ROMs from the bonus analyzer.
+				if bonus_analyzer_metadata == None:
+					bonus_analyzer_metadata = analyzer.metadata
 					bonus_analyzer_oroms = analyzer.oroms
 				continue
 
@@ -419,15 +420,15 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 		if not file_analyzer:
 			# Treat this as a standalone PCI option ROM file if BonusAnalyzer found any.
 			if bonus_analyzer_oroms:
-				bonus_analyzer_addons = []
+				bonus_analyzer_metadata = []
 				file_analyzer = file_analyzers[0]
 			else:
 				# Move on to the next file if nothing else.
 				continue
 
-		# Add interleaved flag to add-ons.
+		# Add interleaved flag to metadata.
 		if type(combined) == str:
-			bonus_analyzer_addons.append(combined)
+			bonus_analyzer_metadata.append(('ROM', combined))
 
 		# Clean up the file path.
 		scan_file_path_full = os.path.join(scan_dir_path, scan_file_name)
@@ -456,9 +457,9 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 		if slash_index == 1 and scan_file_path[0] == '0':
 			scan_file_path = scan_file_path[2:]
 
-		# De-duplicate and sort add-ons and option ROMs.
-		addons = list(set(addon.strip() for addon in (analyzer.addons + bonus_analyzer_addons)))
-		addons.sort()
+		# De-duplicate and sort metadata and option ROMs.
+		metadata = list(set('[{0}] {1}'.format(key, value).strip() for key, value in (analyzer.metadata + bonus_analyzer_metadata)))
+		metadata.sort()
 		oroms = list(set(combined_oroms + analyzer.oroms + bonus_analyzer_oroms))
 		oroms.sort()
 
@@ -525,7 +526,7 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 			file_analyzer.version,
 			formatter.split_if_required('\n', file_analyzer.string),
 			formatter.split_if_required('\n', file_analyzer.signon),
-			formatter.join_if_required(' ', addons),
+			formatter.join_if_required('\n', metadata),
 			formatter.join_if_required('\n', oroms),
 		]]
 
@@ -614,7 +615,7 @@ def analyze(dir_path, formatter_args, options):
 
 	# Begin output.
 	formatter.begin()
-	formatter.output_headers(['File', 'Vendor', 'Version', 'String', 'Sign-on', 'Add-ons', 'ROMs'], options.get('headers'))
+	formatter.output_headers(['File', 'Vendor', 'Version', 'String', 'Sign-on', 'Metadata', 'ROMs'], options.get('headers'))
 
 	# Remove any trailing slash from the root path, as the output path cleanup
 	# functions rely on it not being present.

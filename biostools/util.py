@@ -20,6 +20,7 @@ from biostools.pciutil import *
 
 date_pattern_mmddyy = re.compile('''(?P<month>[0-9]{2})/(?P<day>[0-9]{2})/(?P<year>[0-9]{2,4})''')
 number_pattern = re.compile('''[0-9]+''')
+ascii_backspace_pattern = re.compile(b'''[\\x00-\\xFF]\\x08''')
 
 digits = '0123456789'
 lowercase = 'abcdefghijklmnopqrstuvwxyz'
@@ -191,11 +192,21 @@ def read_complement(file_path, file_header=None, max_size=16777216):
 			pass
 	return b''
 
-def read_string(data, terminator=b'\x00'):
+def read_string(data, terminator=b'\x00', ascii_backspace=True):
 	"""Read a terminated string (by NUL by default) from a bytes."""
+
+	# Trim to terminator.
 	terminator_index = data.find(terminator)
 	if terminator_index > -1:
 		data = data[:terminator_index]
+
+	# Look for ASCII backspaces and apply them accordingly.
+	if ascii_backspace:
+		replaced = 1
+		while replaced:
+			data, replaced = ascii_backspace_pattern.subn(b'', data)
+
+	# Decode as CP437.
 	return data.decode('cp437', 'ignore')
 
 def rmdirs(dir_path):

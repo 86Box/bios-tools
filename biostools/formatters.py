@@ -97,6 +97,7 @@ class XSVFormatter(Formatter):
 		self.array = False
 
 		self.delimiter = delimiter
+		self.query = True
 
 		if self.options.get('hyperlink'):
 			# Get the localized HYPERLINK formula name if specified.
@@ -116,8 +117,11 @@ class XSVFormatter(Formatter):
 				link_prefix = '=' + self.hyperlink + '(""'
 				link_suffix = '""' + ';' + '""\U0001F53D"")' # down arrow emoji
 
-				# Build and output the final link, accounting for Excel's column size limit.
-				link = link_prefix + link_url[:256 - len(link_prefix) - len(link_suffix)] + link_suffix
+				# Build and output the final link, accounting for Excel's column size limit in connection (not query) mode.
+				if self.query:
+					link = link_prefix + link_url + link_suffix
+				else:
+					link = link_prefix + link_url[:256 - len(link_prefix) - len(link_suffix)] + link_suffix
 				output += '"' + link + '"'
 			else:
 				output += '""'
@@ -127,8 +131,11 @@ class XSVFormatter(Formatter):
 			if output:
 				output += self.delimiter
 			output += '"'
-			# Account for Excel's column size limit and lack of linebreak support.
-			output += field.replace('\n', ' - ').replace('"', '""')[:256]
+			if self.query:
+				output += field.replace('"', '""')
+			else:
+				# Account for Excel's column size limit and lack of linebreak support in connection (not query) mode.
+				output += field.replace('\n', ' - ').replace('"', '""')[:256]
 			output += '"'
 
 		# Add linebreak.

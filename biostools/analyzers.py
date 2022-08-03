@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import codecs, re, struct, sys
+import codecs, os, re, struct, sys
 from . import util
 
 class Checker:
@@ -132,7 +132,7 @@ class Analyzer:
 		"""Returns True if the given file's strings should be analyzed."""
 		return len(self._check_list) > 0
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		"""Returns True if this analyzer can handle the given file data.
 		   header_data contains data from the :header: flag file, or
 		   None if no such file exists."""
@@ -174,10 +174,8 @@ class Analyzer:
 		self.version = ''
 		self.string = ''
 		self.signon = ''
-		self.addons = []
+		self.metadata = []
 		self.oroms = []
-
-		self._file_path = '[?]'
 
 class NoInfoAnalyzer(Analyzer):
 	"""Special analyzer for BIOSes which can be identified,
@@ -185,7 +183,7 @@ class NoInfoAnalyzer(Analyzer):
 
 	_entrypoint_date_pattern = re.compile(b'''(?:\\xEA[\\x00-\\xFF]{2}\\x00\\xF0|\\xE9[\\x00-\\xFF]{2})((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2})''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Check if this file can be handled by this specific analyzer.
 		if not self.has_strings(file_data):
 			return False
@@ -226,7 +224,7 @@ class AcerAnalyzer(Analyzer):
 		self._cpus = []
 		self._trap_version = False
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		return b'Copyright (C) Acer Incorporated 1990' in file_data or b'Acer Boot Block v1.0' in file_data
 
 	def _version_precheck(self, line):
@@ -313,7 +311,7 @@ class AcerMultitechAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''Multitech Industrial Corp\..BIOS ([^\s]+ [^\s\\x00]+)''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Look for version and date.
 		match = self._version_pattern.search(file_data)
 		if not match:
@@ -372,7 +370,7 @@ class AMIAnalyzer(Analyzer):
 			(self._addons_winbios,			SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 		])
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		check_match = self._check_pattern.search(file_data)
 		if not check_match:
 			return False
@@ -380,7 +378,7 @@ class AMIAnalyzer(Analyzer):
 		# Some Intel BIOSes may fail to decompress, in which case, we have to
 		# rely on the header version data to get the Intel version sign-on.
 		if header_data:
-			is_intel = AMIIntelAnalyzer.can_handle(self, file_data, header_data)
+			is_intel = AMIIntelAnalyzer.can_handle(self, file_path, file_data, header_data)
 			if is_intel:
 				self.debug_print('Intel data found')
 		else:
@@ -411,7 +409,7 @@ class AMIAnalyzer(Analyzer):
 					self.version = (version_winbios_maj + version_winbios_min).decode('cp437', 'ignore')
 					self.debug_print('Version (4-5):', repr(self.version))
 					self.version += '00'
-					self.addons.append('WinBIOS')
+					self.metadata.append(('Setup', 'WinBIOS'))
 				else:
 					# AMI Color (or WinBIOS 12/15/93) date.
 					self.version = match.group(4).decode('cp437', 'ignore')
@@ -553,7 +551,7 @@ class AMIAnalyzer(Analyzer):
 
 				# Extract BIOS type as an add-on.
 				for match in self._precolor_type_pattern.finditer(file_data):
-					self.addons.append(match.group(1).decode('cp437', 'ignore') + '-BIOS')
+					self.metadata.append(('ID', match.group(1).decode('cp437', 'ignore') + '-BIOS'))
 			else:
 				# Assume this is not an AMI BIOS, unless we found Intel data above.
 				if is_intel:
@@ -597,7 +595,7 @@ class AMIAnalyzer(Analyzer):
 		'''Improper Use of Setup may Cause Problems !!'''
 
 		# Add setup type to add-ons.
-		self.addons.append('Color')
+		self.metadata.append(('Setup', 'Color'))
 
 		return True
 
@@ -605,7 +603,7 @@ class AMIAnalyzer(Analyzer):
 		'''AMIBIOS EASY SETUP UTILIT'''
 
 		# Add setup type to add-ons.
-		self.addons.append('EasySetup')
+		self.metadata.append(('Setup', 'EasySetup'))
 
 		return True
 
@@ -613,7 +611,7 @@ class AMIAnalyzer(Analyzer):
 		'''\\HAMIBIOS HIFLEX SETUP UTILIT'''
 
 		# Add setup type to add-ons.
-		self.addons.append('HiFlex')
+		self.metadata.append(('Setup', 'HiFlex'))
 
 		return True
 
@@ -621,7 +619,7 @@ class AMIAnalyzer(Analyzer):
 		'''Advanced Chipset Configuration  \\QPress'''
 
 		# Add setup type to add-ons.
-		self.addons.append('IntelSetup')
+		self.metadata.append(('Setup', 'IntelSetup'))
 
 		return True
 
@@ -629,7 +627,7 @@ class AMIAnalyzer(Analyzer):
 		'''AMIBIOS NEW SETUP UTILIT'''
 
 		# Add setup type to add-ons.
-		self.addons.append('NewSetup')
+		self.metadata.append(('Setup', 'NewSetup'))
 
 		return True
 
@@ -637,7 +635,7 @@ class AMIAnalyzer(Analyzer):
 		'''\\HAMIBIOS SIMPLE SETUP UTILIT'''
 
 		# Add setup type to add-ons.
-		self.addons.append('SimpleSetup')
+		self.metadata.append(('Setup', 'SimpleSetup'))
 
 		return True
 
@@ -645,7 +643,7 @@ class AMIAnalyzer(Analyzer):
 		''' Wait----'''
 
 		# Add setup type to add-ons.
-		self.addons.append('WinBIOS')
+		self.metadata.append(('Setup', 'WinBIOS'))
 
 		return True
 
@@ -663,7 +661,7 @@ class AMIDellAnalyzer(AMIAnalyzer):
 		super().reset()
 		self._trap_signon_lines = 0
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if file_data[:9] == b'DELLBIOS\x00':
 			# DELLBIOS header contains the Dell version.
 			self.version = '11/11/92'
@@ -740,12 +738,12 @@ class AMIDellAnalyzer(AMIAnalyzer):
 class AMIIntelAnalyzer(Analyzer):
 	_ami_pattern = re.compile(b'''AMIBIOS''')
 	_ami_version_pattern = re.compile(b'''AMIBIOSC(0[1-9][0-9]{2})''')
-	_phoenix_pattern = re.compile(b'''Phoenix Technologies Ltd''')
+	_phoenix_pattern = re.compile(b'''PhoenixBIOS(?:\\(TM\\))? ''')
 
 	def __init__(self, *args, **kwargs):
 		super().__init__('Intel', *args, **kwargs)
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Handle Intel AMI BIOSes that could not be decompressed.
 
 		# Stop if there is no header data or if this file is just the header data.
@@ -794,7 +792,7 @@ class AMIUEFIAnalyzer(AMIAnalyzer):
 		self._signon_intel_msi_pattern = re.compile(b'''\\$((?:IBIOSI|MSESGN)\\$|UBI)([\\x20-\\x7E]{4,})''')
 		self._signon_sgn_pattern = re.compile(b'''\\$SGN\\$[\\x01-\\xFF][\\x00-\\xFF]{2}''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Only handle files sent through UEFIExtractor.
 		if header_data != b'\x00\xFFUEFIExtract\xFF\x00':
 			return False
@@ -804,7 +802,7 @@ class AMIUEFIAnalyzer(AMIAnalyzer):
 			return False
 
 		# Get CSM string from AMIAnalyzer.
-		super().can_handle(file_data, header_data)
+		super().can_handle(file_path, file_data, header_data)
 		self.signon = ''
 
 		# Would be nice to easily know the difference between Aptio IV, V and such...
@@ -854,7 +852,7 @@ class AmproAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''AMPRO (.+) Rom-Bios[^\\n]+\\nVersion ([^ ]+)''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		match = self._version_pattern.search(file_data)
 		if not match:
 			return False
@@ -901,7 +899,7 @@ class AwardAnalyzer(Analyzer):
 		# "V" instead of "v" (286 Modular BIOS V3.03 NFS 11/10/87)
 		self._version_pattern = re.compile(''' (?:v([^-\\s]+)|V(?:ersion )?[^0-9]*([0-9]\\.[0-9][0-9A-Z]?))(?:[. ]([\\x20-\\x7E]+))?''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if not self._award_pattern.search(file_data):
 			return False
 
@@ -980,7 +978,7 @@ class AwardAnalyzer(Analyzer):
 
 				# Flag Gigabyte Hybrid EFI as UEFI.
 				if self._gigabyte_hefi_pattern.search(file_data):
-					self.addons.append('UEFI')
+					self.metadata.append('UEFI', 'Gigabyte Hybrid')
 
 			if self.version == 'v6.00PG' and self._gigabyte_eval_pattern.match(self.signon):
 				# Reconstruct actual sign-on of a Gigabyte fork BIOS through
@@ -1069,7 +1067,7 @@ class AwardPowerAnalyzer(Analyzer):
 			(self._string,	RegexChecker)
 		])
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if b'PowerBIOS Setup' not in file_data or b'Award Software International, Inc.' not in file_data:
 			return False
 
@@ -1104,9 +1102,9 @@ class BonusAnalyzer(Analyzer):
 		super().__init__('', *args, **kwargs)
 		self._pci_ids = {}
 
-		self._acpi_table_pattern = re.compile(b'''(?:DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})[\\x00-\\xFF]{24}[\\x00\\x20-\\x7E]{4}''')
-		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|[\\x20-\\x7E]+ BIOS )''')
-		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9])''')
+		self._acpi_table_pattern = re.compile(b'''(DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})[\\x00-\\xFF]{24}[\\x00\\x20-\\x7E]{4}''')
+		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|([\\x20-\\x7E]+?)(?: SCSI)? BIOS )''')
+		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9\\.]+)''')
 		self._orom_pattern = re.compile(b'''\\x55\\xAA[\\x01-\\xFF][\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
 		self._phoenixnet_patterns = (
 			re.compile(b'''CPLRESELLERID'''),
@@ -1118,48 +1116,72 @@ class BonusAnalyzer(Analyzer):
 			re.compile(b'''PXE-EC6: UNDI driver image is invalid\\.'''),
 		)
 		self._rpl_pattern = re.compile(b'''NetWare Ready ROM''')
-		self._sli_pattern = re.compile(b'''[0-9]{12}Genuine NVIDIA Certified SLI Ready Motherboard for ''')
+		self._sli_pattern = re.compile(b'''[0-9]{12}Genuine NVIDIA Certified SLI Ready Motherboard for ([\\x20-\\x7E]*)''')
 
-	def can_handle(self, file_data, header_data):
+	def _enumerate_metadata(self, key, entries):
+		if len(entries) > 0:
+			# De-duplicate and sort before enumerating.
+			entries = list(set(entries))
+			entries.sort()
+			self.metadata.append((key, ' '.join(entries)))
+
+	def can_handle(self, file_path, file_data, header_data):
 		# PhoenixNet
 		if util.all_match(self._phoenixnet_patterns, file_data):
-			self.addons.append('PhoenixNet')
+			self.metadata.append(('Add-on', 'PhoenixNet'))
 
 		# ACPI tables
-		match = self._acpi_table_pattern.search(file_data)
-		if match and struct.unpack('<I', match.group(1))[0] > 36: # length includes header, header is 36 bytes
-			self.addons.append('ACPI')
+		acpi_tables = []
+		for match in self._acpi_table_pattern.finditer(file_data):
+			if struct.unpack('<I', match.group(2))[0] > 36: # length includes header, header is 36 bytes
+				acpi_tables.append(util.read_string(match.group(1)))
+		self._enumerate_metadata('ACPI', acpi_tables)
 
-		# Adaptec SCSI
-		if self._adaptec_pattern.search(file_data):
-			self.addons.append('Adaptec')
+		# Adaptec and NCR SCSI
+		scsi_roms = []
+		for match in self._adaptec_pattern.finditer(file_data):
+			model = match.group(1)
+			if model:
+				model = ' ' + util.read_string(model)
+			else:
+				model = ''
+			self.metadata.append(('SCSI', 'Adaptec' + model))
+		for match in self._ncr_pattern.finditer(file_data):
+			self.metadata.append(('SCSI', 'NCR ' + util.read_string(match.group(1))))
 
-		# NCR SCSI
-		match = self._ncr_pattern.search(file_data)
-		if match:
-			self.addons.append('NCR' + match.group(1).decode('ascii', 'ignore'))
-
-		# PXE boot
+		# PXE and RPL boot
+		lan_roms = []
 		if util.all_match(self._pxe_patterns, file_data):
-			self.addons.append('PXE')
-
-		# RPL boot
+			lan_roms.append('PXE')
 		if self._rpl_pattern.search(file_data):
-			self.addons.append('RPL')
+			lan_roms.append('RPL')
+		self._enumerate_metadata('LAN', lan_roms)
 
 		# SLI certificate
-		if self._sli_pattern.search(file_data):
-			self.addons.append('SLI')
+		match = self._sli_pattern.search(file_data)
+		if match:
+			self.metadata.append(('SLI', match.group(1)))
 
 		# UEFI
 		if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
-			self.addons.append('UEFI')
+			self.metadata.append(('UEFI', 'Filesystem'))
 
 		# Look for PCI/PnP option ROMs.
 		for match in self._orom_pattern.finditer(file_data):
-			# Check for the VGA BIOS compatibility marker.
-			if match.group(2):
-				self.addons.append('VGA')
+			# Check for the VGA BIOS compatibility marker string and add it as metadata.
+			vga_marker = match.group(2)
+			if vga_marker:
+				# Find ASCII strings around the marker. There must be a space before/after
+				# the marker to avoid parsing of non-text bytes as ASCII characters.
+				vga_start = match.start(2) + 2
+				if file_data[vga_start - 1:vga_start] == b' ':
+					while vga_start > 0 and file_data[vga_start - 1] >= 0x20 and file_data[vga_start - 1] <= 0x7e:
+						vga_start -= 1
+				vga_end = match.end(2)
+				if file_data[vga_end:vga_end + 1] == b' ':
+					while vga_end < len(file_data) and file_data[vga_end] >= 0x20 and file_data[vga_end] <= 0x7e:
+						vga_end += 1
+				self.metadata.append(('Video', file_data[vga_start:vga_end].decode('cp437', 'ignore')))
 
 			# Extract PCI and PnP data structure pointers.
 			pci_header_ptr, pnp_header_ptr = struct.unpack('<HH', match.group(1))
@@ -1177,9 +1199,9 @@ class BonusAnalyzer(Analyzer):
 
 						# Make sure the vendor ID is not bogus.
 						if vendor_id not in (0x0000, 0xffff):
-							# Flag VGA option ROMs.
-							if (class_code == 0 and subclass == 1) or (class_code == 3 and subclass in (0, 1)):
-								self.addons.append('VGA')
+							# Flag VGA option ROMs if the compatibility marker didn't already do so.
+							if not vga_marker and ((class_code == 0 and subclass == 1) or (class_code == 3 and subclass in (0, 1))):
+								self.metadata.append(('Video', 'PCI VGA'))
 
 							# Add IDs to the option ROM list.
 							self.oroms.append((vendor_id, device_id))
@@ -1244,7 +1266,7 @@ class CDIAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('CDI', *args, **kwargs)
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if b' COMPUTER DEVICES INC. ' not in file_data:
 			return False
 
@@ -1265,7 +1287,7 @@ class CentralPointAnalyzer(Analyzer):
 			(self._version,	RegexChecker)
 		])
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		return b'Central Point Software, Inc.' in file_data
 
 	def _version(self, line, match):
@@ -1289,10 +1311,10 @@ class ChipsAnalyzer(Analyzer):
 			(self._version,	RegexChecker),
 		])
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		return b'Chips & Technologies, Inc.' in file_data and b'BIOS Version ' in file_data
 
-	def _version(self, line, match):
+	def _version(self, line, match): # TODO: remove prefix, because teknor "TEK701 BIOS Version 2.2\r\nsign-on..."
 		'''(?:^|(?:CHIPS (.+)|Chips & Technologies (.+) ROM|(Reply Corporation(?: .+)?)) )BIOS Version ([^\(]+)(?:\(([^\)]+)\)( .+)?)?'''
 
 		# Stop if this is a VBIOS.
@@ -1320,7 +1342,7 @@ class CommodoreAnalyzer(Analyzer):
 			(self._version,	RegexChecker),
 		])
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		return b'Commodore Business Machines' in file_data
 
 	def _version(self, line, match):
@@ -1365,7 +1387,7 @@ class CorebootAnalyzer(Analyzer):
 		self._version_linuxbios_pattern = re.compile(b'''(LinuxBIOS|coreboot)-([^_ ]+)[_ ](?:Normal |Fallback )?(.* )?starting\\.\\.\\.''')
 		self._string_build_pattern = re.compile(b'''#define COREBOOT_BUILD "([^"]+)"''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if not self._identifier_pattern.search(file_data):
 			return False
 
@@ -1429,7 +1451,7 @@ class DTKGoldStarAnalyzer(Analyzer):
 		super().reset()
 		self._dtk = False
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if not self._dtk_pattern.search(file_data):
 			return False
 
@@ -1465,7 +1487,7 @@ class GeneralSoftwareAnalyzer(Analyzer):
 		self._string_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})\(C\) [0-9]+ General Software, Inc\. ''')
 		self._version_pattern = re.compile(b'''General Software (?:\\x00 )?([^\\\\\\x0D\\x0A]+)(?:rel\.|Revision)''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Extract version.
 		match = self._version_pattern.search(file_data)
 		if match:
@@ -1490,7 +1512,7 @@ class IBMAnalyzer(Analyzer):
 		self._header_pattern = re.compile(b'''([0-9]{2}[A-Z0-9][0-9]{4})  ?(COPR\\. IBM|\\(C\\) COPYRIGHT IBM CORPORATION) 19[89][0-9]''')
 		self._interleaved_header_pattern = re.compile(b'''(([0-9])\\2([0-9])\\3([A-Z0-9])\\4(?:[0-9]{8}))  (CCOOPPRR\\.\\.  IIBBMM|\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  IIBBMM  CCOORRPPOORRAATTIIOONN)  1199([89])\\6([0-9])\\7''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Extract IBM part number/copyright headers.
 		part_numbers = []
 		copyrights = []
@@ -1539,7 +1561,7 @@ class IBMSurePathAnalyzer(Analyzer):
 		self._apricot_pattern = re.compile(b'''@\\(#\\)(?:Apricot .*|XEN-PC) BIOS [\\x20-\\x7E]+''')
 		self._apricot_version_pattern = re.compile(b'''@\\(#\\)Version [\\x20-\\x7E]+''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if not self._ibm_pattern.search(file_data):
 			return False
 
@@ -1608,7 +1630,7 @@ class ICLAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''(?:ROM|System) BIOS (#[\\x20-\\x7E]+) Version ([\\x20-\\x7E]+)\\x0D\\x0A\\(c\\) Copyright [\\x20-\\x7E]+(?:\\x0D\\x0A\\x0A\\x00([\\x20-\\x7E]+))?''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Update files use unknown compression.
 		if file_data[:8] == b'OKICL1\x01\x00':
 			self.version = '?'
@@ -1637,7 +1659,7 @@ class InsydeAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''InsydeH2O Version ''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Only handle files sent through UEFIExtractor.
 		if header_data != b'\x00\xFFUEFIExtract\xFF\x00':
 			return False
@@ -1662,7 +1684,7 @@ class IntelUEFIAnalyzer(Analyzer):
 		self._identifier_pattern = re.compile(b'''(?:\\$(?:IBIOSI\\$|FID|UBI)|Load Error\\x00{2}Success\\x00|S\\x00l\\x00o\\x00t\\x00 \\x00\\x30\\x00:\\x00 \\x00+)([0-9A-Z]{8}\\.[0-9A-Z]{3}(?:\\.[0-9]{4}){4})|'''
 											  b'''([A-Z]{2}[0-9A-Z]{3}[0-9]{2}[A-Z]\\.[0-9]{2}[A-Z](?:\\.[0-9]{4}){4})''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Only handle files sent through UEFIExtractor.
 		if header_data != b'\x00\xFFUEFIExtract\xFF\x00':
 			return False
@@ -1686,7 +1708,7 @@ class JukoAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''Juko (.+) BIOS ver (.+)''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if b'Juko Electronics Industrial Co.,Ltd.' not in file_data:
 			return False
 
@@ -1715,7 +1737,7 @@ class MRAnalyzer(Analyzer):
 			(self._version_older,	RegexChecker),
 		])
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Skip readme false positives.
 		if len(file_data) < 2048 or not self._check_pattern.search(file_data):
 			return False
@@ -1761,7 +1783,7 @@ class MylexAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''MYLEX ([\\x20-\\x7E]+) BIOS Version ([\\x20-\\x7E]+) ([0-9]{2}/[0-9]{2}/[0-9]{2})''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Determine location of the identification block.
 		match = self._version_pattern.search(file_data)
 		if not match:
@@ -1794,7 +1816,7 @@ class OlivettiAnalyzer(Analyzer):
 		super().reset()
 		self._trap_version = False
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if b'COPYRIGHT (C)   OLIVETTI' not in file_data or (b'No ROM BASIC available - RESET' not in file_data and b'ROM BASIC Not Available,' not in file_data):
 			return False
 
@@ -1836,8 +1858,46 @@ class PhoenixAnalyzer(Analyzer):
 		super().__init__('Phoenix', *args, **kwargs)
 
 		# "Phoenix ROM BIOS" (Dell Latitude CP/CPI)
-		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess''')
+		# No Phoenix copyrights, fallback to NuBIOS (Gateway? 1009.bin)
+		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess|\\x00IBM AT Compatible Phoenix NuBIOS\\x00''')
 		self._ignore_pattern = re.compile(b'''search=f000,0,ffff,S,"|\\x00\\xC3\\x82as Ltd. de Phoenix del \\xC2\\x83 de Tecnolog\\xC3\\x83\\x00''')
+		self._bcpsegment_pattern = re.compile(b'''BCPSEGMENT''')
+
+		self._rombios_version_pattern = re.compile(
+			b'''(?:Phoenix )?''' # Phoenix brand (not always present)
+			b'''((?:8086|8088|V20 |(?:80)?[0-9]{3})(?:/EISA)? )?ROM BIOS\\xF0? (PLUS )?''' # branch (F0 byte sidesteps Dell compression (Latitude CP/CPI))
+			b'''Ver(?:sion)? ?([0-9]\\.[A-Z]?[0-9]{2})''' # actual version (can have short "Ver" with (JE1000) or without (BXM-8) space on small BIOSes, or letter before version (Dell fork "1.P10"))
+			b'''[\\x20-\\x7E]*''' # added patch levels
+		)
+		# Covers the Xx86 and for Pentium family.
+		self._xx86_version_pattern = re.compile(
+			b'''(PhoenixBIOS\\(TM\\) )''' # Phoenix brand
+			b'''[\\x00-\\xFF]{0,512}?''' # variable amount of code inbetween (not observed on DEC)
+			b'''([A-Z][0-9]86|for ([\\x20-\\x7E]+?) (?:CPU )?- ([^ ]+))''' # branch
+			b'''( Version )([0-9]\\.[0-9]{2})''' # actual version
+			b'''-?([\\x20-\\x7E]*)''' # sign-on (Micronics M5PE)
+		)
+		# Additional space before version (some Siemens Nixdorf stuff)
+		# "PhoenixMB" 4.03 (4alp001) but what has "PhoenixMB BIOS" was lost to time
+		# "Developmental" 4.05 (HP Vectra 56x-57x and DEC Multia)
+		# "Plug and Play" (ALR Sequel series)
+		# Release can be single digit (ServerBIOS 2/3 Release 6.0)
+		self._40x_version_pattern = re.compile(
+			b'''(Phoenix(?:MB(?: BIOS)?|(?: [A-Za-z]*?)?BIOS) +(?:Developmental +)?(?:Plug and Play +)?''' # branch
+			b'''(?:Version +)?(?:[0-9]+(?:\\.[0-9]+)? Release )?[0-9]+\\.[\\x21-\\x2D\\x2F-\\x7E]+''' # actual version
+			b'''(?:[\\x21-\\x7E]|\\x20\\x08)*)''' # added patch levels (HP "4.02. " <ASCII backspace> "18", 4.05".Z.00", 6.0".I", ALR "5.10.3")
+			b'''([\\x20-\\x7E]*)''' # sign-on (Micronics M55Hi-Plus 6.12)
+		)
+		# Backup location used as a last resort.
+		self._40x_version_alt_pattern = re.compile(b'''v([0-9]\\.[0-9]{2}) Copyright 1985-[0-9]+ Phoenix Technologies Ltd''')
+		# Some are cME, some are not, cME was the product name.
+		self._core_version_pattern = re.compile(b'''Phoenix (?:cME )?[A-Za-z]+Core|FirstBIOS[\\x20-\\x7E]+''')
+
+		# Some files may be compressed...
+		self._dell_system_pattern = re.compile(b'''Dell System [\\x20-\\x7E]+''')
+		# More attempts to sidestep compression.
+		self._dell_version_pattern = re.compile(b'''(?:BIOS [Vv]ers[\\x00-\\xFF]{3}(?!  =):?|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version [^\\s]+) ([A-Z0-9.]+)''')
+		self._dell_version_code_pattern = re.compile(b'''([A-Z][0-9]{2})''')
 		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved''')
 		self._hp_signon_pattern = re.compile(b'''Version +[\\x21-\\x7E]+ +HP [\\x20-\\x7E]+''')
 		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Ax86)
@@ -1848,30 +1908,19 @@ class PhoenixAnalyzer(Analyzer):
 		# No "All Rights Reserved" (Yangtech 2.27 / pxxt)
 		self._rombios_signon_alt_pattern = re.compile(b'''\\(R\\)eboot, other keys to continue\\x00\\xFF+''')
 		self._rombios_signon_dec_pattern = re.compile(b'''Copyright \\(C\\) [0-9]{4} Digital Equipment Corporation''')
-		self._bcpsys_pattern = re.compile(b'''BCPSYS''')
-		self._bcpsys_datetime_pattern = re.compile('''[0-9]{2}/[0-9]{2}/[0-9]{2} ''')
+		self._segment_pattern = re.compile('''segment_([0-9A-F]{4})\\.rom$''')
 		self._core_signon_pattern = re.compile(b'''\\x00FOR EVALUATION ONLY\\. NOT FOR RESALE\\.\\x00([\\x00-\\xFF]+?)\\x00Primary Master \\x00''')
 		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
+		self._date_pattern = re.compile(b'''((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2}|(?:0{2}[1-9]{2}|1{2}[0-2]{2})/(?:0{2}[1-9]{2}|[12]{2}[0-9]{2}|3{2}[01]{2})/[0-9]{4})[^0-9]''')
 
 		self.register_check_list([
 			((self._signon_fujitsu_precheck, self._signon_fujitsu),	AlwaysRunChecker),
 			((self._signon_nec_precheck, self._signon_nec),			AlwaysRunChecker),
-			(self._version_xx86,									RegexChecker), # "All Rights Reserved" => "A286 Version 1.01"
-			(self._version_pentium,									RegexChecker),
-			(self._version_40rel,									RegexChecker),
-			(self._version_40x,										RegexChecker),
-			(self._version_404,										RegexChecker),
-			(self._version_branch,									RegexChecker),
-			(self._version_core,									RegexChecker),
 			(self._version_grid,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			(self._version_notebios404,								RegexChecker),
-			(self._version_rombios,									RegexChecker),
 			(self._version_sct,										RegexChecker),
 			(self._version_sct_preboot,								SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._version_tandy,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			((self._date_precheck, self._string_date),				RegexChecker),
 			(self._signon_ast,										SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			((self._dell_precheck, self._signon_dell),				RegexChecker),
 			(self._signon_commodore,								RegexChecker),
 			(self._signon_fujitsu_trigger,							SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._signon_hp,										RegexChecker),
@@ -1883,12 +1932,21 @@ class PhoenixAnalyzer(Analyzer):
 
 	def reset(self):
 		super().reset()
-		self._bcpsys_date_time = None
 		self._trap_signon_fujitsu_lines = 0
 		self._trap_signon_nec = False
 		self._found_signon_tandy = ''
 
-	def can_handle(self, file_data, header_data):
+	class BCP:
+		def __init__(self, signature, version_maj, version_min, data):
+			self.signature = signature
+			self.version_maj = version_maj
+			self.version_min = version_min
+			self.data = data
+
+		def __repr__(self):
+			return '<{0} version {1}.{2} datalen {3}>'.format(self.signature, self.version_maj, self.version_min, len(self.data))
+
+	def can_handle(self, file_path, file_data, header_data):
 		if not self._phoenix_pattern.search(file_data):
 			return False
 
@@ -1898,41 +1956,259 @@ class PhoenixAnalyzer(Analyzer):
 		if self._ignore_pattern.search(file_data):
 			return False
 
-		# Read build code, date and time from BCPSYS on 4.0 and newer BIOSes.
-		for match in self._bcpsys_pattern.finditer(file_data):
-			# Skip bogus BCPSYS in ACFG (DEC Venturis 466, other DEC 4.0x, Micronics M54Li 07)
-			offset = match.start(0)
-			if file_data[offset - 10:offset] == b'BCPSEGMENT':
-				continue
+		# Skip BCP parsing if this is not 4.0x or newer.
+		raw_data = b''
+		bios_maj = bios_min = code_segment = None
+		if self._bcpsegment_pattern.search(file_data):
+			# Load raw BIOS data.
+			compressed = os.path.isdir(file_path)
+			if compressed:
+				self.debug_print('Loading raw data for compressed BIOS')
+				try:
+					f = open(os.path.join(file_path, 'remainder.rom'), 'rb')
+					raw_data = f.read()
+					f.close()
+				except:
+					self.debug_print('Could not load raw data, falling back to existing data')
+					raw_data = file_data
+			else:
+				raw_data = file_data
 
-			# Extract the build code as a string.
-			build_code = self.string = util.read_string(file_data[offset + 55:offset + 63].replace(b'\x00', b'\x20')).strip()
-			if build_code:
-				self.debug_print('BCPSYS build code:', build_code)
+			# Create a virtual memory space with the file loaded to its end.
+			virtual_mem = bytearray(0x100000)
+			target_len = min(len(raw_data), len(virtual_mem))
+			virtual_mem[-target_len:] = raw_data[-target_len:]
 
-			# Append the build date and time to the string.
-			date_time = util.read_string(file_data[offset + 15:offset + 32].replace(b'\x00', b'\x20')).strip()
-			if self._bcpsys_datetime_pattern.match(date_time): # discard if this is an invalid date/time (PHLASH.EXE)
-				self._bcpsys_date_time = date_time
-				self.debug_print('BCPSYS build date/time:', date_time)
-				if self.string:
-					self.string += '\n'
-				self.string += date_time
+			# Look for the BCPSEGMENT.
+			bcp = {}
+			for match in self._bcpsegment_pattern.finditer(virtual_mem):
+				# Parse BCP entries.
+				valid_bcp = True
+				bcpsegment_offset = match.start(0)
+				self.debug_print('Probing BCPSEGMENT at', hex(bcpsegment_offset))
+				offset = bcpsegment_offset + 0x0a
+				while virtual_mem[offset:offset + 3] == b'BCP':
+					# Parse header while skipping bogus ones.
+					header = virtual_mem[offset:offset + 0x0a]
+					if len(header) != 0xa or header[0x06:0x09] == b'BCP': # invalid: chain of signatures in ACFG (Micronics M54Li 07)
+						valid_bcp = False
+						break
+					signature, version_maj, version_min, size = struct.unpack('<6sBBH', header)
+					if size < 0x0a: # invalid: "BCPSYS" followed by 0x00 bytes (DEC Venturis 466, other DEC 4.0x)
+						valid_bcp = False
+						break
 
-			break
+					# Add BCP to map.
+					signature = signature.decode('cp437', 'ignore')
+					if signature not in bcp:
+						bcp[signature] = []
+					bcp[signature].append(PhoenixAnalyzer.BCP(signature, version_maj, version_min, virtual_mem[offset:offset + size]))
 
-		# Determine if this is a Dell BIOS (48-byte header).
-		offset = file_data.find(b'Dell System ')
-		if offset > -1:
-			self.version = 'Dell'
-			self.signon = '\n'
+					# Move on to the next BCP entry.
+					offset += size
+					if virtual_mem[offset:offset + 3] != b'BCP':
+						# Sometimes the sizes don't line up (BCPDMI on NEC Powermate V, other cases where it's off by one)
+						next_bcp_offset = virtual_mem[offset:offset + 256].find(b'BCP')
+						if next_bcp_offset > -1:
+							offset += next_bcp_offset
+						else:
+							break
 
-			# Extract Dell version.
-			dell_version = util.read_string(file_data[offset + 0x20:offset + 0x23])
-			if dell_version[0:1] == 'A':
-				self.signon += 'BIOS Version: ' + dell_version
+				# Stop looking if this appears to be a valid BCPSEGMENT.
+				if valid_bcp:
+					# Set initial code segment.
+					code_segment = (bcpsegment_offset & -0x10000) >> 4
+					break
 
-			self.debug_print('Dell version:', dell_version)
+			self.debug_print('Found BCPs:', bcp)
+
+			# Extract information from BCPSYS.
+			bcpsys = bcp.get('BCPSYS', [None])[0]
+			if bcpsys:
+				# BCPSYS versions observed:
+				# - 0.3 (4.01)
+				# - 1.4 (4.02-4.03) => changed date/time format and moved build code
+				# - 1.5 (4.04) => added register table pointers
+				# - 1.7 (4.05)
+				# - 3.1 (4.05-4.0R6)
+				# - 3.2 (4.0R6) => added register table segment
+				# - 3.3 (SecureCore)
+
+				# Extract core version. This is preliminary and may be overridden by string checks.
+				bios_maj, bios_min, bios_patch = bcpsys.data[0x0a:0x0d]
+				if bios_maj > 4: # (ALR "4.0 Release 5.10.3" reports 05 0A 03)
+					self.version = '4.{0:02}'
+				else:
+					if bios_maj == 4 and bios_min >= 6:
+						self.version = '{0}.0 Release {1}.0' # 4.0R6 is way more common than 4.06
+					else:
+						self.version = '{0}.{1:02}'
+				if self.version:
+					self.debug_print('BCPSYS core version:', bios_maj, bios_min, bios_patch)
+					self.version = self.version.format(bios_maj, bios_min, bios_patch)
+
+				# Extract the build code as metadata.
+				# Size checks are sanity checks not observed in the real world.
+				data_size = len(bcpsys.data)
+				if bcpsys.version_maj == 0 and data_size > 0x33:
+					build_code = bcpsys.data[0x33:min(0x3b, data_size)]
+				elif data_size > 0x37:
+					build_code = bcpsys.data[0x37:min(0x3f, data_size)]
+				else:
+					build_code = b''
+				build_code = util.read_string(build_code.replace(b'\x00', b'\x20')).strip()
+				if build_code:
+					self.debug_print('BCPSYS build code:', build_code)
+					self.metadata.append(('BCP', build_code))
+
+				# Extract the build dates and times as metadata.
+				dates_times = (b'', b'')
+				if data_size > 0x0f:
+					if bcpsys.version_maj == 0:
+						dates_times = (
+							bcpsys.data[0x0f:min(0x17, data_size)] + b' ' + bcpsys.data[min(0x17, data_size):min(0x1f, data_size)],
+							bcpsys.data[min(0x1f, data_size):min(0x27, data_size)] + b' ' + bcpsys.data[min(0x27, data_size):min(0x2f, data_size)]
+						)
+					else:
+						dates_times = (
+							bcpsys.data[0x0f:min(0x20, data_size)],
+							bcpsys.data[min(0x21, data_size):min(0x32, data_size)]
+						)
+				dates_times = tuple(util.read_string(date_time.replace(b'\x00', b'\x20')).strip() for date_time in dates_times)
+				self.debug_print('BCPSYS build dates/times:', dates_times)
+				dates_times = ' - '.join(date_time for date_time in dates_times if date_time[:8] != '00/00/00')
+				if dates_times:
+					self.metadata.append(('BCP', dates_times))
+
+				# Extract register table pointer segment and offsets.
+				if bcpsys.version_maj >= 3 and data_size >= 0x6a:
+					regtable_start, regtable_end, regtable_segment = struct.unpack('<HHH', bcpsys.data[0x65:0x6b])
+					if bcpsys.version_maj == 3 and bcpsys.version_min <= 1:
+						regtable_segment = code_segment
+					elif regtable_segment == 0x7000: # (Intel)
+						self.debug_print('Remapping Intel register table segment', hex(regtable_segment))
+						regtable_segment = code_segment = 0xe000
+					elif regtable_segment <= 0xe31f: # (DE35 on HP Pavilion 2200, E31F on HP Brio 80xx)
+						self.debug_print('Register table segment', hex(regtable_segment), 'too low, resetting to', hex(code_segment))
+						regtable_segment = code_segment
+					else:
+						code_segment = regtable_segment
+				elif bcpsys.version_maj == 1 and bcpsys.version_min >= 5 and data_size >= 0x6d:
+					regtable_start, regtable_end, regtable_segment = struct.unpack('<HHH', bcpsys.data[0x67:0x6d])
+					code_segment = regtable_segment
+				else:
+					regtable_segment = None
+
+				if regtable_segment:
+					self.debug_print('Register table at', hex(regtable_segment), ':', hex(regtable_start), 'to', hex(regtable_end))
+
+		# Locate main 4.0x version.
+		match = self._40x_version_pattern.search(file_data)
+		if match:
+			# Extract full version string as metadata.
+			version_string = util.read_string(match.group(1))
+			self.metadata.append(('ID', version_string))
+			self.debug_print('Raw 4.0x version:', repr(version_string))
+
+			# Extract sign-on.
+			signon = match.group(2)
+			if signon:
+				self.signon = util.read_string(signon)
+				self.debug_print('Raw 4.0x post-version sign-on:', repr(signon))
+		else:
+			# Locate backup 4.0x version, but only if we don't have a better one from BCPSYS.
+			if not self.version:
+				match = self._40x_version_alt_pattern.search(file_data)
+			if match:
+				# Extract base core version.
+				self.version = util.read_string(match.group(1))
+				self.debug_print('Backup 4.0x version:', repr(match.group(0)))
+			else:
+				# Locate SecureCore/TrustedCore/FirstBIOS version.
+				match = self._core_version_pattern.search(file_data)
+				if match:
+					# Assume base core version if we don't have a better one from BCPSYS.
+					if not self.version:
+						self.version = '4.0 Release 6.0'
+
+					# Extract full version as metadata.
+					version_string = util.read_string(match.group(0))
+					self.metadata.append(('ID', version_string.replace('(tm)', '')))
+					self.debug_print('Raw Core version:', repr(version_string))
+				else:
+					# Locate Xx86 version.
+					match = self._xx86_version_pattern.search(file_data)
+					if match:
+						# Extract version.
+						branch = match.group(3)
+						if branch: # for Pentium
+							branch = (branch.replace(b'(TM)', b'').strip().split(b'/')[-1] + b' ' + match.group(4))
+						else: # Xx86
+							branch = match.group(2)
+						self.version = util.read_string(branch + b' ' + match.group(6))
+
+						# Extract full version string as metadata.
+						version_string = util.read_string(match.group(1) + match.group(2) + match.group(5) + match.group(6))
+						self.metadata.append(('ID', version_string.replace(' (TM)', '').replace('(TM)', '')))
+						self.debug_print('Raw Xx86 version:', repr(version_string))
+
+						# Extract sign-on.
+						self.signon = util.read_string(match.group(7))
+					else:
+						# Locate ROM BIOS version.
+						match = self._rombios_version_pattern.search(file_data)
+						if match:
+							# Extract version.
+							self.version = util.read_string(match.group(3))
+
+							# Add PLUS prefix if present.
+							pre_version = match.group(2)
+							if pre_version:
+								self.version = util.read_string(pre_version) + self.version
+
+							# Extract version prefix if present.
+							pre_version = match.group(1)
+							if pre_version:
+								# Shorten 80286/80386(/80486?)
+								if len(pre_version) >= 5 and pre_version[:2] == b'80':
+									pre_version = pre_version[2:]
+
+								self.version = util.read_string(pre_version) + self.version
+
+							# Extract full version string as metadata.
+							version_string = util.read_string(match.group(0).replace(b'\xF0', b''))
+							self.metadata.append(('ID', version_string))
+							self.debug_print('Raw ROM BIOS version:', repr(version_string))
+						else:
+							self.debug_print('No version found!')
+
+		# Save post-version sign-on to be restored later.
+		post_version = self.signon
+
+		# Determine if this is a Dell BIOS.
+		match = self._dell_system_pattern.search(file_data)
+		if match:
+			# Backup in case no Phoenix version is found, which is possible given compression.
+			if not self.version:
+				self.version = 'Dell'
+
+			# Extract the model as a sign-on.
+			self.signon = match.group(0).decode('cp437', 'ignore')
+			self.debug_print('Dell model:', self.signon)
+
+			# Add version information to the sign-on, looking at the data after the model first...
+			version_index = match.start(0) + 0x20
+			match = self._dell_version_code_pattern.match(file_data[version_index:version_index + 3])
+			if not match:
+				# ...then the version strings...
+				match = self._dell_version_pattern.search(file_data)
+				if not match:
+					# ...then on byte 48 of some files.
+					match = self._dell_version_code_pattern.match(file_data[0x30:0x33])
+			if match:
+				version_string = match.group(1)
+				self.signon += '\nBIOS Version: ' + version_string.decode('cp437', 'ignore')
+				self.debug_print('Dell version:', version_string)
 		else:
 			# Determine if this is some sort of HP Vectra BIOS.
 			match = self._hp_pattern.search(file_data)
@@ -1959,7 +2235,7 @@ class PhoenixAnalyzer(Analyzer):
 						self.signon = self.signon.replace(frm, to)
 
 					self.signon = self.signon.decode('cp437', 'ignore')
-					self.debug_print('Raw sign-on (4R6+):', repr(self.signon))
+					self.debug_print('Raw 4.0R6+ sign-on:', repr(self.signon))
 				else:
 					# Extract sign-on from Ax86 and older BIOSes.
 					match = self._rombios_signon_pattern.search(file_data)
@@ -1969,149 +2245,108 @@ class PhoenixAnalyzer(Analyzer):
 							self.debug_print('Ignored bogus sign-on on DEC BIOS')
 							match = None
 						else:
-							signon_log = '(old std):'
+							signon_log = 'std'
 					else:
 						match = self._rombios_signon_alt_pattern.search(file_data)
-						signon_log = '(old alt):'
+						signon_log = 'alt'
 					if match:
 						end = match.end(0)
 						if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
-							self.version = '?' # there may be no version at all (Wearnes LPX)
-							self.signon = util.read_string(file_data[end:end + 256])
-							self.debug_print('Raw sign-on', signon_log, repr(self.signon))
-
-							if len(self.signon) <= 2: # Phoenix video BIOS (Commodore SL386SX25), bogus data (NEC Powermate V)
-								self.signon = ''
+							signon = util.read_string(file_data[end:end + 256])
+							if len(signon) <= 3: # Phoenix video BIOS (Commodore SL386SX25), bogus data (NEC Powermate V)
+								match = None
 								self.debug_print('Ignored bogus sign-on (too short)')
+							else:
+								self.signon = signon
+								self.debug_print('Raw old', signon_log, 'sign-on:', repr(self.signon))
 						else:
 							self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
+							match = None
 
-				# Split sign-on lines.
-				if self.signon:
-					self.signon = self.signon.replace('\r', '\n').replace('\x00', ' ')
-					self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
+					if not match and bios_maj != None and bios_min != None and code_segment != None:
+						# Extract sign-on from BCPOST on 4.0x BIOSes.
+						bcpost = bcp.get('BCPOST', [None])[0]
+						if bcpost and len(bcpost.data) >= 0x25:
+							# BCPOST versions observed:
+							# - 0.1 (4.01)
+							# - 0.3 (4.02-4.05)
+							# - 0.4 (4.04-4.05)
+							# - 1.3 (4.0R6)
+							# - 1.4 (SecureCore)
+
+							# If this is a compressed BIOS, load decompressed segments.
+							segment_ranges = []
+							if compressed:
+								# Go through extracted files.
+								for file_in_dir in os.listdir(file_path):
+									# Skip non-segment files.
+									match = self._segment_pattern.match(file_in_dir)
+									if not match:
+										continue
+
+									# Read segment data.
+									try:
+										f = open(os.path.join(file_path, file_in_dir), 'rb')
+										data = f.read()
+										f.close()
+									except:
+										self.debug_print('Could not load segment file:', file_in_dir)
+										continue
+
+									# Load segment data into the virtual memory space.
+									self.debug_print('Loaded segment file:', file_in_dir)
+									offset = int(match.group(1), 16) << 4
+									target_len = min(len(virtual_mem) - offset, len(data))
+									if target_len >= 0:
+										virtual_mem[offset:offset + target_len] = data[:target_len]
+										segment_ranges.append((offset, offset + target_len))
+
+							# Read sign-on string pointer.
+							signon_segment = code_segment
+							signon_offset, = struct.unpack('<H', bcpost.data[0x23:0x25])
+							self.debug_print('4.0x sign-on points to', hex(signon_segment), ':', hex(signon_offset))
+
+							# De-reference pointer on 4.04+ where it points to a string table pointer instead of a string.
+							if bios_maj > 4 or (bios_maj == 4 and bios_min >= 4):
+								signon_offset = (signon_segment << 4) + signon_offset
+								string_table_offset = virtual_mem[signon_offset:signon_offset + 2]
+								if len(string_table_offset) == 2:
+									# Look for a string table segment overlapping the string pointer's segment and offset.
+									for start, end in segment_ranges:
+										if signon_offset >= start and signon_offset < end:
+											signon_segment = start >> 4
+											break
+
+									# Now we should have a pointer to the actual string.
+									signon_offset, = struct.unpack('<H', string_table_offset)
+									self.debug_print('4.0x sign-on string table entry points to', hex(signon_segment), ':', hex(signon_offset))
+
+							# Add segment to pointer.
+							signon_offset += signon_segment << 4
+
+							# Read string.
+							self.signon = util.read_string(virtual_mem[signon_offset:signon_offset + 256])
+							self.debug_print('Raw 4.0x sign-on:', repr(self.signon))
+
+		# Restore post-version sign-on.
+		if post_version != self.signon:
+			if self.signon:
+				self.signon = post_version + '\n' + self.signon
+			else:
+				self.signon = post_version
+
+		# Split sign-on lines.
+		if self.signon:
+			self.signon = self.signon.replace('\r', '\n').replace('\x00', ' ')
+			self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
 
 		return True
-
-	def _date_precheck(self, line):
-		return not self._bcpsys_date_time
-
-	def _dell_precheck(self, line):
-		return self.version == 'Dell'
 
 	def _signon_fujitsu_precheck(self, line):
 		return self._trap_signon_fujitsu_lines > 0
 
 	def _signon_nec_precheck(self, line):
 		return self._trap_signon_nec
-
-	def _version_40rel(self, line, match):
-		'''Phoenix(MB)? ?BIOS ([0-9]\.[^\s]+ Release ([0-9]\.[0-9]+))(.+)?'''
-
-		# Extract version with release.
-		self.version = match.group(2)
-
-		# Add version prefix if one was found.
-		prefix = match.group(1)
-		if prefix:
-			self.version = prefix + ' ' + self.version
-
-		# Extract any additional information after the version
-		# and modified version numbers as part of the sign-on.
-		additional_info = (match.group(4) or '').strip()
-		if additional_info:
-			if additional_info.lstrip() == additional_info:
-				additional_info = match.group(3).strip() + additional_info.strip()
-			if self.signon:
-				if additional_info not in self.signon:
-					self.signon = additional_info + '\n' + self.signon
-			else:
-				self.signon = additional_info
-
-		return True
-
-	def _version_40x(self, line, match):
-		'''Phoenix(?:(MB)(?: BIOS)?| ?BIOS(?: (Developmental))?) +(?:Plug and Play )?(Version +([0-9]\.[0-9]+)|4\.0[0-9])(.+)?'''
-		# Detect just 4.0x without the "Version" prefix to detect some weird
-		# OEM ones (Zenith Z-Station GT) while not causing false positives.
-		# Additional space before version = some Siemens Nixdorf stuff
-		# "Plug and Play" = ALR Sequel series
-
-		# Extract version.
-		self.version = match.group(4) or match.group(3)
-
-		# Add version prefix if one was found.
-		prefix = match.group(1) or match.group(2)
-		if prefix:
-			self.version = prefix + ' ' + self.version
-
-		# Extract any additional information after the version
-		# and modified version numbers as part of the sign-on.
-		additional_info = match.group(5)
-		if additional_info:
-			if additional_info.lstrip() == additional_info:
-				additional_info = self.version + additional_info
-			if self.signon:
-				self.signon = additional_info.strip() + '\n' + self.signon
-			else:
-				self.signon = additional_info.strip()
-
-		return True
-
-	def _version_404(self, line, match):
-		'''v([0-9]\.[0-9]{2}) Copyright 1985-[^ ]+ Phoenix Technologies Ltd'''
-
-		# Some v4.04 BIOSes somehow don't have enough data for
-		# _version_40x to work (partially failed extraction?)
-		if not self.version:
-			self.version = match.group(1)
-
-		return True
-
-	def _version_branch(self, line, match):
-		'''Phoenix ([A-Za-z]+(?:BIOS|Bios)) (?:Version ([0-9]\.[^\s]+)|([0-9](?:\.[0-9.]+)? Release ([0-9]\.[0-9]+)))(.+)?'''
-
-		# Extract version with branch and release.
-		self.version = match.group(1) + ' ' + (match.group(2) or match.group(3))
-
-		# Extract any additional information after the version
-		# and modified version numbers as part of the sign-on.
-		additional_info = (match.group(5) or '').strip()
-		if additional_info:
-			if additional_info.lstrip() == additional_info:
-				additional_info = (match.group(4) or match.group(2)).strip() + additional_info.strip()
-			if self.signon:
-				if additional_info not in self.signon:
-					self.signon = additional_info + '\n' + self.signon
-			else:
-				self.signon = additional_info
-
-		return True
-
-	def _version_core(self, line, match):
-		'''Phoenix ((?:cME )?(?:[A-Za-z]+Core|FirstBIOS [^\s]+ Pro).*)'''
-
-		# Skip setup headers.
-		branch = match.group(1)
-		if ' Setup' in branch:
-			return False
-
-		# Strip ".", ".U" (IBM/Lenovo) and ".S" (MSI K9ND Speedster2).
-		if branch[-2] == '.':
-			branch = branch[:-2]
-		elif branch[-1] == '.':
-			branch = branch[:-1]
-
-		# Trim branch before "for" (IBM/Lenovo).
-		for_index = branch.find(' for ')
-		if for_index > -1:
-			branch = branch[:for_index]
-
-		# Extract branch, while removing extraneous trademark
-		# symbols and changing the Server abbreviation.
-		self.version = branch.replace('(tm)', '')
-
-		return True
 
 	def _version_grid(self, line, match):
 		'''Copyright (C) [0-9-]+, GRiD Systems Corp.All Rights Reserved'''
@@ -2122,78 +2357,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		return False
 
-	def _version_notebios404(self, line, match):
-		'''^Phoenix (NoteBIOS [0-9.]+) Setup - Copyright '''
-
-		# Complement _version_404 with NoteBIOS.
-		if not self.version:
-			self.version = match.group(1)
-		elif 'NoteBIOS' not in self.version:
-			self.version = 'NoteBIOS ' + self.version
-
-		return True
-
-	def _version_pentium(self, line, match):
-		'''^(?:PhoenixBIOS(?:\(TM\))? )?for ((?:486/)?Pentium)\s?\(TM\)(?: CPU)? - ([^\s]+) Version ([^-\s]+)(?:(?:-|\s)(.+))?'''
-
-		# Add branch to version.
-		self.version = match.group(1)
-
-		# Add non-ISA bus types to version.
-		bus_type = match.group(2)
-		if bus_type != 'ISA':
-			self.version += ' ' + bus_type
-
-		# Add actual version.
-		self.version += ' ' + match.group(3)
-
-		# Extract any additional information after the version as a sign-on,
-		# if one wasn't already found.
-		post_version = match.group(4)
-		if not self.signon and post_version:
-			post_version = post_version.strip()
-			if post_version:
-				self.signon = post_version
-
-		return True
-
-	def _version_rombios(self, line, match):
-		'''(?:(?:((?:8086|8088|V20 |(?:80)?(?:[0-9]{3}))(?:/EISA)?) )?ROM BIOS (PLUS )?|^ (PLUS) )Ver(?:sion)? ?([0-9]\.[A-Z0-9]{2,})\.?([^\s]*)(\s+[0-9A-Z].+)?'''
-
-		# Stop if this was already determined to be a Dell BIOS.
-		if self.version == 'Dell':
-			# Let _signon_dell handle this version line.
-			return False
-
-		# Extract version.
-		self.version = match.group(4).rstrip('. ')
-
-		# Extract version prefix if present.
-		pre_version = match.group(1)
-		if pre_version:
-			# Shorten 80286/80386(/80486?)
-			if len(pre_version) >= 5 and pre_version[:2] == '80':
-				pre_version = pre_version[2:]
-
-			self.version = pre_version.strip() + ' ' + self.version
-
-		# Add PLUS prefix/suffix if present.
-		if match.group(1) or match.group(2):
-			space_index = self.version.find(' ')
-			if space_index > -1:
-				self.version = self.version[:space_index] + ' PLUS' + self.version[space_index:]
-			else:
-				self.version = 'PLUS ' + self.version
-
-		# Extract any additional information after the version as a sign-on
-		# if none was already found.
-		if not self.signon.replace('\t', '').replace(' ', ''):
-			additional_info = (match.group(5) or '') + (match.group(6) or '')
-			if additional_info and (len(additional_info) > 3 or additional_info[0] != '.'):
-				self.signon = additional_info
-
-		return True
-
 	def _version_sct(self, line, match):
 		'''Phoenix BIOS SC-T (v[^\\s#]+)'''
 		# (SecureCore Tiano)
@@ -2203,7 +2366,7 @@ class PhoenixAnalyzer(Analyzer):
 		self.version = 'SecureCore Tiano ' + match.group(1)
 
 		# This is UEFI.
-		self.addons.append('UEFI')
+		self.metadata.append(('UEFI', 'SC-T'))
 
 		return True
 
@@ -2215,7 +2378,7 @@ class PhoenixAnalyzer(Analyzer):
 			self.version = 'SecureCore Tiano'
 
 		# This is UEFI.
-		self.addons.append('UEFI')
+		self.metadata.append(('UEFI', 'SC-T'))
 
 		return True
 
@@ -2228,73 +2391,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Set Tandy sign-on if we already found one.
 		self.signon = self._found_signon_tandy
-
-		return True
-
-	def _version_xx86(self, line, match):
-		'''(?:Phoenix(?:(?:\s)?BIOS(?:\(TM\))?)? )?([ADE][23456]86) Version (?:([0-9]\.[0-9]{2})(.*))?$'''
-
-		# Stop if this is A386 after A486 (Apricot LS Pro)
-		branch = match.group(1)
-		if branch == 'A386' and self.version[:5] == 'A486 ':
-			return True
-
-		# Add branch to the version.
-		self.version = branch
-
-		# Add actual version, if found.
-		version = match.group(2)
-		if version:
-			self.version += ' ' + version
-
-		# Abort analysis if this is a non-BIOS file. (ZEOS id.txt)
-		if version == 'A486 1.0x"':
-			self.version = ''
-			raise AbortAnalysisError('Phoenix non-BIOS (_version_xx86)')
-
-		# Extract any additional information after the version as a sign-on
-		# if none was already found.
-		if not self.signon:
-			additional_info = match.group(3)
-			if additional_info and (len(additional_info) > 3 or additional_info[0] != '.'):
-				self.signon = additional_info
-
-		return True
-
-	def _string_date(self, line, match):
-		'''^([0-9]{2}/[0-9]{2}/[0-9]{2}|[0-9]{4}//[0-9]{4}//[0-9]{4})([0-9]{2}/[0-9]{2}/[0-9]{2})?'''
-
-		# De-interleave date if interleaved.
-		date = match.group(1)
-		if len(date) > 8:
-			date = date[::2]
-
-		# If two dates were found, the newest one takes precedence.
-		other_date = match.group(2)
-		if other_date and util.date_gt(other_date, date, util.date_pattern_mmddyy):
-			date = other_date
-
-		# Skip known bad dates.
-		if date == '00/00/00':
-			return True
-
-		# Extract existing date/time from string if present.
-		newline_index = self.string.rfind('\n')
-		if newline_index > -1:
-			string_rest = self.string[:newline_index]
-			string_date = self.string[newline_index + 1:]
-		else:
-			string_rest = ''
-			string_date = self.string
-
-		# Add date to string, or replace an existing one if this one is newer.
-		string_date_valid = util.date_pattern_mmddyy.match(string_date)
-		if not string_date_valid or util.date_gt(date, string_date[:8], util.date_pattern_mmddyy):
-			if string_date_valid:
-				self.string = string_rest
-			if self.string:
-				self.string += '\n'
-			self.string += date
 
 		return True
 
@@ -2314,18 +2410,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Extract the version string as a sign-on.
 		self.signon = match.group(1)
-
-		return True
-
-	def _signon_dell(self, line, match):
-		'''^(?:(Dell System )|(?:BIOS Version(?!  =)|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version (?:[^\s]+)) )(.+)'''
-
-		# Add model or BIOS version to the sign-on.
-		linebreak_index = self.signon.find('\n')
-		if match.group(1):
-			self.signon = match.group(1) + match.group(2) + self.signon[linebreak_index:]
-		else:
-			self.signon = self.signon[:linebreak_index + 1] + 'BIOS version ' + match.group(2)[:3]
 
 		return True
 
@@ -2438,7 +2522,7 @@ class PromagAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''\\(C\\) PROMAG SYSTEM BOARD VER\\. ([^ ]+) [^\\n]+\\n([\\r\\n\\x20-\\x7E]+)''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		match = self._version_pattern.search(file_data)
 		if not match:
 			return False
@@ -2460,7 +2544,7 @@ class QuadtelAnalyzer(Analyzer):
 		self._version_pattern = re.compile('''(?:(?:Quadtel|QUADTEL|PhoenixBIOS) )?(.+) BIOS Version ([^\\r\\n]+)''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if b' Quadtel Corp. Version ' not in file_data:
 			return False
 
@@ -2471,10 +2555,10 @@ class QuadtelAnalyzer(Analyzer):
 			id_block_index = match.start(0)
 
 			# Extract version.
-			version_string = util.read_string(file_data[id_block_index + 0xc8:id_block_index + 0x190])
+			version_string = util.read_string(file_data[id_block_index + 0xc8:id_block_index + 0x190]) # may contain space followed by backspace (ZEOS Marlin)
 			version_match = self._version_pattern.search(version_string) # may start with a linebreak (Phoenix-Quadtel)
 			if version_match:
-				self.version = version_match.group(2).replace(' \b', '').rstrip('.').strip().rstrip('.') # remove trailing "." (first for quadt286, second for Quadtel GC113) and space followed by backspace (ZEOS Marlin)
+				self.version = version_match.group(2).rstrip('.').strip().rstrip('.') # remove trailing "." (first for quadt286, second for Quadtel GC113)
 				if self.version[0:1] == 'Q': # flag Phoenix-Quadtel
 					self.version = self.version[1:] + ' (Phoenix)'
 
@@ -2508,7 +2592,7 @@ class SchneiderAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''EURO PC\s+BIOS (V[\\x20-\\x7E]+)''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if b'Schneider Rundfunkwerke AG' not in file_data:
 			return False
 
@@ -2535,7 +2619,7 @@ class SystemSoftAnalyzer(Analyzer):
 		self._signon_pattern = re.compile(b'''(?:\\x0D\\x0A){1,}\\x00\\x08\\x00([\\x20-\\x7E]+)''')
 		self._signon_old_pattern = re.compile(b'''(?:[\\x0D\\x0A\\x20-\\x7E]+\\x00){1,}\\x00+([\\x0D\\x0A\\x20-\\x7E]+)''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if not self._systemsoft_pattern.search(file_data):
 			return False
 
@@ -2623,7 +2707,7 @@ class TandonAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''NOT COPR. IBM 1984 BIOS VERSION ([\\x20-\\x7E]+)''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Locate version.
 		match = self._version_pattern.search(file_data)
 		if not match:
@@ -2641,7 +2725,7 @@ class TinyBIOSAnalyzer(Analyzer):
 
 		self._version_pattern = re.compile(b'''tinyBIOS (V(?:[^\\s]+))''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if b' PC Engines' not in file_data:
 			return False
 
@@ -2678,7 +2762,7 @@ class ToshibaAnalyzer(Analyzer):
 
 		self._string_pattern = re.compile(b'''(?:([\\x21-\\x7F]+\s*V[\\x21-\\x7F]{1,16}\s*)TOSHIBA |\\x00{3}BIOS[\\x00-\\xFF]{4}([\\x20-\\x7E]{16}))''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if not (b' TOSHIBA ' in file_data and b'Use Toshiba\'s BASIC.' in file_data) and b'Toshiba Corporation. & Award Software Inc.' not in file_data:
 			return False
 
@@ -2697,7 +2781,7 @@ class WhizproAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Whizpro', *args, **kwargs)
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		if b'$PREPOST' not in file_data or b'$BOOTBLK' not in file_data:
 			return False
 
@@ -2748,7 +2832,7 @@ class ZenithAnalyzer(Analyzer):
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2}) \(C\)ZDS CORP''')
 		self._monitor_pattern = re.compile(b'''[\\x20-\\x7E]+ Monitor, Version [\\x20-\\x7E]+''')
 
-	def can_handle(self, file_data, header_data):
+	def can_handle(self, file_path, file_data, header_data):
 		# Locate date.
 		match = self._date_pattern.search(file_data)
 		if not match:
