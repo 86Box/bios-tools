@@ -34,4 +34,6 @@ int unlzari(unsigned char *in, int insz, unsigned char *out, int outsz, char com
 
 int unlzh(unsigned char *in, int insz, unsigned char *out, int outsz);
 
+int unnotlzh(unsigned char *in, int insz, unsigned char *out, int outsz);
+
 #endif				/* LH5_EXTRACT_H */

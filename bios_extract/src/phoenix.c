@@ -466,28 +466,33 @@ BadFragment:
 		munmap(Buffer, le32toh(Module->ExpLen));
 		break;
 
-	case 3:		/* LZSS */
-		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (LZSS)",
-		       Offset + Module->HeadLen + 4, Packed, filename,
-		       le32toh(Module->ExpLen));
-
-		/* The first 4 bytes of the LZSS packing method is just the total
-		 *      expanded length; skip them */
-		LZSSExtract(ModuleData + 4, Packed - 4, fd);
-		break;
-
-	case 4:		/* LZHUF */
-		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (LZHUF)",
+	case 3:		/* BC D6 F1 */
+		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (BC D6 F1)",
 		       Offset + Module->HeadLen + 4, Packed, filename,
 		       le32toh(Module->ExpLen));
 		Buffer = MMapOutputFile(filename, le32toh(Module->ExpLen));
 		if (!Buffer)
 			break;
 
-		/* The first 4 bytes of the LZHUF packing method is just the total
+		/* The first 4 bytes of the BC D6 F1 packing method is just the total
 		 *      expanded length; skip them */
-		unlzh(ModuleData + 4, Packed - 4, Buffer,
-		      le32toh(Module->ExpLen));
+		PhoenixBCD6F1Decode(ModuleData, Packed,
+							Buffer, le32toh(Module->ExpLen));
+		munmap(Buffer, le32toh(Module->ExpLen));
+		break;
+
+	case 4:		/* I can't believe it's not LZHUF! */
+		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (not-LZHUF)",
+		       Offset + Module->HeadLen + 4, Packed, filename,
+		       le32toh(Module->ExpLen));
+		Buffer = MMapOutputFile(filename, le32toh(Module->ExpLen));
+		if (!Buffer)
+			break;
+
+		/* The first 4 bytes of the not-LZHUF packing method is just the total
+		 *      expanded length; skip them */
+		unnotlzh(ModuleData, Packed, Buffer,
+				 le32toh(Module->ExpLen));
 		munmap(Buffer, le32toh(Module->ExpLen));
 		break;
 
@@ -901,11 +906,13 @@ Bool PhoenixFFV(unsigned char *BIOSImage, int BIOSLength, struct PhoenixID *FFV)
 
 void PhoenixBCD6F1Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 			 unsigned char *OutputBuffer, int OutputBufferSize) {
-	/* This is a slightly modified Ghidra decompilation of phoedeco's
-	   x86 assembly implementation. Might be unmodified LZSS for all I
-	   know, but let's play it safe. */
-	char *DAT_00729668 = malloc(0x1000);
-	memset(DAT_00729668, ' ', 0x1000);
+	/* This is a weird compression scheme that Phoenix tools and phoedeco call
+	   "LZSS", but it nowhere near matches LZSS.C... phoedeco has a decompressor
+	   implemented entirely in assembly code lifted out of a BIOS (the F000xxxx
+	   labels give it away), and I somehow managed to get away with just using a
+	   Ghidra decompilation of that code, maybe because it's a single function. */
+	char DAT_00729668[0x1000];
+	memset(DAT_00729668, ' ', sizeof(DAT_00729668));
 	char bVar1;
 	unsigned char *pbVar2;
 	int iVar3;
@@ -956,8 +963,6 @@ void PhoenixBCD6F1Decode(unsigned char *PackedBuffer, int PackedBufferSize,
 			unaff_EDI = unaff_EDI + 1;
 		}
 	} while( 1 );
-
-	free(DAT_00729668);
 }
 
 /*
