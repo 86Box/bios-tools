@@ -425,6 +425,8 @@ class BIOSExtractor(Extractor):
 			# Bad data can cause infinite loops.
 			proc = None
 			self.debug_print('Processing timed out on:', file_path)
+		if proc and proc.returncode not in (0, 1, 86):
+			self.debug_print('Bad return code:', proc.returncode)
 
 		# Assume failure if nothing was extracted. A lone remainder file also counts as a failure.
 		dest_dir_files = os.listdir(dest_dir_0)
