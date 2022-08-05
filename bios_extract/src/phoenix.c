@@ -34,6 +34,7 @@
 #include "bios_extract.h"
 #include "lh5_extract.h"
 #include "lzss_extract.h"
+#include "phoenix_extract.h"
 
 struct bcpHeader {
 	char signature[6];
@@ -451,37 +452,33 @@ BadFragment:
 	}
 
 	switch (Module->Compression) {
-	case 2:		/* LZARI */
-		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (LZARI)",
+	case 2:		/* "LZARI" */
+		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (not-LZARI)",
 		       Offset + Module->HeadLen + 4, Packed, filename,
 		       le32toh(Module->ExpLen));
 		Buffer = MMapOutputFile(filename, le32toh(Module->ExpLen));
 		if (!Buffer)
 			break;
 
-		/* The first 4 bytes of the LZARI packing method is just the total
-		 *      expanded length; skip them */
-		unlzari(ModuleData + 4, Packed - 4, Buffer,
-			le32toh(Module->ExpLen), phx.commonCharacterLZSS);
+		unnotlzari(ModuleData, Packed, Buffer,
+				   le32toh(Module->ExpLen), phx.commonCharacterLZSS);
 		munmap(Buffer, le32toh(Module->ExpLen));
 		break;
 
-	case 3:		/* BC D6 F1 */
-		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (BC D6 F1)",
+	case 3:		/* "LZSS" */
+		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (not-LZSS)",
 		       Offset + Module->HeadLen + 4, Packed, filename,
 		       le32toh(Module->ExpLen));
 		Buffer = MMapOutputFile(filename, le32toh(Module->ExpLen));
 		if (!Buffer)
 			break;
 
-		/* The first 4 bytes of the BC D6 F1 packing method is just the total
-		 *      expanded length; skip them */
-		PhoenixBCD6F1Decode(ModuleData, Packed,
-							Buffer, le32toh(Module->ExpLen));
+		unnotlzss(ModuleData, Packed, Buffer,
+				  le32toh(Module->ExpLen), phx.commonCharacterLZSS);
 		munmap(Buffer, le32toh(Module->ExpLen));
 		break;
 
-	case 4:		/* I can't believe it's not LZHUF! */
+	case 4:		/* "LZHUF" */
 		printf("0x%05X (%6d bytes)   ->   %s\t(%d bytes) (not-LZHUF)",
 		       Offset + Module->HeadLen + 4, Packed, filename,
 		       le32toh(Module->ExpLen));
@@ -489,8 +486,6 @@ BadFragment:
 		if (!Buffer)
 			break;
 
-		/* The first 4 bytes of the not-LZHUF packing method is just the total
-		 *      expanded length; skip them */
 		unnotlzh(ModuleData, Packed, Buffer,
 				 le32toh(Module->ExpLen));
 		munmap(Buffer, le32toh(Module->ExpLen));
@@ -904,67 +899,6 @@ Bool PhoenixFFV(unsigned char *BIOSImage, int BIOSLength, struct PhoenixID *FFV)
 	return TRUE;
 }
 
-void PhoenixBCD6F1Decode(unsigned char *PackedBuffer, int PackedBufferSize,
-			 unsigned char *OutputBuffer, int OutputBufferSize) {
-	/* This is a weird compression scheme that Phoenix tools and phoedeco call
-	   "LZSS", but it nowhere near matches LZSS.C... phoedeco has a decompressor
-	   implemented entirely in assembly code lifted out of a BIOS (the F000xxxx
-	   labels give it away), and I somehow managed to get away with just using a
-	   Ghidra decompilation of that code, maybe because it's a single function. */
-	char DAT_00729668[0x1000];
-	memset(DAT_00729668, ' ', sizeof(DAT_00729668));
-	char bVar1;
-	unsigned char *pbVar2;
-	int iVar3;
-	uint uVar4;
-	uint uVar5;
-	uint uVar6;
-	unsigned char *unaff_ESI = PackedBuffer;
-	unsigned char *pbVar7;
-	unsigned char *unaff_EDI = OutputBuffer;
-
-	pbVar2 = unaff_ESI + PackedBufferSize;
-	uVar4 = 0;
-	uVar5 = 0xfee;
-	do {
-		uVar4 = uVar4 >> 1;
-		pbVar7 = unaff_ESI;
-		if ((uVar4 & 0x100) == 0) {
-			if (unaff_ESI == pbVar2) break;
-			pbVar7 = unaff_ESI + 1;
-			uVar4 = 0xff00 | *unaff_ESI;
-		}
-		if ((uVar4 & 1) == 0) {
-			if (pbVar7 == pbVar2) break;
-			if (pbVar7 + 1 == pbVar2) break;
-			unaff_ESI = pbVar7 + 2;
-			uVar6 = (uint)pbVar7[1];
-			iVar3 = (uVar6 & 0xf) + 3;
-			uVar6 = (uint)*pbVar7 | (uVar6 & 0xf0) << 4;
-			pbVar7 = unaff_EDI;
-			do {
-				bVar1 = DAT_00729668[uVar6];
-				uVar6 = (uVar6 + 1) & 0xfff;
-				unaff_EDI = pbVar7 + 1;
-				*pbVar7 = bVar1;
-				DAT_00729668[uVar5] = bVar1;
-				uVar5 = (uVar5 + 1) & 0xfff;
-				iVar3 = iVar3 + -1;
-				pbVar7 = unaff_EDI;
-			} while (iVar3 != 0);
-		}
-		else {
-			if (pbVar7 == pbVar2 || unaff_EDI >= (OutputBuffer + OutputBufferSize)) break;
-			unaff_ESI = pbVar7 + 1;
-			bVar1 = *pbVar7;
-			*unaff_EDI = bVar1;
-			DAT_00729668[uVar5] = bVar1;
-			uVar5 = (uVar5 + 1) & 0xfff;
-			unaff_EDI = unaff_EDI + 1;
-		}
-	} while( 1 );
-}
-
 /*
  *
  */
@@ -1097,7 +1031,7 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		sprintf(filename, "segment_%04X.rom", BCD6F1->Segment);
 		printf("0x%05lX (%6d bytes)   ->   %s\t(%d bytes) (%s)\n",
 		       p - BIOSImage, le32toh(BCD6F1->FragLength), filename,
-		       le32toh(BCD6F1->ExpLen), (phx.compression == 0) ? "BCD6F1" : "LZARI");
+		       le32toh(BCD6F1->ExpLen), (phx.compression == 0) ? "BCD6F1" : "not-LZARI");
 		Buffer = MMapOutputFile(filename, le32toh(BCD6F1->ExpLen));
 		if (!Buffer)
 			break;
@@ -1105,12 +1039,12 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		//SetRemainder(p - BIOSImage, sizeof(struct PhoenixBCD6F1) + le32toh(BCD6F1->FragLength), FALSE);
 
 		p += sizeof(struct PhoenixBCD6F1);
-		if (phx.compression == 0)
-			PhoenixBCD6F1Decode(p, le32toh(BCD6F1->FragLength),
-					    Buffer, le32toh(BCD6F1->ExpLen));
+		if (phx.compression == 0) /* phoedeco uses the separate bcd6f1 decompressor which assumes a common character of ' ' */
+			unnotlzss(p, le32toh(BCD6F1->FragLength),
+					  Buffer, le32toh(BCD6F1->ExpLen), ' ');
 		else
-			unlzari(p, le32toh(BCD6F1->FragLength), Buffer,
-				le32toh(BCD6F1->ExpLen), phx.commonCharacterLZSS);
+			unnotlzari(p, le32toh(BCD6F1->FragLength), Buffer,
+					   le32toh(BCD6F1->ExpLen), phx.commonCharacterLZSS);
 
 		munmap(Buffer, le32toh(BCD6F1->ExpLen));
 	}

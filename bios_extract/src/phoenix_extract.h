@@ -1,5 +1,5 @@
 /*
- * Copyright 2009      Luc Verhaegen <libv@skynet.be>
+ * Copyright 2022      RichardG <richardg867@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,22 +16,13 @@
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef LH5_EXTRACT_H
-#define LH5_EXTRACT_H
+#ifndef PHOENIX_EXTRACT_H
+#define PHOENIX_EXTRACT_H
 
-unsigned int LH5HeaderParse(unsigned char *Buffer, int BufferSize,
-			    unsigned int *original_size,
-			    unsigned int *packed_size,
-			    char **name, unsigned short *crc);
+int unnotlzh(unsigned char *in, int insz, unsigned char *out, int outsz);
 
-unsigned short CRC16Calculate(unsigned char *Buffer, int BufferSize);
+int unnotlzari(unsigned char *in, int insz, unsigned char *out, int outsz, char common);
 
-int LH5Decode(unsigned char *PackedBuffer, int PackedBufferSize,
-	      unsigned char *OutputBuffer, int OutputBufferSize);
+int unnotlzss(unsigned char *in, int insz, unsigned char *out, int outsz, char common);
 
-extern int lzari_in_bruteforce;
-int unlzari(unsigned char *in, int insz, unsigned char *out, int outsz, char common);
-
-int unlzh(unsigned char *in, int insz, unsigned char *out, int outsz);
-
-#endif				/* LH5_EXTRACT_H */
+#endif /* PHOENIX_EXTRACT_H */

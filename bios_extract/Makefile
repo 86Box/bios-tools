@@ -8,7 +8,7 @@ SRCDIR = src
 
 BIOS_EXTRACT_OBJS = $(SRCDIR)/lh5_extract.o $(SRCDIR)/lzari_extract.o \
 		    $(SRCDIR)/lzhuf_extract.o $(SRCDIR)/lzss_extract.o \
-		    $(SRCDIR)/notlzhuf_extract.o \
+		    $(SRCDIR)/phoenix_extract.o \
 		    $(SRCDIR)/ami.o $(SRCDIR)/award.o \
 		    $(SRCDIR)/phoenix.o $(SRCDIR)/systemsoft.o \
 		    $(SRCDIR)/bios_extract.o $(SRCDIR)/compat.o
@@ -34,7 +34,7 @@ lh5_test: $(LH5_TEST_OBJS)
 
 BRUTEFORCE_OBJS = $(SRCDIR)/lh5_extract.o $(SRCDIR)/lzari_extract.o \
 		  $(SRCDIR)/lzhuf_extract.o $(SRCDIR)/lzss_extract.o \
-		  $(SRCDIR)/notlzhuf_extract.o \
+		  $(SRCDIR)/phoenix_extract.o \
 		  $(SRCDIR)/phoenix.o $(SRCDIR)/bruteforce.o
 bruteforce: $(BRUTEFORCE_OBJS)
 	$(CC) $(CFLAGS) $(BRUTEFORCE_OBJS) -o bruteforce
