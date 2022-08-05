@@ -1873,8 +1873,8 @@ class PhoenixAnalyzer(Analyzer):
 		self._xx86_version_pattern = re.compile(
 			b'''(PhoenixBIOS\\(TM\\) )''' # Phoenix brand
 			b'''[\\x00-\\xFF]{0,512}?''' # variable amount of code inbetween (not observed on DEC)
-			b'''([A-Z][0-9]86|for ([\\x20-\\x7E]+?) (?:CPU )?- ([^ ]+))''' # branch
-			b'''( Version )([0-9]\\.[0-9]{2})''' # actual version
+			b'''(?:([A-Z][0-9]86|for ([\\x20-\\x7E]+?) (?:CPU )?- ([^ ]+))''' # branch (can be missing entirely (Wearnes LPX))
+			b'''( Version ))?([0-9]\\.[0-9]{2})''' # actual version
 			b'''-?([\\x20-\\x7E]*)''' # sign-on (Micronics M5PE)
 		)
 		# Additional space before version (some Siemens Nixdorf stuff)
@@ -2145,11 +2145,11 @@ class PhoenixAnalyzer(Analyzer):
 						if branch: # for Pentium
 							branch = (branch.replace(b'(TM)', b'').strip().split(b'/')[-1] + b' ' + match.group(4))
 						else: # Xx86
-							branch = match.group(2)
+							branch = match.group(2) or b'??86'
 						self.version = util.read_string(branch + b' ' + match.group(6))
 
 						# Extract full version string as metadata.
-						version_string = util.read_string(match.group(1) + match.group(2) + match.group(5) + match.group(6))
+						version_string = util.read_string(match.group(1) + (match.group(2) or b'') + (match.group(5) or b'') + match.group(6))
 						self.metadata.append(('ID', version_string.replace(' (TM)', '').replace('(TM)', '')))
 						self.debug_print('Raw Xx86 version:', repr(version_string))
 
