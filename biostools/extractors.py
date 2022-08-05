@@ -622,17 +622,16 @@ class DellExtractor(Extractor):
 	def _memcpy(self, arr1, off1, arr2, off2, count):
 		while count:
 			if off1 < len(arr1):
-					try:
-						arr1[off1] = arr2[off2]
-					except:
-						break
-			elif off1 == len(arr1):
-					try:
-						arr1.append(arr2[off2])
-					except:
-						break
-			else:
+				try:
+					arr1[off1] = arr2[off2]
+				except:
 					break
+			elif off1 >= len(arr1):
+				while off1 >= len(arr1):
+					arr1.append(0xFF)
+				continue
+			else:
+				break
 			off1 += 1
 			off2 += 1
 			count -= 1
@@ -644,37 +643,61 @@ class DellExtractor(Extractor):
 		dst = bytearray()
 		inlen = len(indata)
 		while srcoff < inlen:
-				b = src[srcoff]
-				nibl, nibh = b & 0x0F, (b >> 4) & 0x0F
-				srcoff += 1
-				if nibl:
-						if nibl == 0xF:
-								al = src[srcoff]
-								ah = src[srcoff+1]
-								srcoff += 2
-								cx = nibh | (ah << 4)
-								count = (cx & 0x3F) + 2
-								delta = ((ah >> 2) << 8) | al
-						else:
-								count = nibl + 1
-								delta = (nibh << 8) | src[srcoff]
-								srcoff += 1
-						self._memcpy(dst, dstoff, dst, dstoff - delta - 1, count)
-						dstoff += count
-				elif nibh == 0x0E:
-						count = src[srcoff] + 1
-						srcoff += 1
-						self._memcpy(dst, dstoff, dst, dstoff - 1, count)
-						dstoff += count
+			b = src[srcoff]
+			nibl, nibh = b & 0x0F, (b >> 4) & 0x0F
+			srcoff += 1
+			if nibl:
+				if nibl == 0xF:
+					al = src[srcoff]
+					ah = src[srcoff+1]
+					srcoff += 2
+					cx = nibh | (ah << 4)
+					count = (cx & 0x3F) + 2
+					delta = ((ah >> 2) << 8) | al
 				else:
-						if nibh == 0x0F:
-								count = src[srcoff] + 15
-								srcoff += 1
-						else:
-								count = nibh + 1
-						self._memcpy(dst, dstoff, src, srcoff, count)
-						dstoff += count
-						srcoff += count
+					count = nibl + 1
+					delta = (nibh << 8) | src[srcoff]
+					srcoff += 1
+				self._memcpy(dst, dstoff, dst, dstoff - delta - 1, count)
+				dstoff += count
+			elif nibh == 0x0E:
+				count = src[srcoff] + 1
+				srcoff += 1
+				self._memcpy(dst, dstoff, dst, dstoff - 1, count)
+				dstoff += count
+			else:
+				if nibh == 0x0F:
+					count = src[srcoff] + 15
+					srcoff += 1
+				else:
+					count = nibh + 1
+				self._memcpy(dst, dstoff, src, srcoff, count)
+				dstoff += count
+				srcoff += count
+
+		return dst
+
+	def _dell_unpack_alt(self, indata):
+		srcoff = 0
+		dstoff = 0
+		src = bytearray(indata)
+		dst = bytearray()
+		inlen = len(indata)
+		while srcoff < inlen:
+			b = src[srcoff]
+			nibl, nibh = b & 0x0F, (b >> 4) & 0x0F
+			srcoff += 1
+			if nibl:
+				count = nibl + 1
+				delta = (nibh << 8) | src[srcoff]
+				srcoff += 1
+				self._memcpy(dst, dstoff, dst, dstoff - delta - 1, count)
+				dstoff += count
+			else:
+				count = nibh + 1
+				self._memcpy(dst, dstoff, src, srcoff, count)
+				dstoff += count
+				srcoff += count
 
 		return dst
 
@@ -684,12 +707,21 @@ class DellExtractor(Extractor):
 
 		# Stop if this is not the type of BIOS we're looking for.
 		copyright_string = b'\xF0\x00Copyright 1985-\x02\x04\xF0\x0F8 Phoenix Technologies Ltd.'
+		alt_mode = False
 		offset = file_header.find(copyright_string)
 		if offset < 5:
-			return False
+			copyright_string = b'\xE0Copyright 1985-\x02\x04\xF08 Phoenix Techno\xD0logies Ltd.'
+			offset = file_header.find(copyright_string)
+			if offset < 2:
+				return False
+			alt_mode = True
 
 		# Determine the length format.
-		if file_header[offset - 5] == 1:
+		if alt_mode:
+			# 16-bit length (no module type prefix) with different compression.
+			length_size = 2
+			struct_format = '<0sH'
+		elif file_header[offset - 5] == 1:
 			# 32-bit length.
 			length_size = 5
 			struct_format = '<BI'
@@ -712,6 +744,7 @@ class DellExtractor(Extractor):
 
 		# Extract any preceding data as EC code.
 		if offset > 0:
+			self.debug_print('Extracting', offset, 'bytes of EC code')
 			f = open(os.path.join(dest_dir_0, 'ec.bin'), 'wb')
 			f.write(file_header[:offset])
 			f.close()
@@ -722,17 +755,20 @@ class DellExtractor(Extractor):
 		while (offset + length_size) < file_size:
 			# Read module type and length.
 			module_type, module_length = struct.unpack(struct_format, file_header[offset:offset + length_size])
-			if module_type == 0xFF:
+			if (alt_mode and module_length == 0xFFFF) or module_type == 0xFF:
 				break
+			self.debug_print('Extracting module number', module_number, 'type', module_type, 'size', module_length)
 			offset += length_size
 
 			# Decompress data if required.
 			data = file_header[offset:offset + module_length]
 			if module_type != 0x0C:
 				try:
-					data = self._dell_unpack(data)
+					data = (alt_mode and self._dell_unpack_alt or self._dell_unpack)(data)
+					if len(data) == 0:
+						self.debug_print('Extraction produced blank output')
 				except:
-					pass
+					self.debug_print('Extraction failed')
 			offset += module_length
 
 			# Write module.
@@ -880,6 +916,10 @@ class ImageExtractor(Extractor):
 		elif file_header[:2] == b'PG':
 			# Get width and height for a Phoenix Graphics image.
 			width, height = struct.unpack('<HH', file_header[10:14])
+			if width == 0 and height == 0 and file_header[2:17] == b'\x09\x00\x00\x80\x02\x16\x00\x00\x00\x00\x00\x00\x00\x00\x0F':
+				# Some HP 4.0R6 have a width and height of 0 on 640x480 images.
+				width = 640
+				height = 480
 
 			# Check if the file is actually paletted, as some
 			# images (PhoenixNet) are incorrectly set as paletted.
@@ -898,6 +938,7 @@ class ImageExtractor(Extractor):
 							# Special marker that the palette should be read.
 							width = -width
 
+			print('pgx', width, height)
 			if width != 0 and height != 0:
 				func = self._convert_pgx
 		if not func:
