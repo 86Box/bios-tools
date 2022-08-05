@@ -1865,7 +1865,7 @@ class PhoenixAnalyzer(Analyzer):
 
 		self._rombios_version_pattern = re.compile(
 			b'''(?:Phoenix )?''' # Phoenix brand (not always present)
-			b'''((?:8086|8088|V20 |(?:80)?[0-9]{3})(?:/EISA)? )?ROM BIOS\\xF0? (PLUS )?''' # branch (F0 byte sidesteps Dell compression (Latitude CP/CPI))
+			b'''((?:8086|8088|V20 |(?:80)?[0-9]{3})(?:/EISA)? )?ROM BIOS (PLUS )?''' # branch
 			b'''Ver(?:sion)? ?([0-9]\\.[A-Z]?[0-9]{2})''' # actual version (can have short "Ver" with (JE1000) or without (BXM-8) space on small BIOSes, or letter before version (Dell fork "1.P10"))
 			b'''[\\x20-\\x7E]*''' # added patch levels
 		)
@@ -1893,10 +1893,8 @@ class PhoenixAnalyzer(Analyzer):
 		# Some are cME, some are not, cME was the product name.
 		self._core_version_pattern = re.compile(b'''Phoenix (?:cME )?[A-Za-z]+Core|FirstBIOS[\\x20-\\x7E]+''')
 
-		# Some files may be compressed...
 		self._dell_system_pattern = re.compile(b'''Dell System [\\x20-\\x7E]+''')
-		# More attempts to sidestep compression.
-		self._dell_version_pattern = re.compile(b'''(?:BIOS [Vv]ers[\\x00-\\xFF]{3}(?!  =):?|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version [^\\s]+) ([A-Z0-9.]+)''')
+		self._dell_version_pattern = re.compile(b'''(?:BIOS [Vv]ersion(?!  =):?|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version [^\\s]+) ([A-Z0-9.]+)''')
 		self._dell_version_code_pattern = re.compile(b'''([A-Z][0-9]{2})''')
 		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved''')
 		self._hp_signon_pattern = re.compile(b'''Version +[\\x21-\\x7E]+ +HP [\\x20-\\x7E]+''')
@@ -2181,7 +2179,7 @@ class PhoenixAnalyzer(Analyzer):
 							self.metadata.append(('ID', version_string))
 							self.debug_print('Raw ROM BIOS version:', repr(version_string))
 						else:
-							self.debug_print('No version found!')
+							self.debug_print('No version found!', file_path)
 
 		# Save post-version sign-on to be restored later.
 		post_version = self.signon
