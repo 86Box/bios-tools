@@ -163,7 +163,7 @@ typedef struct {
 
 /* "LZHUF" algorithm implemented using JankyBox. */
 
-static uint8_t daten[65536];
+#define daten state->mem /* this somehow works better than making it a variable */
 
 void e5(state_t *state) {
 	push(eax);
@@ -469,7 +469,7 @@ loc_0_7585:
 int unnotlzh(unsigned char *in, int insz, unsigned char *out, int outsz) {
 	state_t state_s = {0}, *state = &state_s;
 
-	int srcoffset = 0, destoffset = 65536;
+	int srcoffset = 65536, destoffset = 131072;
 
 	if (insz > (destoffset - srcoffset))
 		insz = destoffset - srcoffset;
