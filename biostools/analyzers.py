@@ -2296,7 +2296,7 @@ class PhoenixAnalyzer(Analyzer):
 
 				# Add segment to pointer.
 				signon_offset += signon_segment << 4
-				signon = virtual_mem[signon_offset:signon_offset + 256]
+				signon = virtual_mem[signon_offset:signon_offset + 4096]
 
 			# Read string if one was found.
 			if signon:
