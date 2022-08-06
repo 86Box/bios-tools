@@ -1911,7 +1911,6 @@ class PhoenixAnalyzer(Analyzer):
 		self._date_pattern = re.compile(b'''((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2}|(?:0{2}[1-9]{2}|1{2}[0-2]{2})/(?:0{2}[1-9]{2}|[12]{2}[0-9]{2}|3{2}[01]{2})/[0-9]{4})[^0-9]''')
 
 		self.register_check_list([
-			((self._signon_fujitsu_precheck, self._signon_fujitsu),	AlwaysRunChecker),
 			((self._signon_nec_precheck, self._signon_nec),			AlwaysRunChecker),
 			(self._version_grid,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._version_sct,										RegexChecker),
@@ -1919,7 +1918,6 @@ class PhoenixAnalyzer(Analyzer):
 			(self._version_tandy,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._signon_ast,										SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
 			(self._signon_commodore,								RegexChecker),
-			(self._signon_fujitsu_trigger,							SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._signon_hp,										RegexChecker),
 			(self._signon_intel,									RegexChecker),
 			(self._signon_nec_trigger,								RegexChecker),
@@ -1928,7 +1926,6 @@ class PhoenixAnalyzer(Analyzer):
 
 	def reset(self):
 		super().reset()
-		self._trap_signon_fujitsu_lines = 0
 		self._trap_signon_nec = False
 		self._found_signon_tandy = ''
 
@@ -2377,9 +2374,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		return True
 
-	def _signon_fujitsu_precheck(self, line):
-		return self._trap_signon_fujitsu_lines > 0
-
 	def _signon_nec_precheck(self, line):
 		return self._trap_signon_nec
 
@@ -2445,30 +2439,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Extract the version string as a sign-on.
 		self.signon = match.group(1)
-
-		return True
-
-	def _signon_fujitsu_trigger(self, line, match):
-		'''Phoenix/FUJITSU'''
-
-		# Read sign-on on the next 2 lines.
-		self._trap_signon_fujitsu_lines = 1
-
-		return True
-
-	def _signon_fujitsu(self, line, match):
-		if self._trap_signon_fujitsu_lines == 1:
-			# Extract the version on the first line.
-			self.signon = ' '.join(line.split())
-
-			# Move on to the next line.
-			self._trap_signon_fujitsu_lines = 2
-		else:
-			# Extract the model number on the second line.
-			self.signon = self.signon + ' (' + line.lstrip() + ')'
-
-			# Disarm the trap.
-			self._trap_signon_fujitsu_lines = 0
 
 		return True
 
