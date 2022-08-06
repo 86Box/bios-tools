@@ -1867,15 +1867,15 @@ class PhoenixAnalyzer(Analyzer):
 			b'''(?:Phoenix )?''' # Phoenix brand (not always present)
 			b'''((?:8086|8088|V20 |(?:80)?[0-9]{3})(?:/EISA)? )?ROM BIOS (PLUS )?''' # branch
 			b'''Ver(?:sion)? ?([0-9]\\.[A-Z]?[0-9]{2})''' # actual version (can have short "Ver" with (JE1000) or without (BXM-8) space on small BIOSes, or letter before version (Dell fork "1.P10"))
-			b'''[\\x20-\\x7E]*''' # added patch levels
+			b'''[\\x20-\\x7E]*''' # added patch levels and OEM info
 		)
 		# Covers the Xx86 and for Pentium family.
 		self._xx86_version_pattern = re.compile(
 			b'''(PhoenixBIOS\\(TM\\) )''' # Phoenix brand
-			b'''[\\x00-\\xFF]{0,512}?''' # variable amount of code inbetween (not observed on DEC)
-			b'''(?:([A-Z][0-9]86|for ([\\x20-\\x7E]+?) (?:CPU )?- ([^ ]+))''' # branch (can be missing entirely (Wearnes LPX))
-			b'''( Version ))?([0-9]\\.[0-9]{2})''' # actual version
-			b'''-?([\\x20-\\x7E]*)''' # sign-on (Micronics M5PE)
+			b'''[\\x00-\\xFF]{0,512}?''' # variable amount of code inbetween (or nothing at all (DEC))
+			b'''(([A-Z][0-9]86|for ([\\x20-\\x7E]+?) (?:CPU )?- ([^ ]+))''' # branch (can be missing entirely (Wearnes LPX))
+			b''' Version )?([0-9]\\.[0-9]{2})''' # actual version
+			b'''([\\x20-\\x7E]*)''' # added patch levels (Samsung SPC-6033P) and OEM info (Micronics M5PE)
 		)
 		# Additional space before version (some Siemens Nixdorf stuff)
 		# "PhoenixMB" 4.03 (4alp001) but what has "PhoenixMB BIOS" was lost to time
@@ -1883,10 +1883,9 @@ class PhoenixAnalyzer(Analyzer):
 		# "Plug and Play" (ALR Sequel series)
 		# Release can be single digit (ServerBIOS 2/3 Release 6.0)
 		self._40x_version_pattern = re.compile(
-			b'''(Phoenix(?:MB(?: BIOS)?|(?: [A-Za-z]*?)?BIOS) +(?:Developmental +)?(?:Plug and Play +)?''' # branch
+			b'''Phoenix(?:MB(?: BIOS)?|(?: [A-Za-z]*?)?BIOS) +(?:Developmental +)?(?:Plug and Play +)?''' # branch
 			b'''(?:Version +)?(?:[0-9]+(?:\\.[0-9]+)? Release )?[0-9]+\\.[\\x21-\\x2D\\x2F-\\x7E]+''' # actual version
-			b'''(?:[\\x21-\\x7E]|\\x20\\x08)*)''' # added patch levels (HP "4.02. " <ASCII backspace> "18", 4.05".Z.00", 6.0".I", ALR "5.10.3")
-			b'''([\\x20-\\x7E]*)''' # sign-on (Micronics M55Hi-Plus 6.12)
+			b'''[\\x08\\x20-\\x7E]*''' # added patch levels (HP "4.02. " <ASCII backspace> "18", 4.05".Z.00", 6.0".I", ALR "5.10.3") and OEM info (Micronics M55Hi-Plus 6.12)
 		)
 		# Backup location used as a last resort.
 		self._40x_version_alt_pattern = re.compile(b'''v([0-9]\\.[0-9]{2}) Copyright 1985-[0-9]+ Phoenix Technologies Ltd''')
@@ -2105,15 +2104,9 @@ class PhoenixAnalyzer(Analyzer):
 		match = self._40x_version_pattern.search(file_data)
 		if match:
 			# Extract full version string as metadata.
-			version_string = util.read_string(match.group(1))
+			version_string = util.read_string(match.group(0))
 			self.metadata.append(('ID', version_string))
 			self.debug_print('Raw 4.0x version:', repr(version_string))
-
-			# Extract sign-on.
-			signon = match.group(2)
-			if signon:
-				self.signon = util.read_string(signon)
-				self.debug_print('Raw 4.0x post-version sign-on:', repr(signon))
 		else:
 			# Locate backup 4.0x version, but only if we don't have a better one from BCPSYS.
 			if not self.version:
@@ -2139,20 +2132,17 @@ class PhoenixAnalyzer(Analyzer):
 					match = self._xx86_version_pattern.search(file_data)
 					if match:
 						# Extract version.
-						branch = match.group(3)
+						branch = match.group(4)
 						if branch: # for Pentium
-							branch = (branch.replace(b'(TM)', b'').strip().split(b'/')[-1] + b' ' + match.group(4))
+							branch = (branch.replace(b'(TM)', b'').strip().split(b'/')[-1] + b' ' + match.group(5))
 						else: # Xx86
-							branch = match.group(2) or b'??86'
+							branch = match.group(3) or b'??86'
 						self.version = util.read_string(branch + b' ' + match.group(6))
 
 						# Extract full version string as metadata.
-						version_string = util.read_string(match.group(1) + (match.group(2) or b'') + (match.group(5) or b'') + match.group(6))
+						version_string = util.read_string(match.group(1) + (match.group(2) or b'') + match.group(6) + (match.group(7) or b''))
 						self.metadata.append(('ID', version_string.replace(' (TM)', '').replace('(TM)', '')))
 						self.debug_print('Raw Xx86 version:', repr(version_string))
-
-						# Extract sign-on.
-						self.signon = util.read_string(match.group(7))
 					else:
 						# Locate ROM BIOS version.
 						match = self._rombios_version_pattern.search(file_data)
