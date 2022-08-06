@@ -1877,19 +1877,14 @@ class PhoenixAnalyzer(Analyzer):
 			b''' Version )?([0-9]\\.[0-9]{2})''' # actual version
 			b'''([\\x20-\\x7E]*)''' # added patch levels (Samsung SPC-6033P) and OEM info (Micronics M5PE)
 		)
-		# Additional space before version (some Siemens Nixdorf stuff)
-		# "PhoenixMB" 4.03 (4alp001) but what has "PhoenixMB BIOS" was lost to time
-		# "Developmental" 4.05 (HP Vectra 56x-57x and DEC Multia)
-		# "Plug and Play" (ALR Sequel series)
-		# Release can be single digit (ServerBIOS 2/3 Release 6.0)
 		self._40x_version_pattern = re.compile(
-			b'''Phoenix(?:MB(?: BIOS)?|(?: [A-Za-z]*?)?BIOS) +(?:Developmental +)?(?:Plug and Play +)?''' # branch
-			b'''(?:Version +)?(?:[0-9]+(?:\\.[0-9]+)? Release )?[0-9]+\\.[\\x21-\\x2D\\x2F-\\x7E]+''' # actual version
+			b'''Phoenix(?:MB(?: BIOS)?|(?: [A-Za-z]*?)?BIOS) +(?:Developmental +)?(?:Plug and Play +)?''' # branch ("PhoenixMB" (4alp001) but what has "PhoenixMB BIOS" was lost to time, "Developmental" (HP Vectra 56-56x, DEC Multia), "Plugh and Play" (ALR Sequel))
+			b'''(?:Version +)?(?:[0-9]+(?:\\.[0-9]+)? Release )?[0-9]+\\.[\\x21-\\x2D\\x2F-\\x7E]+''' # actual version (multiple spaces before version (Siemens Nixdorf), can be single digit (ServerBIOS 2/3 Release 6.0))
 			b'''[\\x08\\x20-\\x7E]*''' # added patch levels (HP "4.02. " <ASCII backspace> "18", 4.05".Z.00", 6.0".I", ALR "5.10.3") and OEM info (Micronics M55Hi-Plus 6.12)
 		)
 		# Backup location used as a last resort.
 		self._40x_version_alt_pattern = re.compile(b'''v([0-9]\\.[0-9]{2}) Copyright 1985-[0-9]+ Phoenix Technologies Ltd''')
-		# Some are cME, some are not, cME was the product name.
+		# Some are cME, some are not; cME was the product name.
 		self._core_version_pattern = re.compile(b'''Phoenix (?:cME )?[A-Za-z]+Core|FirstBIOS[\\x20-\\x7E]+''')
 
 		self._dell_system_pattern = re.compile(b'''Dell System [\\x20-\\x7E]+''')
@@ -1897,7 +1892,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._dell_version_code_pattern = re.compile(b'''([A-Z][0-9]{2})''')
 		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved''')
 		self._hp_signon_pattern = re.compile(b'''Version +[\\x21-\\x7E]+ +HP [\\x20-\\x7E]+''')
-		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Ax86)
+		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Xx86)
 		# "All Rights Reserved\r\n\n\x00" (Commodore 386LT, Tandy 1000RSX)
 		# "All Rights Reserved\r\n\n" (ROM BIOS)
 		# "All Rights Reserved\r\n\r\n\r\n" (Gateway 4DX2-50V)
