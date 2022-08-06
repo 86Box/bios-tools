@@ -1923,7 +1923,6 @@ class PhoenixAnalyzer(Analyzer):
 			(self._signon_hp,										RegexChecker),
 			(self._signon_intel,									RegexChecker),
 			(self._signon_nec_trigger,								RegexChecker),
-			(self._signon_surepath,									RegexChecker),
 			(self._signon_tandy,									RegexChecker),
 		])
 
@@ -2526,18 +2525,6 @@ class PhoenixAnalyzer(Analyzer):
 		signon = line.strip()
 		if signon not in self.signon:
 			self.signon += '\n' + signon
-
-		return True
-
-	def _signon_surepath(self, line, match):
-		'''^SurePath\(tm\) BIOS Version (.+)'''
-
-		# This is an IBM BIOS.
-		if not self.version:
-			self.version = 'IBM'
-
-		# Extract the version string as a sign-on.
-		self.signon = match.group(0)
 
 		return True
 
