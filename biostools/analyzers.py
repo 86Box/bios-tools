@@ -2221,22 +2221,32 @@ class PhoenixAnalyzer(Analyzer):
 						# SecureCore may have 4 bytes before the STRPACK header.
 						offset = data.find(b'STRPACK-BIOS')
 						if offset > -1:
-							strings_files.append(data[offset:])
-							self.debug_print('Loaded strings file:', file_in_dir)
-						else:
-							# Try to ascertain the string table location from the language code
-							# and next 2 bytes if no STRPACK header is present. (HP B013300I)
-							offset = data.find(b'us\x14\x00')
-							if offset > -1:
-								header = data[offset - 0x20:offset]
-								if len(header) < 0x20:
-									header = (b'\x00' * (0x20 - len(header))) + header
-								strings_files.append(header + data[offset:])
-							else:
-								self.debug_print('Bad strings file:', file_in_dir)
+							# Load each string table.
+							offset += 0x1c
+							languages = []
+							while True:
+								# Parse string table header.
+								lang_header = data[offset:offset + 6]
+								if len(lang_header) != 6: # end reached
+									break
+								lang_size, _, lang_code = struct.unpack('<HH2s', lang_header)
+								if lang_size == 0:
+									break
 
-			# Sort strings files, prioritizing the "us" (English) language.
-			strings_files.sort(key=lambda x: x[0x20:0x22] == b'us' and b'\x00\x00' or x[0x20:0x22])
+								# Add string table data, prioritizing the English language.
+								if lang_code == b'us':
+									strings_files.insert(0, data[offset:offset + lang_size])
+								else:
+									strings_files.append(data[offset:offset + lang_size])
+								languages.append(lang_code)
+
+								# Move on to the next table.
+								offset += lang_size
+
+							strings_files.append(data[offset:])
+							self.debug_print('Loaded strings file:', file_in_dir, '=>', languages)
+						else:
+							self.debug_print('Bad strings file:', file_in_dir)
 
 			# Read sign-on string pointer.
 			signon_segment = code_segment
@@ -2246,7 +2256,6 @@ class PhoenixAnalyzer(Analyzer):
 			signon = None
 			if bios_maj >= 6 or (bios_maj == 4 and bios_min >= 6):
 				# 4.0R6+: string table pointer is relative to string table file minus header.
-				signon_offset += 0x1c
 				self.debug_print('BCPOST sign-on points to string table file offset', hex(signon_offset))
 
 				# Make sure we have a strings file first.
@@ -2254,12 +2263,11 @@ class PhoenixAnalyzer(Analyzer):
 					string_table_offset = strings_files[0][signon_offset:signon_offset + 2]
 					if len(string_table_offset) == 2:
 						signon_offset, = struct.unpack('<H', string_table_offset)
-						signon_offset += 0x1c
 						self.debug_print('BCPOST sign-on string table entry points to file offset', hex(signon_offset))
 
 						# Phoenix allowed for some line drawing that is not quite CP437.
 						# The actual characters used haven't been confirmed in hardware.
-						signon = strings_files[0][signon_offset:signon_offset + 256]
+						signon = strings_files[0][signon_offset:]
 						for args in ((b'\x91', b'\xDA'), (b'\x92', b'\xC4'), (b'\x87', b'\xBF'), (b'\x86', b'\xB3'), (b'\x90', b'\xC0'), (b'\x88', b'\xD9')):
 							signon = signon.replace(*args)
 					else:
