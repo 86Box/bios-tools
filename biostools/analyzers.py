@@ -1105,7 +1105,7 @@ class BonusAnalyzer(Analyzer):
 		self._acpi_table_pattern = re.compile(b'''(DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})[\\x00-\\xFF]{24}[\\x00\\x20-\\x7E]{4}''')
 		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|([\\x20-\\x7E]+?)(?: SCSI)? BIOS )''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9\\.]+)''')
-		self._orom_pattern = re.compile(b'''\\x55\\xAA[\\x01-\\xFF][\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
+		self._orom_pattern = re.compile(b'''\\x55\\xAA([\\x01-\\xFF])[\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
 		self._phoenixnet_patterns = (
 			re.compile(b'''CPLRESELLERID'''),
 			re.compile(b'''BINCPUTBL'''),
@@ -1117,6 +1117,18 @@ class BonusAnalyzer(Analyzer):
 		)
 		self._rpl_pattern = re.compile(b'''NetWare Ready ROM''')
 		self._sli_pattern = re.compile(b'''[0-9]{12}Genuine NVIDIA Certified SLI Ready Motherboard for ([\\x20-\\x7E]*)''')
+		self._vga_string_pattern = re.compile(
+			b'''[\\x0D\\x0A\\x20-\\x7E]{16,}''' # standard string
+			b'''(?:\\x00[\\x0D\\x0A\\x20-\\x7E]{16,})?''' # PhoenixView
+		)
+		self._vga_trim_pattern = re.compile(
+			'''(?:IBM (?:(?:VGA )?Compat[ia]ble(?: BIOS)?|''' # typical
+			'''IS A TRADEMARK OF INTERNATIONAL BUSINESS MACHINES CORP(?:([\\x20-\\x7E]+?) Phone-\\([\\x21-\\x7E]+)?)|''' # AMI monologue
+			'''\\*\\* +RESERVED FOR IBM COMPATIBILITY +\\*\\*|''' # Trident
+			'''This is not a product of IBM|''' # Tseng
+			'''NOT AN IBM BIOS\\!)''' # Radius
+			'''[\\x20-\\x2F\\x3A-\\x40\\x5B-\\x60\\x7A-\\x7E]*''', # trim non-alphanumeric characters
+			re.I)
 
 	def _enumerate_metadata(self, key, entries):
 		if len(entries) > 0:
@@ -1169,22 +1181,31 @@ class BonusAnalyzer(Analyzer):
 		# Look for PCI/PnP option ROMs.
 		for match in self._orom_pattern.finditer(file_data):
 			# Check for the VGA BIOS compatibility marker string and add it as metadata.
-			vga_marker = match.group(2)
+			vga_marker = match.group(3)
 			if vga_marker:
 				# Find ASCII strings around the marker. There must be a space before/after
 				# the marker to avoid parsing of non-text bytes as ASCII characters.
-				vga_start = match.start(2) + 2
+				vga_start = match.start(3) + 2
 				if file_data[vga_start - 1:vga_start] == b' ':
 					while vga_start > 0 and file_data[vga_start - 1] >= 0x20 and file_data[vga_start - 1] <= 0x7e:
 						vga_start -= 1
-				vga_end = match.end(2)
+				vga_end = match.end(3)
 				if file_data[vga_end:vga_end + 1] == b' ':
 					while vga_end < len(file_data) and file_data[vga_end] >= 0x20 and file_data[vga_end] <= 0x7e:
 						vga_end += 1
-				self.metadata.append(('Video', file_data[vga_start:vga_end].decode('cp437', 'ignore')))
+				vga_marker = util.read_string(file_data[vga_start:vga_end]).strip()
+
+				# Find an ASCII string after the IBM header, and if one is found, use it instead.
+				rom_size = match.group(1)[0] * 512
+				additional_match = self._vga_string_pattern.search(file_data[vga_end:match.start(0) + rom_size])
+				if additional_match:
+					vga_marker = self._vga_trim_pattern.sub('', vga_marker).strip()
+					if vga_marker:
+						vga_marker += '\n'
+					vga_marker += util.read_string(additional_match.group(0).replace(b'\x00', b' ')).strip()
 
 			# Extract PCI and PnP data structure pointers.
-			pci_header_ptr, pnp_header_ptr = struct.unpack('<HH', match.group(1))
+			pci_header_ptr, pnp_header_ptr = struct.unpack('<HH', match.group(2))
 
 			# Check for a valid PCI data structure.
 			if pci_header_ptr >= 26:
@@ -1199,9 +1220,8 @@ class BonusAnalyzer(Analyzer):
 
 						# Make sure the vendor ID is not bogus.
 						if vendor_id not in (0x0000, 0xffff):
-							# Flag VGA option ROMs if the compatibility marker didn't already do so.
-							if not vga_marker and ((class_code == 0 and subclass == 1) or (class_code == 3 and subclass in (0, 1))):
-								self.metadata.append(('Video', 'PCI VGA'))
+							# The generic VGA marker is no longer required.
+							vga_marker = None
 
 							# Add IDs to the option ROM list.
 							self.oroms.append((vendor_id, device_id))
@@ -1254,9 +1274,19 @@ class BonusAnalyzer(Analyzer):
 
 						# Take valid data only.
 						if device_id[:2] != b'\x00\x00' and (vendor or device):
+							# The generic VGA marker is no longer required.
+							vga_marker = None
+
 							# Add PnP ID (endianness swapped to help the front-end in
 							# processing it), vendor name and device name to the list.
 							self.oroms.append((struct.unpack('>I', device_id)[0], vendor, device))
+
+			# Add generic VGA marker if no PCI/PnP data was found.
+			if vga_marker:
+				# Strip lines that are too short or have a single repeated character.
+				stripped = (x.strip() for x in vga_marker.replace('\r', '').split('\n'))
+				vga_marker = '\n'.join(x for x in stripped if len(x) > 3 and x != (x[0] * len(x))).strip('\n')
+				self.oroms.append('[VGA] ' + vga_marker.replace('\n', '\n      '))
 
 		# This analyzer should never return True.
 		return False
@@ -1858,7 +1888,7 @@ class PhoenixAnalyzer(Analyzer):
 		super().__init__('Phoenix', *args, **kwargs)
 
 		# "Phoenix ROM BIOS" (Dell Latitude CP/CPI)
-		# No Phoenix copyrights, fallback to NuBIOS (Gateway? 1009.bin)
+		# No Phoenix copyrights, fallback to NuBIOS (Gateway Solo 2500)
 		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess|\\x00IBM AT Compatible Phoenix NuBIOS\\x00''')
 		self._ignore_pattern = re.compile(b'''search=f000,0,ffff,S,"|\\x00\\xC3\\x82as Ltd. de Phoenix del \\xC2\\x83 de Tecnolog\\xC3\\x83\\x00''')
 		self._bcpsegment_pattern = re.compile(b'''BCPSEGMENT''')

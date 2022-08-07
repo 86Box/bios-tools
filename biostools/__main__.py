@@ -466,7 +466,9 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 		# Add names to option ROMs.
 		previous_vendor = previous_device = None
 		for x in range(len(oroms)):
-			if len(oroms[x]) == 2: # PCI ROM
+			if type(oroms[x]) == str: # generic ROM
+				continue
+			elif len(oroms[x]) == 2: # PCI ROM
 				# Get vendor and device IDs and names.
 				vendor_id, device_id = oroms[x]
 				vendor, device = util.get_pci_id(vendor_id, device_id)
