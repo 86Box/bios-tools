@@ -1286,7 +1286,7 @@ class BonusAnalyzer(Analyzer):
 				# Strip lines that are too short or have a single repeated character.
 				stripped = (x.strip() for x in vga_marker.replace('\r', '').split('\n'))
 				vga_marker = '\n'.join(x for x in stripped if len(x) > 3 and x != (x[0] * len(x))).strip('\n')
-				self.oroms.append('[VGA] ' + vga_marker.replace('\n', '\n      '))
+				self.oroms.append(('VGA', vga_marker))
 
 		# This analyzer should never return True.
 		return False
