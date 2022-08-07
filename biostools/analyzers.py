@@ -1877,6 +1877,17 @@ class PhoenixAnalyzer(Analyzer):
 			b''' Version )?([0-9]\\.[0-9]{2})''' # actual version
 			b'''([\\x20-\\x7E]*)''' # added patch levels (Samsung SPC-6033P) and OEM info (Micronics M5PE)
 		)
+		# Customized Xx86 used in GRiDPad products.
+		self._xx86_grid_version_pattern = re.compile(
+			b'''\\xBE[\\x00-\\xFF]{2}\\xE8[\\x00-\\xFF]{2}\\x5E\\xC3''' # code before string
+			b'''(([\\x20-\\x7E]*?)''' # branch (LAP386SL or nothing observed so far)
+			b''' Version ''' # text inbetween
+			b'''[\\x20-\\x7E]*?''' # added OEM info (2360 "for 224")
+			b'''([0-9]\\.[0-9]{2})''' # actual version
+			b'''[\\x20-\\x7E]*)''' # more added OEM info (2260 and 2270 date)
+			b'''[\\x00-\\xFF]+''' # metric ton of code inbetween
+			b'''(PhoenixBIOS\\(TM\\) )\\x00''' # Phoenix brand
+		)
 		self._40x_version_pattern = re.compile(
 			b'''Phoenix(?:MB(?: BIOS)?|(?: [A-Za-z]*?)?BIOS) +(?:Developmental +)?(?:Plug and Play +)?''' # branch ("PhoenixMB" (4alp001) but what has "PhoenixMB BIOS" was lost to time, "Developmental" (HP Vectra 56-56x, DEC Multia), "Plugh and Play" (ALR Sequel))
 			b'''(?:Version +)?(?:[0-9]+(?:\\.[0-9]+)? Release )?[0-9]+\\.[\\x21-\\x2D\\x2F-\\x7E]+''' # actual version (multiple spaces before version (Siemens Nixdorf), can be single digit (ServerBIOS 2/3 Release 6.0))
@@ -1907,7 +1918,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		self.register_check_list([
 			((self._signon_nec_precheck, self._signon_nec),			AlwaysRunChecker),
-			(self._version_grid,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._version_sct,										RegexChecker),
 			(self._version_sct_preboot,								SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._version_tandy,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
@@ -2135,32 +2145,44 @@ class PhoenixAnalyzer(Analyzer):
 						self.metadata.append(('ID', version_string.replace(' (TM)', '').replace('(TM)', '')))
 						self.debug_print('Raw Xx86 version:', repr(version_string))
 					else:
-						# Locate ROM BIOS version.
-						match = self._rombios_version_pattern.search(file_data)
+						# Locate GRiD-customized Xx86 version.
+						match = self._xx86_grid_version_pattern.search(file_data)
 						if match:
 							# Extract version.
-							self.version = util.read_string(match.group(3))
-
-							# Add PLUS prefix if present.
-							pre_version = match.group(2)
-							if pre_version:
-								self.version = util.read_string(pre_version) + self.version
-
-							# Extract version prefix if present.
-							pre_version = match.group(1)
-							if pre_version:
-								# Shorten 80286/80386(/80486?)
-								if len(pre_version) >= 5 and pre_version[:2] == b'80':
-									pre_version = pre_version[2:]
-
-								self.version = util.read_string(pre_version) + self.version
+							branch = match.group(2) or b'??86'
+							self.version = util.read_string(branch + b' ' + match.group(3))
 
 							# Extract full version string as metadata.
-							version_string = util.read_string(match.group(0).replace(b'\xF0', b''))
-							self.metadata.append(('ID', version_string))
-							self.debug_print('Raw ROM BIOS version:', repr(version_string))
+							version_string = util.read_string(match.group(4) + match.group(1))
+							self.metadata.append(('ID', version_string.replace('(TM)', '')))
+							self.debug_print('Raw GRiD Xx86 version:', repr(version_string))
 						else:
-							self.debug_print('No version found!', file_path)
+							# Locate ROM BIOS version.
+							match = self._rombios_version_pattern.search(file_data)
+							if match:
+								# Extract version.
+								self.version = util.read_string(match.group(3))
+
+								# Add PLUS prefix if present.
+								pre_version = match.group(2)
+								if pre_version:
+									self.version = util.read_string(pre_version) + self.version
+
+								# Extract version prefix if present.
+								pre_version = match.group(1)
+								if pre_version:
+									# Shorten 80286/80386(/80486?)
+									if len(pre_version) >= 5 and pre_version[:2] == b'80':
+										pre_version = pre_version[2:]
+
+									self.version = util.read_string(pre_version).replace('  ', ' ') + self.version # double space on V20
+
+								# Extract full version string as metadata.
+								version_string = util.read_string(match.group(0).replace(b'\xF0', b''))
+								self.metadata.append(('ID', version_string))
+								self.debug_print('Raw ROM BIOS version:', repr(version_string))
+							else:
+								self.debug_print('No version found!', file_path)
 
 		# Save post-version sign-on to be restored later.
 		post_version = self.signon
@@ -2379,15 +2401,6 @@ class PhoenixAnalyzer(Analyzer):
 
 	def _signon_nec_precheck(self, line):
 		return self._trap_signon_nec
-
-	def _version_grid(self, line, match):
-		'''Copyright (C) [0-9-]+, GRiD Systems Corp.All Rights Reserved'''
-
-		# This is a GRiD BIOS.
-		if not self.version:
-			self.version = 'GRiD'
-
-		return False
 
 	def _version_sct(self, line, match):
 		'''Phoenix BIOS SC-T (v[^\\s#]+)'''
