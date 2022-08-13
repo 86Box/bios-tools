@@ -710,11 +710,16 @@ class DellExtractor(Extractor):
 		alt_mode = False
 		offset = file_header.find(copyright_string)
 		if offset < 5:
+			alt_mode = True
 			copyright_string = b'\xE0Copyright 1985-\x02\x04\xF08 Phoenix Techno\xD0logies Ltd.'
 			offset = file_header.find(copyright_string)
 			if offset < 2:
-				return False
-			alt_mode = True
+				copyright_string = b'Copyright 1985-1988 Phoenix Technologies Ltd.'
+				offset = file_header.find(copyright_string)
+				if offset > 2 and (offset & 0xffff) == 0 and file_header[2] == 0xf0: # partial compression (OptiPlex 5xx)
+					offset = 2
+				else:
+					return False
 
 		# Determine the length format.
 		if alt_mode:
@@ -755,7 +760,7 @@ class DellExtractor(Extractor):
 		while (offset + length_size) < file_size:
 			# Read module type and length.
 			module_type, module_length = struct.unpack(struct_format, file_header[offset:offset + length_size])
-			if (alt_mode and module_length == 0xFFFF) or module_type == 0xFF:
+			if (alt_mode and module_length in (0, 0xFFFF)) or module_type == 0xFF:
 				break
 			self.debug_print('Extracting module number', module_number, 'type', module_type, 'size', module_length)
 			offset += length_size
@@ -778,6 +783,15 @@ class DellExtractor(Extractor):
 
 			# Increase filename counter.
 			module_number += 1
+
+		# Extract remainder if applicable.
+		if offset < file_size:
+			try:
+				f = open(os.path.join(dest_dir_0, 'remainder.bin'), 'wb')
+				f.write(file_header[offset:])
+				f.close()
+			except:
+				pass
 
 		# Create header file with the copyright string, to tell the analyzer
 		# this BIOS went through this extractor.
