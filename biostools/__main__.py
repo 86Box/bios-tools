@@ -120,7 +120,12 @@ def extract_process(queue, abort_flag, multifile_lock, dir_number_path, next_dir
 		image_extractor,
 		extractors.ApricotExtractor(),
 		extractors.IntelNewExtractor(),
-		extractors.DellExtractor(),
+	]
+	if not options['unpack-only']:
+		file_extractors += [
+			extractors.DellExtractor(),
+		]
+	file_extractors += [
 		extractors.IntelExtractor(),
 		extractors.OMFExtractor(),
 		extractors.TrimondExtractor(),
