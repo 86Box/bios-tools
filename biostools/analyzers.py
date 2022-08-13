@@ -889,9 +889,10 @@ class AwardAnalyzer(Analyzer):
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\\([a-zA-Z0-9]{1,8}\\) EVALUATION ROM - NOT FOR SALE$''')
 		self._gigabyte_hefi_pattern = re.compile(b'''EFI CD/DVD Boot Option''')
-		self._id_block_pattern = re.compile( # whatever has "Phoenix" instead of "Award" was lost to time
-			b'''(?:''' + util.rotate_pattern(b'Award Software Inc. ', 6) + b'''|''' + util.rotate_pattern(b'Phoenix Technologies, Ltd ', 6) + b''')[\\x00-\\xFF]{8}IBM COMPATIBLE|'''
-			b'''[0-9]{2}/[0-9]{2}/[0-9]{4} {4}IBM COMPATIBLE (?:[0-9]+ )?BIOS COPYRIGHT Award Software Inc\\.'''
+		self._id_block_pattern = re.compile(
+			b'''(?:''' + util.rotate_pattern(b'Award Software Inc. ', 6) + b'''|''' + util.rotate_pattern(b'Phoenix Technologies, Ltd ', 6) + b''')[\\x00-\\xFF]{8}IBM COMPATIBLE|''' # whatever has "Phoenix" instead of "Award" was lost to time
+			b'''[0-9]{2}/[0-9]{2}/[0-9]{4} {4}IBM COMPATIBLE (?:[0-9]+ )?BIOS COPYRIGHT Award Software Inc\\.|''' # whatever has this was lost to time
+			b'''IBM COMPATIBLE (?:[0-9]+ )?BIOS COPYRIGHT Award Software Inc\\.''' # (Samsung Samtron 88S)
 		)
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \\(c\\) (?:[^\r]+)\r\n)?Copyright \\(c\\) (?:NCR \\& )?Award', re.M)
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
@@ -917,9 +918,15 @@ class AwardAnalyzer(Analyzer):
 			id_block_index = match.start(0)
 			self.debug_print('ID block starts at', hex(id_block_index), match.group(0))
 
-			# Extract version.
-			version_string = util.read_string(file_data[id_block_index + 0x61:id_block_index + 0xa1])
+			# Extract full version string as metadata.
+			version_string = util.read_string(file_data[id_block_index + 0x61:id_block_index + 0xc1])
+			linebreak_index = version_string.find('\r')
+			if linebreak_index > -1: # trim to linebreak (Samsung Samtron 88S)
+				version_string = version_string[:linebreak_index]
+			self.metadata.append(('ID', version_string))
 			self.debug_print('Raw version string:', repr(version_string))
+
+			# Extract version.
 			self.signon = ''
 			version_match = self._version_pattern.search(version_string)
 			if version_match:
@@ -929,12 +936,6 @@ class AwardAnalyzer(Analyzer):
 			elif version_string[:19] == 'Award Modular BIOS/': # Award version removed (Packard Bell PB810)
 				self.version = 'Packard Bell'
 				self.signon = version_string[19:] + '\n'
-
-			# Add Phoenix-Award and WorkstationBIOS indicators.
-			if 'Phoenix' in version_string:
-				self.version += ' (Phoenix)'
-			elif 'WorkstationBIOS' in version_string:
-				self.version += ' (Workstation)'
 
 			# Extract sign-on.
 			signon = util.read_string(file_data[id_block_index + 0xc1:id_block_index + 0x10f])
