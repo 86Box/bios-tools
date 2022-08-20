@@ -357,17 +357,21 @@ class AMIAnalyzer(Analyzer):
 		# Decoded: "\(C\)AMI, \(([^\)]{11,64})\)" (the 64 is arbitrary)
 		self._8088_string_pattern = re.compile(b'''\\xEC\\x5F\\x6C\\x60\\x5A\\x5C\\xEA\\xF0\\xEC([\\x00-\\x6B\\x6D-\\xFF]{11,64})\\x6C''')
 
+		# I believe "UTILITIES" instead of "UTILITY" was only observed on New Setup, but check on all of them for safety.
+		self._setup_patterns = {
+			'Color': re.compile(b'''Improper Use of Setup may Cause Problems !!'''),
+			'Easy': re.compile(b'''AMIBIOS EASY SETUP UTILIT'''),
+			'HiFlex': re.compile(b'''\\\\HAMIBIOS HIFLEX SETUP UTILIT'''),
+			'Intel': re.compile(b'''Advanced Chipset Configuration  \\\\QPress'''),
+			'New': re.compile(b'''AMIBIOS NEW SETUP UTILIT'''),
+			'Simple': re.compile(b'''\\\\HAMIBIOS SIMPLE SETUP UTILIT'''),
+			'WinBIOS': re.compile(b''' Wait----''')
+		}
+
 		self.register_check_list([
 			(self._string_pcchips,			RegexChecker),
 			(self._string_setupheader,		RegexChecker),
 			(self._signon_intel,			RegexChecker),
-			(self._addons_color,			SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			(self._addons_easy,				SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			(self._addons_hiflex,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			(self._addons_intel,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			(self._addons_new,				SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			(self._addons_simple,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			(self._addons_winbios,			SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 		])
 
 	def can_handle(self, file_path, file_data, header_data):
@@ -446,6 +450,15 @@ class AMIAnalyzer(Analyzer):
 
 			# The actual sign-on starts on the second line.
 			self.signon = '\n'.join(x.rstrip('\r').strip() for x in self.signon.split('\n')[1:] if x != '\r').strip('\n')
+
+			# Add setup type(s) as metadata.
+			# There can be multiple setup modules (PC Chips M559 with switchable Simple/WinBIOS)
+			setup_types = []
+			for setup_type in self._setup_patterns:
+				if self._setup_patterns[setup_type].search(file_data):
+					setup_types.append(setup_type)
+			if len(setup_types) > 0:
+				self.metadata.append(('Setup', ', '.join(setup_types)))
 		elif len(file_data) < 1024:
 			# Ignore false positives from sannata readmes.
 			self.debug_print('False positive by size of', len(file_data), 'bytes')
@@ -588,62 +601,6 @@ class AMIAnalyzer(Analyzer):
 		if (not oem or oem[:2] != '86' or not self._intel_86_pattern.match(self.signon)) and intel_version not in self.signon:
 			# Extract the version string as a sign-on.
 			self.signon = intel_version
-
-		return True
-
-	def _addons_color(self, line, match):
-		'''Improper Use of Setup may Cause Problems !!'''
-
-		# Add setup type to add-ons.
-		self.metadata.append(('Setup', 'Color'))
-
-		return True
-
-	def _addons_easy(self, line, match):
-		'''AMIBIOS EASY SETUP UTILIT'''
-
-		# Add setup type to add-ons.
-		self.metadata.append(('Setup', 'EasySetup'))
-
-		return True
-
-	def _addons_hiflex(self, line, match):
-		'''\\HAMIBIOS HIFLEX SETUP UTILIT'''
-
-		# Add setup type to add-ons.
-		self.metadata.append(('Setup', 'HiFlex'))
-
-		return True
-
-	def _addons_intel(self, line, match):
-		'''Advanced Chipset Configuration  \\QPress'''
-
-		# Add setup type to add-ons.
-		self.metadata.append(('Setup', 'IntelSetup'))
-
-		return True
-
-	def _addons_new(self, line, match):
-		'''AMIBIOS NEW SETUP UTILIT'''
-
-		# Add setup type to add-ons.
-		self.metadata.append(('Setup', 'NewSetup'))
-
-		return True
-
-	def _addons_simple(self, line, match):
-		'''\\HAMIBIOS SIMPLE SETUP UTILIT'''
-
-		# Add setup type to add-ons.
-		self.metadata.append(('Setup', 'SimpleSetup'))
-
-		return True
-
-	def _addons_winbios(self, line, match):
-		''' Wait----'''
-
-		# Add setup type to add-ons.
-		self.metadata.append(('Setup', 'WinBIOS'))
 
 		return True
 
