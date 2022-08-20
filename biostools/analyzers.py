@@ -1414,9 +1414,9 @@ class CorebootAnalyzer(Analyzer):
 		super().__init__('coreboot', *args, **kwargs)
 
 		self._identifier_pattern = re.compile(b'''coreboot-%s%s |Sage_coreboot-|Jumping to LinuxBIOS\\.''')
-		self._version_coreboot_pattern = re.compile(b'''#(?: This image was built using coreboot|define COREBOOT_VERSION ")([^"]+)''')
-		self._version_linuxbios_pattern = re.compile(b'''(LinuxBIOS|coreboot)-([^_ ]+)[_ ](?:Normal |Fallback )?(.* )?starting\\.\\.\\.''')
-		self._string_build_pattern = re.compile(b'''#define COREBOOT_BUILD "([^"]+)"''')
+		self._version_coreboot_pattern = re.compile(b'''#(?: This image was built using coreboot |define COREBOOT_VERSION ")([\\x20-\\x21\\x23-\\x7E]+)''')
+		self._version_linuxbios_pattern = re.compile(b'''((LinuxBIOS|coreboot)-([^_ ]+)[_ ](?:Normal |Fallback )?(?:.* )?)starting\\.\\.\\.''')
+		self._build_pattern = re.compile(b'''#define COREBOOT_BUILD "([^"]+?)"''')
 
 	def can_handle(self, file_path, file_data, header_data):
 		if not self._identifier_pattern.search(file_data):
@@ -1425,46 +1425,41 @@ class CorebootAnalyzer(Analyzer):
 		# Locate and extract version.
 		match = self._version_coreboot_pattern.search(file_data)
 		if match: # coreboot
-			self.debug_print('coreboot tag:', match.group(0))
-
 			# Reset vendor to coreboot.
 			self.vendor = self.vendor_id
 
-			# Extract version.
-			self.version = match.group(1).decode('cp437', 'ignore')
+			# Extract full version string as metadata.
+			self.version = util.read_string(match.group(1))
+			self.metadata.append(('ID', 'coreboot ' + self.version))
+			self.debug_print('Raw coreboot version:', self.version)
 
-			# Extract any additional information after the version as a string.
+			# Separate main version number.
 			dash_index = self.version.find('-')
 			if dash_index > -1:
-				self.string = self.version[dash_index + 1:]
 				self.version = self.version[:dash_index]
 
 			# Locate build tag.
-			match = self._string_build_pattern.search(file_data)
+			match = self._build_pattern.search(file_data)
 			if match:
-				self.debug_print('coreboot build:', match.group(0))
-
-				# Add build tag to string.
-				if self.string:
-					self.string += '\n'
-				self.string += match.group(1).decode('cp437', 'ignore')
+				# Extract build tag as metadata.
+				build_code = util.read_string(match.group(1))
+				self.debug_print('Raw coreboot build:', build_code)
+				self.metadata.append(('Build', build_code))
 
 			return True
 		else:
 			match = self._version_linuxbios_pattern.search(file_data)
 			if match: # LinuxBIOS
-				self.debug_print('LinuxBIOS banner:', match.group(0))
-
 				# Set vendor to LinuxBIOS if required.
-				self.vendor = match.group(1).decode('cp437', 'ignore')
+				self.vendor = util.read_string(match.group(2))
+
+				# Extract full version string as metadata.
+				version_string = util.read_string(match.group(1))
+				self.metadata.append(('ID', version_string))
+				self.debug_print('Raw LinuxBIOS version:', version_string)
 
 				# Extract version.
-				self.version = match.group(2).decode('cp437', 'ignore')
-
-				# Extract any additional information after the version as a string.
-				additional_info = match.group(3)
-				if additional_info:
-					self.string = additional_info.decode('cp437', 'ignore')
+				self.version = util.read_string(match.group(3))
 
 				return True
 
@@ -2733,7 +2728,7 @@ class PhoenixAnalyzer(Analyzer):
 
 				# Add build code and dates/times as a single metadata entry.
 				if build_code:
-					self.metadata.append(('BCP', build_code))
+					self.metadata.append(('Build', build_code))
 
 				# Extract register table pointer segment and offsets.
 				if bcpsys.version_maj >= 3 and data_size >= 0x6a:
