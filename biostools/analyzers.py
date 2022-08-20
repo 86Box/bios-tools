@@ -333,7 +333,6 @@ class AMIAnalyzer(Analyzer):
 		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC| Access Methods Inc\\.|AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) (?:IBM is a TM of IBM|[\\x00-\\xFF]{2}   AMI-[^-]+-BIOS )''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
 		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-[0-9]{6}-Chipset-0AAAA000$''')
-		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 		# The "All Rights Reserved" is important to not catch the same header on other files.
 		# "All<Rights Reserved" (Tatung TCS-9850 9600x9, corrupted during production?)
 		# AMIBIOS 6+ version corner cases:
@@ -370,23 +369,15 @@ class AMIAnalyzer(Analyzer):
 			'WinBIOS': re.compile(b''' Wait----''')
 		}
 
-		self.register_check_list([
-			(self._signon_intel,	RegexChecker),
-		])
-
 	def can_handle(self, file_path, file_data, header_data):
 		check_match = self._check_pattern.search(file_data)
 		if not check_match:
 			return False
 
-		# Some Intel BIOSes may fail to decompress, in which case, we have to
-		# rely on the header version data to get the Intel version sign-on.
-		if header_data:
-			is_intel = AMIIntelAnalyzer.can_handle(self, file_path, file_data, header_data)
-			if is_intel:
-				self.debug_print('Intel data found')
-		else:
-			is_intel = False
+		# Extract Intel data in a preliminary manner in case extraction failed.
+		is_intel = AMIIntelAnalyzer.can_handle(self, file_path, file_data, header_data)
+		if is_intel:
+			self.debug_print('Intel data found')
 
 		# Check post-Color identification block.
 		match = self._id_block_pattern.search(file_data)
@@ -580,19 +571,6 @@ class AMIAnalyzer(Analyzer):
 
 		return True
 
-	def _signon_intel(self, line, match):
-		'''^(?:(?:BIOS (?:Release|Version) )?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[A-Z][0-9A-Z]{1,})|(?:\\$IBIOSI\\$)?([0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}|(?:\\.[0-9]{4}){3}))'''
-
-		# If this is Intel's second AMI run, check if this is not a generic
-		# (86x) version string overwriting an OEM version string.
-		oem = match.group(3)
-		intel_version = match.group(1) or match.group(2)
-		if (not oem or oem[:2] != '86' or not self._intel_86_pattern.match(self.signon)) and intel_version not in self.signon:
-			# Extract the version string as a sign-on.
-			self.signon = intel_version
-
-		return True
-
 
 class AMIDellAnalyzer(AMIAnalyzer):
 	def __init__(self, *args, **kwargs):
@@ -685,47 +663,57 @@ class AMIIntelAnalyzer(Analyzer):
 	_ami_pattern = re.compile(b'''AMIBIOS''')
 	_ami_version_pattern = re.compile(b'''AMIBIOSC(0[1-9][0-9]{2})''')
 	_phoenix_pattern = re.compile(b'''PhoenixBIOS(?:\\(TM\\))? ''')
+	_version_pattern = re.compile(b'''(?:BIOS (?:Release|Version) )?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[A-Z][0-9A-Z]{1,})|(?:\\$IBIOSI\\$)?([0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}|(?:\\.[0-9]{4}){3})''')
+	_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 
 	def __init__(self, *args, **kwargs):
 		super().__init__('Intel', *args, **kwargs)
 
 	def can_handle(self, file_path, file_data, header_data):
-		# Handle Intel AMI BIOSes that could not be decompressed.
-
-		# Stop if there is no header data or if this file is just the header data.
-		# Note that headers with a 512-byte offset are converted by the extractor.
-		if not header_data:
-			return False
-
-		# Stop if this is an User Data Area file.
-		if header_data[112:126] == b'User Data Area':
-			return False
-
-		# Extract the Intel version from the flash header.
-		if header_data[90:95] == b'FLASH':
+		# Handle header on Intel AMI (and sometimes Phoenix) BIOSes that could not be decompressed.
+		ret = header_data and header_data[90:95] == b'FLASH' and header_data[112:126] != b'User Data Area'
+		if ret:
 			# Start by assuming this is an unknown BIOS.
 			if self.vendor_id == 'Intel':
 				self.vendor = 'Intel'
-			self.version = 'Unknown Intel'
+				self.version = '?'
 
-			# Extract AMI version from compressed data.
-			# (0632 fork which bios_extract can't handle)
+			# Apply the version string as a sign-on.
+			self.signon = util.read_string(header_data[112:])
+		else:
+			# No header found, attempt to manually extract version string from data.
+			for match in AMIIntelAnalyzer._version_pattern.finditer(file_data):
+				self.debug_print('Raw Intel version:', match.group(0))
+
+				# If this is Intel's second AMI run, check if this is not a generic
+				# (86x) version string overwriting an OEM-customized version string.
+				oem = util.read_string(match.group(3) or b'')
+				intel_version = util.read_string(match.group(1) or match.group(2))
+				if (not oem or oem[:2] != '86' or not AMIIntelAnalyzer._86_pattern.match(self.signon)) and intel_version not in self.signon:
+					# Extract the version string as a sign-on.
+					if self.vendor_id == 'Intel':
+						self.version = '?'
+					self.signon = intel_version
+					ret = True
+
+		if ret:
+			# Extract AMI version from compressed data. (0632 fork which bios_extract can't handle)
 			match = AMIIntelAnalyzer._ami_pattern.search(file_data)
 			if match:
 				match = AMIIntelAnalyzer._ami_version_pattern.search(file_data[match.start(0):])
 				if match:
 					if self.vendor_id == 'Intel':
 						self.vendor = 'AMI'
+					elif self.vendor != 'AMI':
+						return False
 					self.version = match.group(1).decode('cp437', 'ignore') + '00'
-			elif self.vendor_id == 'Intel' and AMIIntelAnalyzer._phoenix_pattern.search(file_data):
-				self.vendor = 'Phoenix'
+			elif AMIIntelAnalyzer._phoenix_pattern.search(file_data):
+				if self.vendor_id == 'Intel':
+					self.vendor = 'Phoenix'
+				elif self.vendor_id != 'Phoenix':
+					return False
 
-			# Apply the version as a sign-on.
-			self.signon = util.read_string(header_data[112:])
-
-			return True
-
-		return False
+		return ret
 
 
 class AMIUEFIAnalyzer(AMIAnalyzer):
@@ -1887,7 +1875,6 @@ class PhoenixAnalyzer(Analyzer):
 		self._rombios_signon_dec_pattern = re.compile(b'''Copyright \\(C\\) [0-9]{4} Digital Equipment Corporation''')
 		self._segment_pattern = re.compile('''segment_([0-9A-F]{4})\\.rom$''')
 		self._strings_pattern = re.compile('''strings_[0-9A-F_]+\\.rom$''')
-		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 		self._date_pattern = re.compile(b'''((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2}|(?:0{2}[1-9]{2}|1{2}[0-2]{2})/(?:0{2}[1-9]{2}|[12]{2}[0-9]{2}|3{2}[01]{2})/[0-9]{4})[^0-9]''')
 
 		# Reverse engineered from Phoenix BIOS Editor Pro.
@@ -2489,16 +2476,15 @@ class PhoenixAnalyzer(Analyzer):
 		self._regtable_entries[0] = self._regtable_entries[1]
 
 		self.register_check_list([
-			((self._signon_nec_precheck, self._signon_nec),			AlwaysRunChecker),
-			(self._version_sct,										RegexChecker),
-			(self._version_sct_preboot,								SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			(self._version_tandy,									SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			(self._signon_ast,										SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			(self._signon_commodore,								RegexChecker),
-			(self._signon_hp,										RegexChecker),
-			(self._signon_intel,									RegexChecker),
-			(self._signon_nec_trigger,								RegexChecker),
-			(self._signon_tandy,									RegexChecker),
+			((self._signon_nec_precheck, self._signon_nec),	AlwaysRunChecker),
+			(self._version_sct,								RegexChecker),
+			(self._version_sct_preboot,						SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
+			(self._version_tandy,							SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
+			(self._signon_ast,								SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
+			(self._signon_commodore,						RegexChecker),
+			(self._signon_hp,								RegexChecker),
+			(self._signon_nec_trigger,						RegexChecker),
+			(self._signon_tandy,							RegexChecker),
 		])
 
 	def reset(self):
@@ -2538,6 +2524,11 @@ class PhoenixAnalyzer(Analyzer):
 		# - Intel UEFI with PCI device list (UTF-8 encoded)
 		if self._ignore_pattern.search(file_data):
 			return False
+
+		# Extract Intel data in a preliminary manner in case extraction failed.
+		is_intel = AMIIntelAnalyzer.can_handle(self, file_path, file_data, header_data)
+		if is_intel:
+			self.debug_print('Intel data found')
 
 		# Skip BCP parsing if this is not 4.0x or newer.
 		raw_data = b''
@@ -2857,7 +2848,7 @@ class PhoenixAnalyzer(Analyzer):
 								self.metadata.append(('ID', version_string))
 								self.debug_print('Raw ROM BIOS version:', repr(version_string))
 							else:
-								self.debug_print('No version found!', file_path)
+								self.debug_print('No version found!')
 
 		# Save post-version sign-on to be restored later.
 		post_version = self.signon
@@ -3142,22 +3133,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Extract the version string as a sign-on.
 		self.signon = match.group(0)
-
-		return True
-
-	def _signon_intel(self, line, match):
-		'''^(?:\\$IBIOSI\\$)?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[0-9A-Z]{2,}|[0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.([0-9]{10}))'''
-
-		# This is an Intel BIOS.
-		if not self.version:
-			self.version = 'Intel'
-
-		# If this is Intel's second Phoenix run, check if this is not a generic
-		# (86x) version string overwriting an OEM version string.
-		oem = match.group(2)
-		if not oem or oem[:2] != '86' or not self._intel_86_pattern.match(self.signon):
-			# Extract the version string as a sign-on.
-			self.signon = match.group(1)
 
 		return True
 
