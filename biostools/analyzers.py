@@ -353,7 +353,9 @@ class AMIAnalyzer(Analyzer):
 		# "Ref. " (Everex EISA 386-BIOS) - let the code handle termination
 		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFD\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6}|\\x6D\\xD4\\xCC\\x8E\\xFE[\\x00-\\xFF]{1,64})''')
 		self._precolor_signon_pattern = re.compile(b'''BIOS \\(C\\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
-		self._precolor_type_pattern = re.compile(b'''([0-9]86|8(?:08)?8)-BIOS \\(C\\)''')
+		self._precolor_type_pattern = re.compile(b'''([0-9]86[a-z]*|8(?:08)?8)-BIOS \\(C\\)''')
+		self._precolor_setup_pattern = re.compile(b'''[A-Za-z][0-9/]+([^\\(]*(SETUP PROGRAM FOR | SETUP UTILITY)[^\\(]*)\\(C\\)19''')
+		self._precolor_pcchips_pattern = re.compile(b'''ADVANCED SYSTEM SETUP UTILITY VERSION[\\x20-\\x7E]+?PC CHIPS INC''')
 		# Decoded: "\(C\)AMI, \(([^\)]{11,64})\)" (the 64 is arbitrary)
 		self._8088_string_pattern = re.compile(b'''\\xEC\\x5F\\x6C\\x60\\x5A\\x5C\\xEA\\xF0\\xEC([\\x00-\\x6B\\x6D-\\xFF]{11,64})\\x6C''')
 
@@ -369,9 +371,7 @@ class AMIAnalyzer(Analyzer):
 		}
 
 		self.register_check_list([
-			(self._string_pcchips,			RegexChecker),
-			(self._string_setupheader,		RegexChecker),
-			(self._signon_intel,			RegexChecker),
+			(self._signon_intel,	RegexChecker),
 		])
 
 	def can_handle(self, file_path, file_data, header_data):
@@ -565,29 +565,18 @@ class AMIAnalyzer(Analyzer):
 				# Extract BIOS type as an add-on.
 				for match in self._precolor_type_pattern.finditer(file_data):
 					self.metadata.append(('ID', match.group(1).decode('cp437', 'ignore') + '-BIOS'))
+
+				# Add setup type as metadata.
+				match = self._precolor_setup_pattern.search(file_data)
+				if match:
+					self.metadata.append(('Setup', util.read_string(match.group(1).replace(match.group(2), b''))))
+				elif self._precolor_pcchips_pattern.search(file_data):
+					self.metadata.append(('Setup', 'PC Chips'))
 			else:
 				# Assume this is not an AMI BIOS, unless we found Intel data above.
 				if is_intel:
 					self.debug_print('No AMI data found but Intel data found')
 				return is_intel
-
-		return True
-
-	def _string_pcchips(self, line, match):
-		'''ADVANCED SYSTEM SETUP UTILITY VERSION.+PC CHIPS INC'''
-
-		# This is an early PC Chips BIOS.
-		if not self.string:
-			self.string = 'PC Chips'
-
-		return True
-
-	def _string_setupheader(self, line, match):
-		'''[a-z][0-9/]+([^\(]*(SETUP PROGRAM FOR | SETUP UTILITY)[^\(]*)\(C\)19'''
-
-		# Extract the setup header as a string if none was already found.
-		if not self.string:
-			self.string = match.group(1).replace(match.group(2), '')
 
 		return True
 
