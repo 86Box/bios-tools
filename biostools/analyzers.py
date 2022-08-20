@@ -2342,7 +2342,7 @@ class PhoenixAnalyzer(Analyzer):
 				73: 'ITE 8711F'
 			},
 			4: {
-				0: 'ACC 2051(?)', # was "ACC 2051" - bogus register tables often have this
+				0: 'ACC 2051',
 				1: 'ACC 2056',
 				2: 'ACC 2057',
 				3: 'ACC 2058',
@@ -2560,6 +2560,7 @@ class PhoenixAnalyzer(Analyzer):
 
 	def reset(self):
 		super().reset()
+		self._regtables = {}
 		self._trap_signon_nec = False
 		self._found_signon_tandy = ''
 
@@ -2573,6 +2574,17 @@ class PhoenixAnalyzer(Analyzer):
 
 		def __repr__(self):
 			return '<{0} version {1}.{2} datalen {3}>'.format(self.signature, self.version_maj, self.version_min, len(self.data))
+
+	def _add_regtable(self, category, model):
+		# Identify register table category and model names.
+		entry = self._regtable_entries.get(category, {}).get(model, None)
+		if entry:
+			# Add this category and model to the register table list.
+			category_name = self._regtable_categories.get(category, str(category))
+			if entry not in self._regtables:
+				self._regtables[entry] = [category_name]
+			elif category_name not in self._regtables[entry]:
+				self._regtables[entry].append(category_name)
 
 	def can_handle(self, file_path, file_data, header_data):
 		if not self._phoenix_pattern.search(file_data):
@@ -2695,9 +2707,8 @@ class PhoenixAnalyzer(Analyzer):
 				build_code = util.read_string(build_code.replace(b'\x00', b'\x20')).strip()
 				if build_code:
 					self.debug_print('BCPSYS build code:', build_code)
-					self.metadata.append(('BCP', build_code))
 
-				# Extract the build dates and times as metadata.
+				# Extract the build dates and times as further metadata.
 				dates_times = (b'', b'')
 				if data_size > 0x0f:
 					if bcpsys.version_maj == 0:
@@ -2712,9 +2723,15 @@ class PhoenixAnalyzer(Analyzer):
 						)
 				dates_times = tuple(util.read_string(date_time.replace(b'\x00', b'\x20')).strip() for date_time in dates_times)
 				self.debug_print('BCPSYS build dates/times:', dates_times)
-				dates_times = ' - '.join(date_time for date_time in dates_times if date_time[:8] != '00/00/00')
+				dates_times = '\n'.join(date_time for date_time in dates_times if date_time[:8] != '00/00/00')
 				if dates_times:
-					self.metadata.append(('BCP', dates_times))
+					if build_code:
+						build_code += '\n'
+					build_code += dates_times
+
+				# Add build code and dates/times as a single metadata entry.
+				if build_code:
+					self.metadata.append(('BCP', build_code))
 
 				# Extract register table pointer segment and offsets.
 				if bcpsys.version_maj >= 3 and data_size >= 0x6a:
@@ -2754,38 +2771,36 @@ class PhoenixAnalyzer(Analyzer):
 							# Read data from table header.
 							regtable_ptr += regtable_segment << 4
 							regtable_model, regtable_type = virtual_mem[regtable_ptr + 0x01:regtable_ptr + 0x03]
-							self.debug_print('Register table at', hex(regtable_ptr), 'identifying as', regtable_type, ':', regtable_model)
+							self.debug_print('Register table at', hex(regtable_ptr), 'identifying as', regtable_type >> 4, ':', regtable_model)
 
-							# Add identification to metadata.
-							regtable_id = self._regtable_entries.get(regtable_type >> 4, {}).get(regtable_model, None)
-							if regtable_id:
-								self.metadata.append(('Table', regtable_id))
+							# Add to register table list.
+							self._add_regtable(regtable_type >> 4, regtable_model)
 					else:
 						self.debug_print('Potentially bogus register table pointer array with', int((regtable_end - regtable_start) / 2), 'entries')
 
 			# Extract chipset information from BCPCHP.
 			for bcpchp in bcp.get('BCPCHP', []):
 				# BCPCHP versions observed:
-				# - 0.0 (4.01-4.03)
-				# - 0.2 (4.0R6) removed chipset ID
+				# - 0.0 (4.01-4.04)
+				# - 1.0 (4.04) removed chipset ID
+				# - 1.1 (4.04-4.05)
+				# - 2.0 (4.0R6-SecureCore)
 				self.debug_print('BCPCHP version:', bcpchp.version_maj, bcpchp.version_min)
 
 				# Extract model if possible.
-				if bcpchp.version_maj == 0 and bcpchp.version_min <= 1 and len(bcpchp.data) >= 0x0b:
+				if bcpchp.version_maj == 0 and len(bcpchp.data) >= 0x0b:
 					model = bcpchp.data[0x0a]
 					self.debug_print('BCPCHP chipset identifying as', model)
 
-					# Add identification to metadata.
-					regtable_id = self._regtable_entries[0].get(model, None)
-					if regtable_id:
-						self.metadata.append(('Table', regtable_id))
+					# Add to register table list.
+					self._add_regtable(0, model)
 
 			# Extract Super I/O information from BCPIO.
 			for bcpio in bcp.get('BCPIO ', []):
 				# BCPIO versions observed:
-				# - 0.1
-				# - 1.1
-				# - 2.1
+				# - 1.0 (4.01-4.04)
+				# - 1.1 (4.04-4.05)
+				# - 1.2 (4.05)
 				self.debug_print('BCPIO version:', bcpio.version_maj, bcpio.version_min)
 
 				# Extract model if possible.
@@ -2793,17 +2808,14 @@ class PhoenixAnalyzer(Analyzer):
 					model = bcpio.data[0x0a]
 					self.debug_print('BCPIO chip identifying as', model)
 
-					# Add identification to metadata.
-					regtable_id = self._regtable_entries[3].get(model, None)
-					if regtable_id:
-						self.metadata.append(('Table', regtable_id))
+					# Add to register table list.
+					self._add_regtable(3, model)
 
 			# Extract Super I/O (and rarely onboard device) information from BCPMCD.
 			for bcpmcd in bcp.get('BCPMCD', []):
 				# BCPMCD versions observed:
-				# - 0.0
-				# - 1.0
-				# - 1.1
+				# - 0.0 (4.0R6)
+				# - 0.1 (4.0R6-SecureCore)
 				self.debug_print('BCPMCD version:', bcpmcd.version_maj, bcpmcd.version_min)
 
 				# Extract model if possible.
@@ -2811,10 +2823,15 @@ class PhoenixAnalyzer(Analyzer):
 					model = bcpmcd.data[0x0a]
 					self.debug_print('BCPMCD chip identifying as', model)
 
-					# Add identification to metadata.
-					regtable_id = self._regtable_entries[6].get(model, None)
-					if regtable_id:
-						self.metadata.append(('Table', regtable_id))
+					# Add to register table list.
+					self._add_regtable(6, model)
+
+			# Add all found register table information as metadata.
+			regtable_metadata = ''
+			for table in sorted(self._regtables):
+				regtable_metadata += '\n{0} ({1})'.format(table, ', '.join(sorted(self._regtables[table])))
+			if regtable_metadata:
+				self.metadata.append(('Table', regtable_metadata[1:]))
 
 		# Locate main 4.0x version.
 		match = self._40x_version_pattern.search(file_data)
