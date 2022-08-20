@@ -1765,7 +1765,8 @@ class MRAnalyzer(Analyzer):
 		self._signon_pattern = re.compile(
 			b'''OEM SIGNON >>-->''' # start marker
 			b'''(?:[\\x20-\\x7E][\\x00-\\x1F\\x7F-\\xFF][\\x00-\\xFF]{14})?''' # code inbetween (on older BIOSes)
-			b'''([\\x20-\\x7E]*?)''' # actual sign-on (null terminated)
+			b'''([\\x20-\\x7E]*?)''' # actual sign-on
+			b'''\\x00?''' # null terminator (not always present)
 			b'''<--<< OEM SIGNON''' # end marker
 		)
 
