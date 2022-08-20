@@ -1286,7 +1286,7 @@ class BonusAnalyzer(Analyzer):
 			if vga_marker:
 				# Strip lines that are too short or have a single repeated character.
 				stripped = (x.strip() for x in vga_marker.replace('\r', '').split('\n'))
-				vga_marker = '\n'.join(x for x in stripped if len(x) > 3 and x != (x[0] * len(x))).strip('\n')
+				vga_marker = '\n'.join(x for x in stripped if len(x) > 3 and x[:10] != (x[0] * min(len(x), 10))).strip('\n')
 				self.oroms.append(('VGA', vga_marker))
 
 		# This analyzer should never return True.
@@ -1947,6 +1947,604 @@ class PhoenixAnalyzer(Analyzer):
 		self._intel_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 		self._date_pattern = re.compile(b'''((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2}|(?:0{2}[1-9]{2}|1{2}[0-2]{2})/(?:0{2}[1-9]{2}|[12]{2}[0-9]{2}|3{2}[01]{2})/[0-9]{4})[^0-9]''')
 
+		# Reverse engineered from Phoenix BIOS Editor Pro.
+		self._regtable_categories = {
+			0: 'System',
+			1: 'Cache',
+			2: 'CPU',
+			3: 'I/O',
+			4: 'PM',
+			5: 'Bridge',
+			6: 'MCD',
+			7: 'Other'
+		}
+		self._regtable_entries = {
+			1: {
+				1: 'OPTI 82C391',
+				2: 'OPTI 82C493',
+				3: 'OPTI 82C495',
+				4: 'OPTI 82C596',
+				5: 'SIS 85C460',
+				6: 'SIS 85C401',
+				7: 'ALD 93C305A',
+				8: 'SIS 85C461',
+				9: 'SYMPHONY 82C461',
+				10: 'OPTI 82C801',
+				11: 'OPTI 82C496',
+				12: 'WD 8110LV',
+				13: 'VLSI 82C481',
+				14: 'SIS 85C411',
+				15: 'OPTI 82C682',
+				16: 'INTEL 82C420',
+				17: 'HT HTK340',
+				18: 'CT CS4031',
+				19: 'ETEQ ET9000',
+				20: 'VLSI 82C483',
+				21: 'SIS 85C471',
+				22: 'SYMPHONY 82C491',
+				23: 'OPTI 82C802',
+				24: 'SAND 93101',
+				25: 'ACC 2168GT',
+				26: 'OPTI 82C499',
+				27: 'VLSI 82C486',
+				28: 'CYRIX PAM',
+				29: 'INTEL 82C430LX', # was "INTEL 82C430"
+				30: 'FOREX 58C602',
+				31: 'INTEL 82C425',
+				32: 'INTEL 82C430NX',
+				33: 'PICO 86C268',
+				34: 'PICO 86C368',
+				35: 'VLSI 82C590',
+				36: 'CONTAQ 82C596',
+				37: 'OPTI 82C546',
+				38: 'EFAR EC802G',
+				39: 'CT CS4041',
+				40: 'ACC 2278',
+				41: 'SAM 388',
+				42: 'INTEL 82C430FX',
+				43: 'PICO 86C668',
+				44: 'OPTI 82C557',
+				45: 'OPTI 82C558',
+				46: 'HYDRA HT35X',
+				47: 'OPTI 82C465',
+				48: 'GRNLOGIC GL488',
+				49: 'STD TTL',
+				50: 'CI CBUS2 CBC2',
+				51: 'OPTI 82C558N',
+				52: 'ETEQ ET5001',
+				53: 'UNI U5800',
+				54: 'INTEL EX',
+				55: 'INTEL ORION',
+				56: 'INTEL P60',
+				57: 'VIA 82C425',
+				58: 'INTEL 82C430MX',
+				59: 'ACC 2178A',
+				60: 'SIS 5501',
+				61: 'STDNOTEB',
+				62: 'TI MERC3',
+				63: 'MEC 5520',
+				64: 'VLSI 82C594',
+				65: 'ACC 2178',
+				66: 'VLSI 82C535',
+				67: 'ALI M1609',
+				68: 'PICO 86C378',
+				69: 'FTD 82C4591',
+				70: 'INTEL 82C440FX',
+				71: 'PICO 86C521',
+				72: 'INTEL 82C430HX',
+				73: 'OPTI 82C895',
+				74: 'INTEL 82C430VX',
+				75: 'VLSI 82C540',
+				76: 'CYPRESS 82C691',
+				77: 'OPTI 82C567',
+				78: 'OPTI 82C568',
+
+				80: 'ALI M1601',
+				81: 'ACC 2058',
+				82: 'SEC F4S',
+				83: 'ACC 2051',
+				84: 'AMD ELAN',
+				85: 'ACC 2057',
+				86: 'RADISYS R380',
+				87: 'INTEL 82C430TX',
+				88: 'INTEL 82C440LX',
+				89: 'OKI PM1',
+				90: 'EFAR EC92X',
+				91: 'SMC 90E32',
+				92: 'OPTI 82C650',
+				93: 'RADISYS R400',
+				94: 'RCC CHAMPION',
+				95: 'S3 PLATO 86551',
+				96: 'NEC uPD72170',
+				97: 'AMD H2',
+				98: 'INTEL E3G',
+				99: 'INTEL 440BX',
+				100: 'UMC 82C480',
+				101: 'UMC 82C491',
+				102: 'ACER M1219',
+				103: 'ACER M1419',
+				104: 'ACER M1429',
+				105: 'VCTRONIX 92C5806',
+				106: 'EFAR EC798',
+				107: 'WINBOND 82C410',
+				108: 'VIA 82C495',
+				109: 'UMC 82C880',
+				110: 'UMC 82C498',
+				111: 'SIS 85C4967',
+				112: 'SIS 85C50X',
+				113: 'ALI 1445',
+				114: 'ALI 1451',
+				115: 'ALI 1461',
+				116: 'UMC 82C890',
+				117: 'VIA 82C486F',
+				118: 'VIA 82C486',
+				119: 'VIA 82C496',
+				120: 'VIA 82C570',
+				121: 'ALI 1489',
+				122: 'SIS 5571',
+				123: 'VIA 82C590VP',
+				124: 'SIS 5597',
+
+
+
+				128: 'SIS 551X',
+				129: 'VTECH GW',
+				130: 'ALI 1511',
+				131: 'ACC 2056',
+				132: 'ALI 1521',
+				133: 'VIA 82C580VP',
+				134: 'SIS 5596',
+				135: 'SIS 510X',
+				136: 'VIA 82C680',
+				137: 'CYRIX GX',
+				138: 'ITE 8330GN',
+				139: 'ALI 1531',
+				140: 'WEITEK 564ST',
+				141: 'INTEL 82C450NX',
+				142: 'VIA 82C597',
+				143: 'ALI 1541',
+				144: 'ALI 1621',
+				145: 'VIA 82C598',
+				146: 'INTEL 82C440EX',
+				147: 'INTEL CAMINO',
+				148: 'SIS 530',
+				149: 'INTEL 82C460GX',
+				150: 'WHITNEY GMCH',
+				151: 'VIA 82C691',
+				152: 'SIS 620',
+				153: 'VIA VT8501',
+				154: 'AMD IRONGATE',
+				155: 'CYRIX MXI',
+				156: 'INTEL CARMEL',
+				157: 'VIA 82C694',
+				158: 'TMETA TM100VNB',
+				159: 'VIA VT8601',
+				160: 'VIA 82C694X',
+				161: 'SIS 540',
+				162: 'SIS 630',
+				163: 'INTEL GREENDALE',
+				164: 'VIA VT8371',
+				165: 'ALI 1631',
+				166: 'VIA 82C8605',
+				167: 'INTEL TIMNA',
+				168: 'VIA 82C694Z',
+				169: 'SOLANO GMCH',
+				170: 'ALI 1632',
+				171: 'ALI 1641',
+				172: 'ALI 1561',
+				173: 'VIA VT8363',
+				174: 'AMD ELANSC520',
+				175: 'VIA SAMUEL',
+				176: 'INTEL ALMADOR',
+				177: 'RCC GRAND CHAMP',
+				178: 'ZFLINUX MACHZ',
+				179: 'ALI 1647',
+				180: 'VIA VT8603',
+				181: 'VIA VT8365',
+				182: 'SIS 730',
+				183: 'RADISYS 82600',
+				184: 'VIA VT8633',
+				185: 'SIS 635',
+				186: 'SIS 735',
+				187: 'ALI 1651',
+				188: 'ALI 1644',
+				189: 'ALI 1646',
+				190: 'VIA VT8366',
+				191: 'INTEL BROOKDALE',
+				192: 'ATI_CABO',
+				193: 'VIA_P4X266',
+				194: 'SIS_645',
+				195: 'NVIDIA CRUSH11 NB',
+				196: 'AMD 761',
+				197: 'AMD 762',
+				198: 'ALI 1671',
+				199: 'ST ATLAS',
+				200: 'AMD HAMMER',
+				201: 'SIS 648',
+				202: 'SIS 740',
+				203: 'INTEL PLUMAS',
+				204: 'VIA VT8372',
+				205: 'VIA VT8367',
+				206: 'VIA P4X333',
+				207: 'INTEL ODEM',
+				208: 'ATI RS200',
+				209: 'SIS 746',
+				210: 'INTEL MONTARA',
+				211: 'VIA VT8377',
+				212: 'ALI 1681',
+				213: 'SIS 655',
+				214: 'INTEL PLUMAS533',
+				215: 'VIA VT8383',
+				216: 'SIS 755'
+			},
+			2: {
+				0|0: '386 Class - 386DX',
+				0|1: '386 Class - 386SX',
+				0|2: '386 Class - 386SL',
+				0|3: '386 Class - 386CX',
+				64|0: '486 Class - 486DX',
+				64|1: '486 Class - 486SX',
+				64|2: '486 Class - 486DX2',
+				64|3: '486 Class - P24C',
+				64|4: '486 Class - 487SX',
+				64|5: '486 Class - 386486',
+				64|6: '486 Class - CX486SLC',
+				64|7: '486 Class - CX486DLC',
+				64|8: '486 Class - IBM386SLC',
+				64|9: '486 Class - IBM486SLC2',
+				64|10: '486 Class - IBM486SLBL',
+				64|11: '486 Class - CX486S',
+				64|12: '486 Class - CX486S2',
+				64|13: '486 Class - CX486M7',
+				64|14: '486 Class - CX486M72',
+				64|15: '486 Class - TI486SXL',
+				64|16: '486 Class - 486SX2',
+				64|17: '486 Class - AM486PLDX2',
+				64|18: '486 Class - AM486PLDX2WB',
+				64|19: '486 Class - AM486PLDX4',
+				64|20: '486 Class - AM486PLDX4WB',
+				64|21: '486 Class - TI486DX2',
+				64|22: '486 Class - 486DX2WB',
+				64|23: '486 Class - 486DXL',
+				64|24: '486 Class - CX486DX4',
+				64|25: '486 Class - P24CWB',
+				64|32: '486 Class - TI486DX4',
+				64|33: '486 Class - AMDX5',
+				64|34: '486 Class - AMDX5WB',
+				64|35: '486 Class - AM486SLE',
+				64|36: '486 Class - STPCCLIENT',
+				64|37: '486 Class - STPCCONSUMER',
+				64|38: '486 Class - STPCINDUSTRIAL',
+				64|63: '486 Class - 486 OD',
+				128|0: '586 Class - P24T',
+				128|1: '586 Class - PENTIUM',
+				128|2: '586 Class - P54C',
+				128|3: '586 Class - CYRIX M1',
+				128|4: '586 Class - CYRIX M1sc',
+				128|5: '586 Class - AMD K5',
+				128|6: '586 Class - P55C',
+				128|7: '586 Class - AMD K6',
+				128|8: '586 Class - P55C OVER DRIVE',
+				128|9: '586 Class - CYRIX M2',
+				128|10: '586 Class - CYRIX CX/GX',
+				128|11: '586 Class - TILLAMOOK',
+				128|12: '586 Class - IDT C6',
+				128|13: '586 Class - IDT C6 No MMX',
+				128|14: '586 Class - IDT',
+				128|(15+0): '586 Class - CYRIX GXM',
+				128|(15+1): '586 Class - AMDK6-2',
+				128|(15+2): '586 Class - AMDK6-3',
+				128|(15+3): '586 Class - RISE MP6',
+				128|(15+4): '586 Class - RISE MP6II',
+				128|(15+5): '586 Class - CXMXI',
+				128|(15+6): '586 Class - TMETA TM100',
+				128|(15+7): '586 Class - TMETA TM120',
+				128|(15+8): '586 Class - TMETA TM160',
+				128|(15+9): '586 Class - CXJOSHUA',
+				128|(15+10): '586 Class - AMDK6-2E Plus',
+				128|(15+11): '586 Class - AMDK6-3E Plus',
+				128|63: '586 Class - PENTIUM OVER DRIVE',
+				192|(1+0): '686 Class - 686',
+				192|(1+1): '686 Class - KLAMATH',
+				192|(1+2): '686 Class - DESCHUTES',
+				192|(1+3): '686 Class - PENTIUM II',
+				192|(1+4): '686 Class - CELERON',
+				192|(1+5): '686 Class - XEON',
+				192|(1+6): '686 Class - COPPERMINE',
+				192|(1+7): '686 Class - TANNER',
+				192|(1+8): '686 Class - CASCADE',
+				192|(1+9): '686 Class - KATMAI',
+				192|(1+10): '686 Class - AMD K7',
+				192|(1+11): '686 Class - TIMNA',
+				192|(1+12): '686 Class - AMD DURON',
+				192|(1+13): '686 Class - SAMUEL',
+				192|(1+14): '686 Class - P8',
+				192|(1+15): '686 Class - TUALATIN',
+				192|(1+16): '686 Class - AMDK7 ATHLON',
+				192|(1+17): '686 Class - AMDK7 DURON',
+				192|(1+18): '686 Class - AMDK7 PALOMINO',
+				192|63: '686 Class - 686 OVER DRIVE'
+			},
+			3: {
+				0: 'STANDARD IO',
+				1: 'NS 311',
+				2: 'SMC 661',
+				3: 'NS 310',
+				4: 'CHIPS 711',
+				5: 'SMC 665',
+				6: 'NS 332',
+				7: 'NS 322',
+				8: 'NS 323',
+				9: 'ACC 3221SP',
+				10: 'SMC 653',
+				11: 'INTEL 091AA',
+				12: 'CHIPS 735',
+				13: 'UMC 863',
+				14: 'ACC 3223',
+				15: 'NS 303',
+				16: 'NS 334',
+				17: 'NS 306',
+				18: 'SMC 93X',
+				19: 'SMC 922',
+				20: 'VLSI VL82C532',
+				21: 'WINBOND 787',
+				22: 'NS 307',
+				23: 'NS 308',
+				24: 'SMC 669',
+				25: 'UMC 8669',
+				26: 'NS 336',
+				27: 'NS 338',
+				28: 'ALI 5113',
+				29: 'UMC ITE 8680F',
+				30: 'ALI 512X',
+				31: 'SMC 957',
+				32: 'SMC 669FR',
+				33: 'NS PC87420',
+				34: 'NC PC87317',
+				35: 'SMC FDC37C67X',
+				36: 'SMC FDC37C68X',
+				37: 'SMC 77X',
+				38: 'SMC FDC37B78X',
+				39: 'SMC FDC37C60X',
+				40: 'SMC FDC37M70X',
+				41: 'SMC LPC47B17X',
+				42: 'SMC LPC47B27X',
+				43: 'NS PC87360',
+				44: 'NS PC87364',
+				45: 'SMC FDC 37B72X',
+				46: 'ITE (UMC) 8693F',
+				47: 'ITE (UMC) 8712F',
+				48: 'SMC FDC 37N97X',
+				49: 'SMC FDC 86X',
+				50: 'SMC FDC 33X',
+				51: 'NS PC87363',
+				52: 'NS PC87366',
+				53: 'SMSC LPC 47S42x',
+				54: 'NS PC87560',
+				55: 'ITE8761E',
+				56: 'ALI M513X',
+				57: 'SMSC 81X',
+				58: 'SMC LPC47B227',
+				59: 'ITE (UMC) 8702F',
+				60: 'SMC FDC 10X',
+				61: 'SMC FDC 37X',
+				62: 'SMC FDC 14X',
+				63: 'NS PC87391',
+				64: 'SMC LPC 267',
+				65: 'SMC LPC 45X',
+				66: 'SMSC 254 Chivas',
+				67: 'STM ATLAS',
+				68: 'SMSC 192',
+				69: 'ITE 8711F',
+				70: 'SMSC 172',
+				71: 'NS PC87372',
+				72: 'SMSC 350',
+				73: 'ITE 8711F'
+			},
+			4: {
+				0: 'ACC 2051(?)', # was "ACC 2051" - bogus register tables often have this
+				1: 'ACC 2056',
+				2: 'ACC 2057',
+				3: 'ACC 2058',
+				4: 'ACC 2066NT',
+				5: 'ACC 2178A',
+				6: 'ALI 1429',
+				7: 'ALI 1513',
+				8: 'ALI M1489',
+				9: 'ALI M1523',
+				10: 'ALI M6377',
+				11: 'AMD ELAN',
+				12: 'AMD H2',
+				13: 'AMD SC400',
+				14: 'CHIPS 4041',
+				15: 'CYPRESS 693',
+				16: 'CT CS4041',
+				17: 'FUJITSU AQUARIUS',
+				18: 'GRNLOGIC 488',
+				19: 'INTEL GENERIC',
+				20: 'INTEL 82371AB',
+				21: 'INTEL 82371FB',
+				22: 'INTEL 82371MX',
+				23: 'INTEL 82374COM',
+				24: 'INTEL 82374EB',
+				25: 'INTEL 82375EB',
+				26: 'INTEL 82378IBG',
+				27: 'INTEL 82426EX',
+				28: 'INTEL 82430MX',
+				29: 'INTEL 82437MX',
+				30: 'ITE PLATINUM',
+				31: 'MEC MN5520',
+				32: 'MEC MN5523',
+				33: 'NEC PHX',
+				34: 'OPTI GENERIC',
+				35: 'OPTI 465MVB',
+				36: 'OPTI 802G',
+				37: 'OPTI 82C558',
+				38: 'OPTI 82C558N',
+				39: 'OPTI 82C568',
+				40: 'OPTI 82C700',
+				41: 'PICO 368',
+				42: 'PICO 378',
+				43: 'PICO 521',
+				44: 'PICO 521NS420',
+				45: 'PICO 668',
+				46: 'PICO SEQUOIA',
+				47: 'PICO VESUVIUS',
+				48: 'SEC FALCONER',
+				49: 'SIS 471',
+				50: 'SIS 510X',
+				51: 'SIS 551X',
+				52: 'SIS 5571',
+				53: 'SIS 5596',
+				54: 'SMC 90E32',
+				55: 'STDNOTEB',
+				56: 'TI MERC3',
+				57: 'UMC 82C498',
+				58: 'UMC 890BN',
+				59: 'UMC 890N',
+				60: 'UNICHIP U5800',
+				61: 'VIA 82C425MV',
+				62: 'VIA 570M',
+				63: 'VIA 570MV',
+				64: 'VIA 580VP',
+				65: 'VIA 82C586',
+				66: 'VLSI 483',
+				67: 'VLSI 541',
+				68: 'VLSI 590',
+				69: 'VLSI EAGLE',
+				70: 'INTEL 82371AB IO',
+				71: 'INTEL 82372FB IO',
+				72: 'INTEL 82372FB',
+				73: 'INTEL ICH',
+				74: 'SIS 5595',
+				75: 'AMD COBRA',
+				76: 'ST STPC',
+				77: 'VIA 8231',
+				78: 'ZF MACHZ',
+				79: 'VIA 8233',
+				80: 'SMC 90E66 IO',
+				81: 'SMC 90E66',
+				82: 'NV MCP1',
+				83: 'AMD 8111',
+				84: 'VIA 8235',
+				85: 'ATI SB200'
+			},
+			5: {
+				1: 'INTEL 82378IB',
+				2: 'INTEL 82374EB',
+				3: 'INTEL 82375EB',
+				4: 'INTEL 82426EX',
+				5: 'INTEL 82371FB',
+				6: 'OPTI 822',
+				7: 'VLSI 590',
+				8: 'ACC 2188',
+				9: 'ALI M1435',
+				10: 'UMC 82C8880',
+				11: 'UMC 82C8890',
+				12: 'OPTI 82C557',
+				13: 'OPTI 82C558',
+				14: 'OPTI 832',
+				15: 'CHIPS 4049',
+				16: 'INTEL 82371MX',
+				17: 'SIS 5503',
+				18: 'UMC 8890N',
+				19: 'ALI M1513',
+				20: 'ALI 1451',
+				21: 'INTEL 82372SB',
+				22: 'ALI M1523',
+				23: 'CYPRESS 82C693',
+				24: 'OPTI 82C567',
+				25: 'OPTI 82C568',
+				26: 'VLSI 543',
+				27: 'OPTI 82C700',
+				28: 'INTEL 82371AB',
+				29: 'SMC E36',
+				30: 'RCC OSB2',
+				31: 'CYRIX 5500',
+				32: 'INTEL 82372FB',
+				33: 'INTEL ICH LPC',
+				34: 'SIS 5595',
+				35: 'VIA 82C686A',
+				36: 'AMD COBRA',
+				37: 'SIS 960',
+				38: 'VIA VT8231',
+				39: 'VIA VT8233',
+				40: 'SIS 961',
+				41: 'SMC 90E66',
+				42: 'NVIDIA MCP1',
+				43: 'AMD 766',
+				44: 'AMD 768',
+				45: 'AMD 8111',
+				46: 'SIS 962',
+				47: 'VIA VT8235',
+				48: 'ATI SB200'
+			},
+			6: {
+				0: 'Winbond 877F Super IO',
+				1: 'Intel 091AA Super I/O',
+				2: 'NS 306 Super I/O',
+				3: 'NS 307 Super I/O',
+				4: 'NS 308 Super I/O',
+				5: 'NS 317 Super I/O',
+				6: 'NS 334 Super I/O',
+				7: 'NS 338 Super I/O',
+				8: 'SMC 665 Super I/O',
+				9: 'SMC 669 Super I/O',
+				10: 'SMC 669FR Super I/O',
+				11: 'SMC 93X Super I/O',
+				12: 'SMC 957 Super I/O',
+				13: 'Winbond 787 Super I/O',
+				14: 'CT 2504 Audio',
+				15: 'YAMAHA YMF715 Audio',
+				16: 'TI 1131 Cardbus',
+				17: 'NS 336 Super I/O',
+				18: 'Crystal 423X Audio Chip',
+				19: 'ITE 8669 Super I/O',
+				20: 'Motorola 1673 Modem',
+				21: 'Winbond 967 Super I/O',
+				22: 'ITE 8680RF Super I/O',
+				23: 'CL-PD6832 Cardbus',
+				24: 'SMC 93XFR Super I/O',
+				25: 'NS 309 Super I/O',
+				26: 'ALI 512X Super I/O',
+				27: 'NS LM78 Hardware Monitor',
+				28: 'O2Micro Cardbus -OZ6832-',
+				29: 'Winbond 977 Super I/O',
+				30: 'VIA VT83C669 Super I/O',
+				31: 'SMC FDC37N69 Super I/O',
+				32: 'SMC 958 Super I/O',
+				33: 'SMC 77X Super I/O',
+				34: 'ITE 8671F Super I/O',
+				35: 'ITE 8661F Super I/O',
+				36: 'NS PC87360 Super I/O',
+				37: 'NS PC87364 Super I/O',
+				38: 'ITE 8693F Super I/O',
+				39: 'VIA VT82C686A Super I/O',
+				40: 'NS PC87363 Super I/O',
+				41: 'Winbond 627 Super I/O',
+				42: 'NS PC87366 Super I/O',
+				43: 'NS PC87560 Super I/O',
+				44: 'SIS 950 Super I/O',
+				45: 'NSPC87365 Super I/O',
+				46: 'Yamaha YMF744 Audio Chip',
+				47: 'ALI M513X Super IO',
+				48: 'NS PC87393 Super I/O',
+				49: 'VIA VT8231 Super I/O',
+				50: 'NS PC87364 Super I/O',
+				51: 'AMD SC520 Super I/O',
+				52: 'Winbond 697HF Super I/O',
+				53: 'NS PC87351 Super I/O',
+				54: 'AMD SC520 FDISK',
+				55: 'SMC 14X Super I/O',
+				56: 'NSPC87391 Super I/O',
+				57: 'NSPC87414 Super I/O',
+				58: 'VIA VT1211 LPC Super I/O',
+				59: 'Winbond 517D Super I/O',
+				60: 'SMC 172 Super I/O'
+			}
+		}
+		self._regtable_entries[0] = self._regtable_entries[1]
+
 		self.register_check_list([
 			((self._signon_nec_precheck, self._signon_nec),			AlwaysRunChecker),
 			(self._version_sct,										RegexChecker),
@@ -1966,10 +2564,11 @@ class PhoenixAnalyzer(Analyzer):
 		self._found_signon_tandy = ''
 
 	class BCP:
-		def __init__(self, signature, version_maj, version_min, data):
+		def __init__(self, signature, version_maj, version_min, offset, data):
 			self.signature = signature
 			self.version_maj = version_maj
 			self.version_min = version_min
+			self.offset = offset
 			self.data = data
 
 		def __repr__(self):
@@ -2016,6 +2615,13 @@ class PhoenixAnalyzer(Analyzer):
 				bcpsegment_offset = match.start(0)
 				self.debug_print('Probing BCPSEGMENT at', hex(bcpsegment_offset))
 				offset = bcpsegment_offset + 0x0a
+				# Sometimes there's no BCP immediately after BCPSEGMENT (Micronics M54LI)
+				if virtual_mem[offset:offset + 3] != b'BCP':
+					next_bcp_offset = virtual_mem[offset:offset + 256].find(b'BCP')
+					if next_bcp_offset > -1:
+						offset += next_bcp_offset
+					else:
+						break
 				while virtual_mem[offset:offset + 3] == b'BCP':
 					# Parse header while skipping bogus ones.
 					header = virtual_mem[offset:offset + 0x0a]
@@ -2031,7 +2637,7 @@ class PhoenixAnalyzer(Analyzer):
 					signature = signature.decode('cp437', 'ignore')
 					if signature not in bcp:
 						bcp[signature] = []
-					bcp[signature].append(PhoenixAnalyzer.BCP(signature, version_maj, version_min, virtual_mem[offset:offset + size]))
+					bcp[signature].append(PhoenixAnalyzer.BCP(signature, version_maj, version_min, offset, virtual_mem[offset:offset + size]))
 
 					# Move on to the next BCP entry.
 					offset += size
@@ -2118,19 +2724,97 @@ class PhoenixAnalyzer(Analyzer):
 					elif regtable_segment == 0x7000: # (Intel)
 						self.debug_print('Remapping Intel register table segment', hex(regtable_segment))
 						regtable_segment = code_segment = 0xe000
-					elif regtable_segment <= 0xe31f: # (DE35 on HP Pavilion 2200, E31F on HP Brio 80xx)
+					elif regtable_segment <= 0xe31f: # invalid segments: DE35 (HP Pavilion 2200), E31F (HP Brio 80xx)
 						self.debug_print('Register table segment', hex(regtable_segment), 'too low, resetting to', hex(code_segment))
 						regtable_segment = code_segment
 					else:
 						code_segment = regtable_segment
 				elif bcpsys.version_maj == 1 and bcpsys.version_min >= 5 and data_size >= 0x6d:
-					regtable_start, regtable_end, regtable_segment = struct.unpack('<HHH', bcpsys.data[0x67:0x6d])
-					code_segment = regtable_segment
+					regtable_start, regtable_end, code_segment = struct.unpack('<HHH', bcpsys.data[0x67:0x6d])
+					regtable_segment = (bcpsys.offset >> 4) & 0xf000 # not always F000 due to inverted BIOSes
 				else:
 					regtable_segment = None
 
 				if regtable_segment:
-					self.debug_print('Register table at', hex(regtable_segment), ':', hex(regtable_start), 'to', hex(regtable_end))
+					self.debug_print('Register table pointer array at', hex(regtable_segment), ':', hex(regtable_start), 'to', hex(regtable_end))
+
+					# Do some sanity checking on the values.
+					if regtable_start >= 0 and (regtable_end - regtable_start) <= 128:
+						# Add segment to offsets.
+						regtable_start += regtable_segment << 4
+						regtable_end += regtable_segment << 4
+
+						# Go through table pointers.
+						regtable_entry = regtable_start
+						while regtable_entry < regtable_end:
+							# Read pointer.
+							regtable_ptr, = struct.unpack('<H', virtual_mem[regtable_entry:regtable_entry + 2])
+							regtable_entry += 2
+
+							# Read data from table header.
+							regtable_ptr += regtable_segment << 4
+							regtable_model, regtable_type = virtual_mem[regtable_ptr + 0x01:regtable_ptr + 0x03]
+							self.debug_print('Register table at', hex(regtable_ptr), 'identifying as', regtable_type, ':', regtable_model)
+
+							# Add identification to metadata.
+							regtable_id = self._regtable_entries.get(regtable_type >> 4, {}).get(regtable_model, None)
+							if regtable_id:
+								self.metadata.append(('Table', regtable_id))
+					else:
+						self.debug_print('Potentially bogus register table pointer array with', int((regtable_end - regtable_start) / 2), 'entries')
+
+			# Extract chipset information from BCPCHP.
+			for bcpchp in bcp.get('BCPCHP', []):
+				# BCPCHP versions observed:
+				# - 0.0 (4.01-4.03)
+				# - 0.2 (4.0R6) removed chipset ID
+				self.debug_print('BCPCHP version:', bcpchp.version_maj, bcpchp.version_min)
+
+				# Extract model if possible.
+				if bcpchp.version_maj == 0 and bcpchp.version_min <= 1 and len(bcpchp.data) >= 0x0b:
+					model = bcpchp.data[0x0a]
+					self.debug_print('BCPCHP chipset identifying as', model)
+
+					# Add identification to metadata.
+					regtable_id = self._regtable_entries[0].get(model, None)
+					if regtable_id:
+						self.metadata.append(('Table', regtable_id))
+
+			# Extract Super I/O information from BCPIO.
+			for bcpio in bcp.get('BCPIO ', []):
+				# BCPIO versions observed:
+				# - 0.1
+				# - 1.1
+				# - 2.1
+				self.debug_print('BCPIO version:', bcpio.version_maj, bcpio.version_min)
+
+				# Extract model if possible.
+				if len(bcpio.data) >= 0x0b:
+					model = bcpio.data[0x0a]
+					self.debug_print('BCPIO chip identifying as', model)
+
+					# Add identification to metadata.
+					regtable_id = self._regtable_entries[3].get(model, None)
+					if regtable_id:
+						self.metadata.append(('Table', regtable_id))
+
+			# Extract Super I/O (and rarely onboard device) information from BCPMCD.
+			for bcpmcd in bcp.get('BCPMCD', []):
+				# BCPMCD versions observed:
+				# - 0.0
+				# - 1.0
+				# - 1.1
+				self.debug_print('BCPMCD version:', bcpmcd.version_maj, bcpmcd.version_min)
+
+				# Extract model if possible.
+				if len(bcpmcd.data) >= 0x0b:
+					model = bcpmcd.data[0x0a]
+					self.debug_print('BCPMCD chip identifying as', model)
+
+					# Add identification to metadata.
+					regtable_id = self._regtable_entries[6].get(model, None)
+					if regtable_id:
+						self.metadata.append(('Table', regtable_id))
 
 		# Locate main 4.0x version.
 		match = self._40x_version_pattern.search(file_data)
