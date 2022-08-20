@@ -1760,50 +1760,51 @@ class MRAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('MR', *args, **kwargs)
 
-		self._check_pattern = re.compile(b'''[A-Z ]{7} \\((?:r|tm)\\)  V''')
-		self._signon_pattern = re.compile(b'''OEM SIGNON >>-->([\\x20-\\x7E]+)''')
-
-		self.register_check_list([
-			(self._version_newer,	RegexChecker),
-			(self._version_older,	RegexChecker),
-		])
+		self._version_older_pattern = re.compile(b'''Ver:? (V[^-]+)(?:-| +Port )([\\x21-\\x7E]+)''')
+		self._version_newer_pattern = re.compile(b'''[A-Z ]{7} \\((?:r|tm)\\)  (V[^ ']+)(?: ([\\x21-\\x7E]+))?''')
+		self._signon_pattern = re.compile(
+			b'''OEM SIGNON >>-->''' # start marker
+			b'''(?:[\\x20-\\x7E][\\x00-\\x1F\\x7F-\\xFF][\\x00-\\xFF]{14})?''' # code inbetween (on older BIOSes)
+			b'''([\\x20-\\x7E]*?)''' # actual sign-on (null terminated)
+			b'''<--<< OEM SIGNON''' # end marker
+		)
 
 	def can_handle(self, file_path, file_data, header_data):
 		# Skip readme false positives.
-		if len(file_data) < 2048 or not self._check_pattern.search(file_data):
+		if len(file_data) < 2048:
 			return False
+
+		# Extract older format version.
+		match = self._version_older_pattern.search(file_data)
+		if match:
+			self.debug_print('Raw older version:', match.group(0))
+
+			# Extract version.
+			self.version = util.read_string(match.group(1))
+
+			# Extract part number as a string.
+			self.string = util.read_string(match.group(2))
+		else:
+			# Extract newer format version.
+			match = self._version_newer_pattern.search(file_data)
+			if match:
+				self.debug_print('Raw older version:', match.group(0))
+
+				# Extract version.
+				self.version = util.read_string(match.group(1))
+
+				# Extract part number as a string if one was found.
+				self.string = util.read_string(match.group(2) or b'')
+			else:
+				# No version information found.
+				return False
 
 		# Extract custom OEM sign-on.
 		match = self._signon_pattern.search(file_data)
 		if match:
-			self.signon = match.group(1).decode('cp437', 'ignore')
-			if len(self.signon) == 1: # single character when not set
-				self.signon = ''
-			self.signon = self.signon.strip()
-
-		return True
-
-	def _version_newer(self, line, match):
-		'''[A-Z ]{7} \\((?:r|tm)\\)  (V[^ ']+)(?: (.+))?$'''
-
-		# Extract version.
-		self.version = match.group(1)
-
-		# Extract part number as a string if one was found.
-		part_number = match.group(2)
-		if part_number:
-			self.string = part_number.strip()
-
-		return True
-
-	def _version_older(self, line, match):
-		'''Ver:? (V[^-]+)(?:-| +Port )(.+)'''
-
-		# Extract version.
-		self.version = match.group(1)
-
-		# Extract part number(?)
-		self.string = match.group(2)
+			signon = util.read_string(match.group(1))
+			if len(signon) > 1: # sign-on contains a single ASCII character when not set
+				self.signon = signon.strip()
 
 		return True
 
