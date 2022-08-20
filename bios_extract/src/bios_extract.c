@@ -190,6 +190,7 @@ static struct {
 	"AMIBIOSC07", NULL, AMI95Extract}, {
 	"AMIBIOSC08", NULL, AMI95Extract}, {
 	"AMIBIOSC09", NULL, AMI95Extract}, { /* Hyper-V legacy BIOS */
+	"AMIBIOSC\x00\x00\x00\x00", NULL, AMI95Extract}, { /* Gigabyte GA-8IPXDR F1 */
 	"(AAMMIIBBIIOOSS)", "AMIBIOSC", AMI940725Extract}, { /* 12/15/93 */
 	"AMI Flash Utility for DOS Command mode.", "@ROM", AFUDOSExtract}, {
 	"= Award Decompression Bios =", NULL, AwardExtract}, {
