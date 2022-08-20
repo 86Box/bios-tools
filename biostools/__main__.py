@@ -552,7 +552,6 @@ def analyze_process(queue, formatter, scan_base, options):
 		analyzers.AwardAnalyzer(), # must run before PhoenixAnalyzer
 		analyzers.QuadtelAnalyzer(), # must run before PhoenixAnalyzer
 		analyzers.PhoenixAnalyzer(), # must run before AMIDellAnalyzer and AMIIntelAnalyzer
-		#analyzers.AMIDellAnalyzer(), # must run before AMIAnalyzer
 		analyzers.AMIUEFIAnalyzer(), # must run before AMIAnalyzer
 		analyzers.AMIAnalyzer(), # must run before AMIIntelAnalyzer
 		analyzers.AMIIntelAnalyzer(),
