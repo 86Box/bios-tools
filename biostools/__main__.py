@@ -466,14 +466,15 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 		metadata = list(set('[{0}] {1}'.format(key, value.replace('\n', '\n' + (' ' * (len(key) + 3)))).strip() for key, value in (analyzer.metadata + bonus_analyzer_metadata)))
 		metadata.sort()
 		oroms = list(set(combined_oroms + analyzer.oroms + bonus_analyzer_oroms))
+		print(oroms)
 		oroms.sort()
 
 		# Add names to option ROMs.
 		previous_vendor = previous_device = None
 		for x in range(len(oroms)):
-			if type(oroms[x][0]) == str: # generic ROM
+			if oroms[x][0] == -1 and type(oroms[x][1]) == str: # generic ROM
 				# Format string.
-				oroms[x] = '[{0}] {1}'.format(*oroms[x]).replace('\n', '\n' + (' ' * (len(oroms[x][0]) + 3)))
+				oroms[x] = '[{1}] {2}'.format(*oroms[x]).replace('\n', '\n' + (' ' * (len(oroms[x][1]) + 3)))
 			elif len(oroms[x]) == 2: # PCI ROM
 				# Get vendor and device IDs and names.
 				vendor_id, device_id = oroms[x]
