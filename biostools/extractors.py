@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import array, codecs, datetime, io, itertools, math, os, re, shutil, socket, struct, subprocess, sys, time
+import array, codecs, datetime, io, itertools, math, os, re, shutil, socket, struct, subprocess, sys, time, zlib
 try:
 	import PIL.Image
 except ImportError:
@@ -2173,7 +2173,8 @@ class PEExtractor(ArchiveExtractor):
 		self._flashtool_pattern = re.compile(
 			b'''(Software\\\\AMI\\\\AFUWIN)|''' # AMIBIOS 8 AFUWIN (many ASRock)
 			b'''(AOpen FLASH ROM Utility R)|''' # AOpen (AP61)
-			b'''Micro Firmware, Incorporated \\* ''' # Micro Firmware (Intel Monsoon surfaced so far)
+			b'''Micro Firmware, Incorporated \\* |''' # Micro Firmware (Intel Monsoon surfaced so far)
+			b'''(ASUS Floppy Image Self-Extrator\\.)''' # ASUS floppy self-extractor (P4VP-MX)
 		)
 
 		# Path to the deark utility.
@@ -2273,6 +2274,7 @@ class PEExtractor(ArchiveExtractor):
 
 	def _extract_flashtool(self, file_path, file_header, dest_dir, match):
 		# Determine embedded ROM start and end offsets.
+		dest_file_name = 'flashtool.bin'
 		if match.group(1): # AFUWIN
 			# Look for markers and stop if one of them wasn't found.
 			rom_start_offset = file_header.find(b'_EMBEDDED_ROM_START_\x00')
@@ -2283,6 +2285,18 @@ class PEExtractor(ArchiveExtractor):
 			rom_end_offset = file_header.find(b'_EMBEDDED_ROM_END_\x00', rom_start_offset)
 			if rom_end_offset == -1:
 				return False
+		elif match.group(3): # ASUS floppy self-extractor
+			# Change output file name.
+			dest_file_name = 'floppy.img'
+
+			# Extract zlib compressed data.
+			try:
+				file_header = file_header[:0xc000] + zlib.decompress(file_header[0xc000:])
+			except:
+				self.debug_print('ASUS zlib decompression failed')
+				return False
+			rom_start_offset = 0xc000
+			rom_end_offset = len(file_header)
 		else: # others
 			# Round ROM size down to a power of two.
 			try:
@@ -2317,7 +2331,7 @@ class PEExtractor(ArchiveExtractor):
 
 		# Extract ROM.
 		try:
-			f = open(os.path.join(dest_dir, 'flashtool.bin'), 'wb')
+			f = open(os.path.join(dest_dir, dest_file_name), 'wb')
 			f.write(file_header[rom_start_offset:rom_end_offset])
 			f.close()
 		except:
