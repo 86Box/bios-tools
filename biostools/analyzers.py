@@ -634,7 +634,8 @@ class AMIUEFIAnalyzer(AMIAnalyzer):
 		super().__init__(*args, **kwargs)
 		self.vendor_id = 'AMIUEFI'
 
-		self._identifier_pattern = re.compile(b'''\\$SGN\\$|ALASKAA M I|[Xx]-UEFI-AMI''')
+		# "AMITSESetup" (Pegatron H63ST)
+		self._identifier_pattern = re.compile(b'''\\$SGN\\$|ALASKAA M I|[Xx]-UEFI-AMI|AMITSESetup''')
 		self._signon_asus_pattern = re.compile(b''' ACPI BIOS Rev''')
 		self._signon_intel_msi_pattern = re.compile(b'''\\$((?:IBIOSI|MSESGN)\\$|UBI)([\\x20-\\x7E]{4,})''')
 		self._signon_sgn_pattern = re.compile(b'''\\$SGN\\$[\\x01-\\xFF][\\x00-\\xFF]{2}''')
