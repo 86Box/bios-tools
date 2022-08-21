@@ -997,26 +997,6 @@ class BonusAnalyzer(Analyzer):
 				acpi_tables.append(util.read_string(match.group(1)))
 		self._enumerate_metadata('ACPI', acpi_tables)
 
-		# Adaptec and NCR SCSI
-		scsi_roms = []
-		for match in self._adaptec_pattern.finditer(file_data):
-			model = match.group(1)
-			if model:
-				model = ' ' + util.read_string(model)
-			else:
-				model = ''
-			self.metadata.append(('SCSI', 'Adaptec' + model))
-		for match in self._ncr_pattern.finditer(file_data):
-			self.metadata.append(('SCSI', 'NCR ' + util.read_string(match.group(1))))
-
-		# PXE and RPL boot
-		lan_roms = []
-		if util.all_match(self._pxe_patterns, file_data):
-			lan_roms.append('PXE')
-		if self._rpl_pattern.search(file_data):
-			lan_roms.append('RPL')
-		self._enumerate_metadata('LAN', lan_roms)
-
 		# SLI certificate
 		match = self._sli_pattern.search(file_data)
 		if match:
@@ -1026,26 +1006,50 @@ class BonusAnalyzer(Analyzer):
 		if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
 			self.metadata.append(('UEFI', 'Filesystem'))
 
-		# Look for PCI/PnP option ROMs.
+		# Look for option ROMs.
 		for match in self._orom_pattern.finditer(file_data):
+			# Extract ROM data based on its size.
+			rom_offset = match.start()
+			rom_size = match.group(1)[0] * 512
+			rom_data = file_data[rom_offset:rom_offset + rom_size]
+
+			# Check for Adaptec and NCR SCSI.
+			scsi_roms = []
+			for submatch in self._adaptec_pattern.finditer(rom_data):
+				model = submatch.group(1)
+				if model:
+					model = ' ' + util.read_string(model)
+				else:
+					model = ''
+				self.metadata.append(('SCSI', 'Adaptec' + model))
+			for submatch in self._ncr_pattern.finditer(rom_data):
+				self.metadata.append(('SCSI', 'NCR ' + util.read_string(submatch.group(1))))
+
+			# Check for PXE and RPL boot.
+			lan_roms = []
+			if util.all_match(self._pxe_patterns, rom_data):
+				lan_roms.append('PXE')
+			if self._rpl_pattern.search(rom_data):
+				lan_roms.append('RPL')
+			self._enumerate_metadata('LAN', lan_roms)
+
 			# Check for the VGA BIOS compatibility marker string and add it as metadata.
 			vga_marker = match.group(3)
 			if vga_marker:
 				# Find ASCII strings around the marker. There must be a space before/after
 				# the marker to avoid parsing of non-text bytes as ASCII characters.
-				vga_start = match.start(3) + 2
-				if file_data[vga_start - 1:vga_start] == b' ':
-					while vga_start > 0 and file_data[vga_start - 1] >= 0x20 and file_data[vga_start - 1] <= 0x7e:
+				vga_start = match.start(3) + 2 - rom_offset
+				if rom_data[vga_start - 1:vga_start] == b' ':
+					while vga_start > 0 and rom_data[vga_start - 1] >= 0x20 and rom_data[vga_start - 1] <= 0x7e:
 						vga_start -= 1
-				vga_end = match.end(3)
-				if file_data[vga_end:vga_end + 1] == b' ':
-					while vga_end < len(file_data) and file_data[vga_end] >= 0x20 and file_data[vga_end] <= 0x7e:
+				vga_end = match.end(3) - rom_offset
+				if rom_data[vga_end:vga_end + 1] == b' ':
+					while vga_end < len(rom_data) and rom_data[vga_end] >= 0x20 and rom_data[vga_end] <= 0x7e:
 						vga_end += 1
-				vga_marker = util.read_string(file_data[vga_start:vga_end]).strip()
+				vga_marker = util.read_string(rom_data[vga_start:vga_end]).strip()
 
 				# Find an ASCII string after the IBM header, and if one is found, use it instead.
-				rom_size = match.group(1)[0] * 512
-				additional_match = self._vga_string_pattern.search(file_data[vga_end:match.start(0) + rom_size])
+				additional_match = self._vga_string_pattern.search(rom_data[vga_end:])
 				if additional_match:
 					vga_marker = self._vga_trim_pattern.sub('', vga_marker).strip()
 					if vga_marker:
@@ -1057,10 +1061,9 @@ class BonusAnalyzer(Analyzer):
 
 			# Check for a valid PCI data structure.
 			if pci_header_ptr >= 26:
-				pci_header_ptr += match.start()
-				pci_magic = file_data[pci_header_ptr:pci_header_ptr + 4]
+				pci_magic = rom_data[pci_header_ptr:pci_header_ptr + 4]
 				if pci_magic == b'PCIR':
-					pci_header_data = file_data[pci_header_ptr + 4:pci_header_ptr + 16]
+					pci_header_data = rom_data[pci_header_ptr + 4:pci_header_ptr + 16]
 					if len(pci_header_data) == 12:
 						# Read PCI header data.
 						vendor_id, device_id, device_list_ptr, _, revision, progif, subclass, class_code = struct.unpack('<HHHHBBBB', pci_header_data)
@@ -1084,9 +1087,9 @@ class BonusAnalyzer(Analyzer):
 							device_list_ptr += pci_header_ptr
 
 							# Read device IDs.
-							while len(file_data[device_list_ptr:device_list_ptr + 2]) == 2:
+							while len(rom_data[device_list_ptr:device_list_ptr + 2]) == 2:
 								# Read ID and stop if this is a terminator.
-								device_id, = struct.unpack('<H', file_data[device_list_ptr:device_list_ptr + 2])
+								device_id, = struct.unpack('<H', rom_data[device_list_ptr:device_list_ptr + 2])
 								self.debug_print('PCI header: additional device', hex(device_id))
 								if device_id == 0x0000:
 									break
@@ -1102,20 +1105,19 @@ class BonusAnalyzer(Analyzer):
 
 			# Check for a valid PnP data structure.
 			if pnp_header_ptr >= 26:
-				pnp_header_ptr += match.start()
-				if file_data[pnp_header_ptr:pnp_header_ptr + 4] == b'$PnP':
-					pnp_header_data = file_data[pnp_header_ptr + 4:pnp_header_ptr + 18]
+				if rom_data[pnp_header_ptr:pnp_header_ptr + 4] == b'$PnP':
+					pnp_header_data = rom_data[pnp_header_ptr + 4:pnp_header_ptr + 18]
 					if len(pnp_header_data) == 14:
 						# Read PnP header data.
 						_, _, _, _, _, device_id, vendor_ptr, device_ptr = struct.unpack('<BBHBB4sHH', pnp_header_data)
 
 						# Extract vendor/device name strings if they're valid.
 						if vendor_ptr >= 26:
-							vendor = util.read_string(file_data[match.start() + vendor_ptr:])
+							vendor = util.read_string(rom_data[match.start() + vendor_ptr:])
 						else:
 							vendor = None
 						if device_ptr >= 26:
-							device = util.read_string(file_data[match.start() + device_ptr:])
+							device = util.read_string(rom_data[match.start() + device_ptr:])
 						else:
 							device = None
 						self.debug_print('PnP header: vendor', repr(vendor), 'device', repr(device))
