@@ -192,13 +192,13 @@ def read_complement(file_path, file_header=None, max_size=16777216):
 			pass
 	return b''
 
-def read_string(data, terminator=b'\x00', ascii_backspace=True):
+def read_string(data, terminator=b'\\x00', ascii_backspace=True):
 	"""Read a terminated string (by NUL by default) from a bytes."""
 
 	# Trim to terminator.
-	terminator_index = data.find(terminator)
-	if terminator_index > -1:
-		data = data[:terminator_index]
+	match = re.search(terminator, data)
+	if match:
+		data = data[:match.start()]
 
 	# Look for ASCII backspaces and apply them accordingly.
 	if ascii_backspace:

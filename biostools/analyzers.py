@@ -351,8 +351,7 @@ class AMIAnalyzer(Analyzer):
 		# Decoded: "\xFE([^- ]{4}-(?:[^-]{4}-)?[^-]{6}|Ref\. [\x00-\xFF]{1,64})"
 		# "Ref. " (Everex EISA 386-BIOS) - let the code handle termination
 		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFD\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6}|\\x6D\\xD4\\xCC\\x8E\\xFE[\\x00-\\xFF]{1,64})''')
-		self._precolor_signon_pattern = re.compile(b'''BIOS \\(C\\).*(?:AMI|American Megatrends Inc), for ([\\x0D\\x0A\\x20-\\x7E]+)''')
-		self._precolor_type_pattern = re.compile(b'''([0-9]86[A-Za-z]*|8(?:08)?8)-BIOS \\(C\\)''')
+		self._precolor_signon_pattern = re.compile(b'''((?:[0-9]86[A-Za-z]*-|8(?:08)?8-)?BIOS \\(C\\).*(?:AMI|American Megatrends Inc))(?:, for ([\\x0D\\x0A\\x20-\\x7E]+))?''')
 		self._precolor_setup_pattern = re.compile(b'''[A-Za-z][0-9/]+([^\\(]*(SETUP PROGRAM FOR | SETUP UTILITY)[^\\(]*)\\(C\\)19''')
 		self._precolor_pcchips_pattern = re.compile(b'''ADVANCED SYSTEM SETUP UTILITY VERSION[\\x20-\\x7E]+?PC CHIPS INC''')
 		# Decoded: "\(C\)AMI, \(([^\)]{11,64})\)" (the 64 is arbitrary)
@@ -430,17 +429,20 @@ class AMIAnalyzer(Analyzer):
 				return False
 
 			# Ignore unwanted string terminator on sign-on. (TriGem Lisbon-II)
-			signon_terminator = b'\x00'
+			signon_terminator = b'''\\x00'''
 			if file_data[id_block_index + 0x123:id_block_index + 0x12b] == b' Inc.,\x00 ':
 				self.debug_print('Applying sign-on terminator hack')
-				signon_terminator += b'\x00'
+				signon_terminator += b'''\\x00'''
 
 			# Extract sign-on, while removing carriage returns.
 			self.signon = util.read_string(file_data[id_block_index + 0x100:id_block_index + 0x200], terminator=signon_terminator)
 			self.debug_print('Raw sign-on:', repr(self.signon))
 
+			# Extract full version string from the first line as metadata.
 			# The actual sign-on starts on the second line.
-			self.signon = '\n'.join(x.rstrip('\r').strip() for x in self.signon.split('\n')[1:] if x != '\r').strip('\n')
+			stripped = [x.strip() for x in self.signon.split('\n')]
+			self.metadata.append(('ID', stripped[0]))
+			self.signon = '\n'.join(x for x in stripped[1:] if x).strip('\n')
 
 			# Add setup type(s) as metadata.
 			# There can be multiple setup modules (PC Chips M559 with switchable Simple/WinBIOS)
@@ -543,19 +545,21 @@ class AMIAnalyzer(Analyzer):
 
 						self.debug_print('Reconstructed string:', repr(self.string))
 
-				# Extract additional information after the copyright as a sign-on.
+				# Extract full version string as metadata, and also extract
+				# additional information after the copyright as a sign-on
 				# (Shuttle 386SX, CDTEK 286, Flying Triumph Access Methods)
 				match = self._precolor_signon_pattern.search(file_data)
 				if match:
-					self.signon = match.group(1).decode('cp437', 'ignore')
+					version_string = util.read_string(match.group(1), terminator=b'''[\\x00\\x0D\\x0A\\x80-\\xFF]''') # MSB termination on early 8088-BIOS
+					self.debug_print('Raw version string:', repr(version_string))
+					self.metadata.append(('ID', version_string))
+
+					self.signon = util.read_string(match.group(2) or b'')
 					self.debug_print('Raw sign-on:', repr(self.signon))
 
 					# Split sign-on lines. (Video Technology Info-Tech 286-BIOS)
-					self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
-
-				# Extract BIOS type as an add-on.
-				for match in self._precolor_type_pattern.finditer(file_data):
-					self.metadata.append(('ID', match.group(1).decode('cp437', 'ignore') + '-BIOS'))
+					stripped = (x for x in self.signon.split('\n'))
+					self.signon = '\n'.join(x for x in stripped if x).strip('\n')
 
 				# Add setup type as metadata.
 				match = self._precolor_setup_pattern.search(file_data)
