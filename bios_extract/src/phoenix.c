@@ -318,7 +318,7 @@ static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	unsigned char *Buffer;
 	unsigned char *ModuleData;
 	uint32_t Packed;
-	int fd, ExtractResult, Remain;
+	int fd, ExtractResult;
 
 	Module = (struct PhoenixModuleHeader *)(BIOSImage + Offset);
 
@@ -351,13 +351,13 @@ static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 		(Module->Signature[1] == 0x31) && (Module->Signature[2] == 0x31)) {
 		struct PhoenixModuleHeader NewHeader;
 		memcpy(&NewHeader, Module, sizeof(struct PhoenixModuleHeader));
-		NewHeader.ExpLen = Module->ExpLen & 0x00ffffff;
-		NewHeader.FragLength = Module->FragLength & 0x00ffffff;
+		NewHeader.ExpLen = Module->ExpLen & le32toh(0x00ffffff);
+		NewHeader.FragLength = Module->FragLength & le32toh(0x00ffffff);
 		Module = &NewHeader;
 	}
 
 valid_signature:
-	if ((Offset + Module->HeadLen + 4 + le32toh(Module->FragLength)) >
+	if ((Offset + Module->HeadLen + le32toh(Module->FragLength)) >
 	    BIOSLength) {
 		fprintf(stderr, "Error: Module overruns buffer at 0x%05X\n",
 			Offset);
@@ -408,17 +408,16 @@ valid_signature:
 			FragLength = le32toh(Fragment->FragLength);
 			printf("(%05X, %d bytes) ", FragOffset, FragLength);
 
-			if ((Packed + FragLength > le32toh(Module->ExpLen)) || ((FragOffset + 9 + FragLength) >= BIOSLength)) {
+			if ((((uint64_t) Packed + FragLength) > le32toh(Module->ExpLen)) || (((uint64_t) FragOffset + 9 + FragLength) > BIOSLength)) {
 				printf("\nFragment too big at %05X for %05X\n",
 				        FragOffset, Offset);
 				free(ModuleData);
 				/* Assume this is an invalid fragment module */
 				goto BadFragment;
 			}
-			Remain = BIOSLength - ((ModuleData + Packed) - BIOSImage);
 			memcpy(ModuleData + Packed, BIOSImage + FragOffset + 9,
-			       (Remain < FragLength) ? Remain : FragLength);
-			//SetRemainder(FragOffset + 9, (Remain < FragLength) ? Remain : FragLength, FALSE);
+				   FragLength);
+			//SetRemainder(FragOffset + 9, FragLength, FALSE);
 			Packed += FragLength;
 			FragOffset =
 			    le32toh(Fragment->NextFrag) & (BIOSLength - 1);
