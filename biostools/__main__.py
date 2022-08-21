@@ -466,7 +466,6 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 		metadata = list(set('[{0}] {1}'.format(key, value.replace('\n', '\n' + (' ' * (len(key) + 3)))).strip() for key, value in (analyzer.metadata + bonus_analyzer_metadata)))
 		metadata.sort()
 		oroms = list(set(combined_oroms + analyzer.oroms + bonus_analyzer_oroms))
-		print(oroms)
 		oroms.sort()
 
 		# Add names to option ROMs.
