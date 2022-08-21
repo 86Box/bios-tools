@@ -358,15 +358,15 @@ class ASTExtractor(Extractor):
 class BIOSExtractor(Extractor):
 	"""Extract a bios_extract-compatible BIOS file."""
 
+	# BIOS entrypoint signatures (faster search)
+	_entrypoint_pattern = re.compile(
+		b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0|''' # typical AMI/Award/Phoenix
+		b'''\\x0F\\x09\\xE9|''' # Intel AMIBIOS 6
+		b'''\\xE9[\\x00-\\xFF]{2}\\x00{5}''' # weird Intel (observed in SRSH4)
+	)
+
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-
-		# BIOS entrypoint signatures (faster search)
-		self._entrypoint_pattern = re.compile(
-			b'''\\xEA[\\x00-\\xFF]{2}\\x00\\xF0|''' # typical AMI/Award/Phoenix
-			b'''\\x0F\\x09\\xE9|''' # Intel AMIBIOS 6
-			b'''\\xE9[\\x00-\\xFF]{2}\\x00{5}''' # weird Intel (observed in SRSH4)
-		)
 
 		# Fallback BIOS signatures (slower search), based on bios_extract.c
 		self._signature_pattern = re.compile(
@@ -410,7 +410,7 @@ class BIOSExtractor(Extractor):
 		file_header += util.read_complement(file_path, file_header)
 
 		# Stop if no BIOS signatures are found.
-		if not self._entrypoint_pattern.match(file_header[-16:]) and not self._signature_pattern.search(file_header):
+		if not BIOSExtractor._entrypoint_pattern.match(file_header[-16:]) and not self._signature_pattern.search(file_header):
 			return False
 
 		# Create destination directory and stop if it couldn't be created.
@@ -1717,15 +1717,21 @@ class IntelExtractor(Extractor):
 					elif data_length == largest_part_size and ((dest_offset >> 16) & 1) == int(invert):
 						# Workaround for SE440BX-2 and SRMK2, which require a
 						# gap at the final 64 KB where the boot block goes.
-						self.debug_print('> Final part gap')
-						remaining += largest_part_size
+						if BIOSExtractor._entrypoint_pattern.match(part_data[-16:]):
+							# This does not apply to N440BX, which ends
+							# its parts with an entry point as expected.
+							self.debug_print('> Entry point found, not applying final part gap')
+						else:
+							self.debug_print('> Final part gap')
+							remaining += largest_part_size
 				elif logical_area == 0 and dest_offset == bootblock_offset:
 					# Don't pad a boot block insertion.
 					remaining = 0
-				self.debug_print('> Adding', remaining, 'padding bytes')
-				while remaining > 0:
-					out_f.write(b'\xFF' * min(remaining, 1048576))
-					remaining -= 1048576
+				if remaining > 0:
+					self.debug_print('> Adding', remaining, 'padding bytes')
+					while remaining > 0:
+						out_f.write(b'\xFF' * min(remaining, 1048576))
+						remaining -= 1048576
 
 				f.close()
 
