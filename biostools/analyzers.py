@@ -1132,7 +1132,7 @@ class BonusAnalyzer(Analyzer):
 			# Add generic VGA marker if no PCI/PnP data was found.
 			if vga_marker:
 				# Strip lines that are too short or have a single repeated character.
-				stripped = (x.strip() for x in vga_marker.replace('\r', '').split('\n'))
+				stripped = (x.strip() for x in vga_marker.replace('\r', '\n').split('\n'))
 				vga_marker = '\n'.join(x for x in stripped if len(x) > 3 and x[:10] != (x[0] * min(len(x), 10))).strip('\n')
 				self.oroms.append(('VGA', vga_marker))
 

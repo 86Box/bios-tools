@@ -463,7 +463,7 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 			scan_file_path = scan_file_path[2:]
 
 		# De-duplicate and sort metadata and option ROMs.
-		metadata = list(set('[{0}] {1}'.format(key, value).strip() for key, value in (analyzer.metadata + bonus_analyzer_metadata)))
+		metadata = list(set('[{0}] {1}'.format(key, value.replace('\n', '\n' + (' ' * (len(key) + 3)))).strip() for key, value in (analyzer.metadata + bonus_analyzer_metadata)))
 		metadata.sort()
 		oroms = list(set(combined_oroms + analyzer.oroms + bonus_analyzer_oroms))
 		oroms.sort()
