@@ -2615,12 +2615,20 @@ class PhoenixAnalyzer(Analyzer):
 						regtable_entry = regtable_start
 						while regtable_entry < regtable_end:
 							# Read pointer.
-							regtable_ptr, = struct.unpack('<H', virtual_mem[regtable_entry:regtable_entry + 2])
+							regtable_ptr = virtual_mem[regtable_entry:regtable_entry + 2]
+							if len(regtable_ptr) != 2:
+								self.debug_print('Register table pointer short read at', hex(regtable_entry))
+								break
+							regtable_ptr, = struct.unpack('<H', regtable_ptr)
 							regtable_entry += 2
 
 							# Read data from table header.
 							regtable_ptr += regtable_segment << 4
-							regtable_model, regtable_type = virtual_mem[regtable_ptr + 0x01:regtable_ptr + 0x03]
+							regtable_header = virtual_mem[regtable_ptr + 0x01:regtable_ptr + 0x03]
+							if len(regtable_header) != 2:
+								self.debug_print('Register table header short read at', hex(regtable_ptr))
+								break
+							regtable_model, regtable_type = regtable_header
 							self.debug_print('Register table at', hex(regtable_ptr), 'identifying as', regtable_type >> 4, ':', regtable_model)
 
 							# Add to register table list.
