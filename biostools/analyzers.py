@@ -984,7 +984,7 @@ class BonusAnalyzer(Analyzer):
 			re.compile(b'''PXE-EC6: UNDI driver image is invalid\\.'''),
 		)
 		self._rpl_pattern = re.compile(b'''NetWare Ready ROM''')
-		self._sli_pattern = re.compile(b'''[0-9]{12}Genuine NVIDIA Certified SLI Ready Motherboard for ([\\x20-\\x7E]*)''')
+		self._sli_pattern = re.compile(b'''[0-9]{12}Genuine NVIDIA Certified SLI Ready Motherboard for ([\\x20-\\x7E]*)[\\x20-\\x7E]{4}-Copyright [0-9]{4} NVIDIA''')
 		self._vga_string_pattern = re.compile(
 			b'''[\\x0D\\x0A\\x20-\\x7E]{16,}''' # standard string
 			b'''(?:\\x00[\\x0D\\x0A\\x20-\\x7E]{16,})?''' # PhoenixView
@@ -1020,7 +1020,7 @@ class BonusAnalyzer(Analyzer):
 		# SLI certificate
 		match = self._sli_pattern.search(file_data)
 		if match:
-			self.metadata.append(('SLI', match.group(1)))
+			self.metadata.append(('SLI', util.read_string(match.group(1))))
 
 		# UEFI
 		if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
