@@ -436,14 +436,16 @@ class AMIAnalyzer(Analyzer):
 				self.debug_print('Applying sign-on terminator hack')
 				signon_terminator += b'''\\x00'''
 
-			# Extract sign-on, while removing carriage returns.
+			# Extract sign-on.
 			self.signon = util.read_string(file_data[id_block_index + 0x100:id_block_index + 0x200], terminator=signon_terminator)
 			self.debug_print('Raw sign-on:', repr(self.signon))
 
 			# Extract full version string from the first line as metadata.
+			# First line may be terminated by a carriage return only (MSI MS-7522 AMIBIOS 8)
 			# The actual sign-on starts on the second line.
-			stripped = [x.strip() for x in self.signon.split('\n')]
-			self.metadata.append(('ID', stripped[0]))
+			stripped = [x.strip() for x in self.signon.replace('\r', '\n').split('\n')]
+			if stripped[0]:
+				self.metadata.append(('ID', stripped[0]))
 			self.signon = '\n'.join(x for x in stripped[1:] if x).strip('\n')
 
 			# Add setup type(s) as metadata.
