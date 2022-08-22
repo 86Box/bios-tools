@@ -339,6 +339,8 @@ class AMIAnalyzer(Analyzer):
 		# - Second digit not 0 (I forget which one had 000000)
 		# - Can be 4-digit instead of 6-digit (Biostar)
 		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))([\\x00-\\xFF]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)''')
+		self._regtable_pattern = re.compile(b'''\\$\\$CT\\x01([\\x20-\\x7E]+)''')
+		self._regtable_trim_pattern = re.compile('''[- ]+(?:Table|B(?:oot[- ]?)?Block|BtBlk|(?:[0-9]+M(?:[Hh]z)?|Other) ?PCIC(?:lk|LK))''')
 		# TriGem weirdness: "TGem" (UMC 486-BIOS) and "TriGem Computer " (SiS 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS|TriGem Computer )|( Access Methods Inc\\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
@@ -452,6 +454,17 @@ class AMIAnalyzer(Analyzer):
 					setup_types.append(setup_type)
 			if len(setup_types) > 0:
 				self.metadata.append(('Setup', ', '.join(setup_types)))
+
+			# Add AMIBIOS 6+ register table names as metadata.
+			regtables = []
+			for match in self._regtable_pattern.finditer(file_data):
+				# Trim name to skip duplicates: regular and bootblock, different PCICLKs, etc.
+				regtable_name = self._regtable_trim_pattern.sub('', util.read_string(match.group(1))).strip()
+				if regtable_name not in regtables:
+					regtables.append(regtable_name)
+			if len(regtables) > 0:
+				regtables.sort()
+				self.metadata.append(('Table', '\n'.join(regtables)))
 		elif len(file_data) < 1024:
 			# Ignore false positives from sannata readmes.
 			self.debug_print('False positive by size of', len(file_data), 'bytes')
