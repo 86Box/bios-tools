@@ -340,7 +340,10 @@ class AMIAnalyzer(Analyzer):
 		# - Can be 4-digit instead of 6-digit (Biostar)
 		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))([\\x00-\\xFF]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)''')
 		self._regtable_pattern = re.compile(b'''\\$\\$CT\\x01([\\x20-\\x7E]+)''')
-		self._regtable_trim_pattern = re.compile('''[- ]+(?:Table|B(?:oot[- ]?)?Block|BtBlk|(?:[0-9]+M(?:[Hh]z)?|Other) ?PCIC(?:lk|LK))''')
+		# Dash separator possible (TritonIDETimings on AMI Apollo and potentially others)
+		self._regtable_split_pattern = re.compile('''[- ]''')
+		# "Cfg" and "Config" (Acrosser AR-B1479 STPC Elite)
+		self._regtable_trim_pattern = re.compile('''[- ]+(?:Table|B(?:oot[- ]?)?Block|BtBlk|POST(?: Init)?|Cfg|Config)''', re.I)
 		# TriGem weirdness: "TGem" (UMC 486-BIOS) and "TriGem Computer " (SiS 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS|TriGem Computer )|( Access Methods Inc\\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
@@ -458,15 +461,36 @@ class AMIAnalyzer(Analyzer):
 				self.metadata.append(('Setup', ', '.join(setup_types)))
 
 			# Add AMIBIOS 6+ register table names as metadata.
-			regtables = []
+			regtables = {}
 			for match in self._regtable_pattern.finditer(file_data):
-				# Trim name to skip duplicates: regular and bootblock, different PCICLKs, etc.
-				regtable_name = self._regtable_trim_pattern.sub('', util.read_string(match.group(1))).strip()
-				if regtable_name not in regtables:
-					regtables.append(regtable_name)
+				# Trim name to skip redundant words.
+				regtable_name = util.read_string(match.group(1))
+				regtable_name = self._regtable_trim_pattern.sub('', regtable_name).strip()
+
+				# Split name for common prefix search, while applying cosmetic fixes.
+				regtable_name = re.sub('''(^| )([A-Za-z]+)(Time)($| )''', '\\1\\2 \\3\\4', regtable_name) # (ITOX STAR)
+				regtable_name = re.sub('''(^| )W(?:in|IN)([0-9]{3})''', '\\1Winbond \\2', regtable_name) # (MSI MS-5146)
+				split = [x for x in self._regtable_split_pattern.split(regtable_name) if x]
+				if len(split) == 2 and split[1] == 'Timing' and 'mhz' in split[0].lower(): # (Biostar MB-8500TUC)
+					split.reverse()
+				elif len(split) >= 4 and split[0] == 'System' and split[2] == 'to': # SMC FDC37C669 (PC Partner MB600N), NSC PC87306 (Supermicro P55T2S)
+					split = split[3:] + split[0:2]
+				regtables[regtable_name.lower()] = split
+
+			# Sort table names by common prefixes.
+			regtables = [regtables[regtable] for regtable in regtables]
 			if len(regtables) > 0:
-				regtables.sort()
-				self.metadata.append(('Table', '\n'.join(regtables)))
+				self.debug_print('Clean register tables:', regtables)
+
+				# Add grouped register tables to metadata.
+				regtable_groups = util.common_prefixes(regtables)
+				regtable_group_strings = []
+				for regtable_group in sorted(regtable_groups):
+					joined = ', '.join(' '.join(x) for x in regtable_groups[regtable_group] if x)
+					if len(joined) > 0:
+						joined = ': ' + joined
+					regtable_group_strings.append(regtable_group + joined)
+				self.metadata.append(('Table', '\n'.join(regtable_group_strings)))
 		elif len(file_data) < 1024:
 			# Ignore false positives from sannata readmes.
 			self.debug_print('False positive by size of', len(file_data), 'bytes')
@@ -595,7 +619,7 @@ class AMIIntelAnalyzer(Analyzer):
 	_ami_pattern = re.compile(b'''AMIBIOS''')
 	_ami_version_pattern = re.compile(b'''AMIBIOSC(0[1-9][0-9]{2})''')
 	_phoenix_pattern = re.compile(b'''PhoenixBIOS(?:\\(TM\\))? ''')
-	_version_pattern = re.compile(b'''(?:BIOS (?:Release|Version) )?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[A-Z][0-9A-Z]{1,})|(?:\\$IBIOSI\\$)?([0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}|(?:\\.[0-9]{4}){3})''')
+	_version_pattern = re.compile(b'''(?:BIOS (?:Release|Version) )?([0-9]\\.[0-9]{2}\\.[0-9]{2}\\.[A-Z][0-9A-Z]{1,})|(?:\\$IBIOSI\\$)?([0-9A-Z]{8}\\.([0-9A-Z]{3})\\.[0-9A-Z]{3,4}(?:\\.[0-9A-Z]{1,4}\\.[0-9]{10}|(?:\\.[0-9]{4}){3}))''')
 	_86_pattern = re.compile('''[0-9A-Z]{8}\\.86[0-9A-Z]\\.[0-9A-Z]{3,4}\\.[0-9A-Z]{1,4}\\.[0-9]{10}$''')
 
 	def __init__(self, *args, **kwargs):
