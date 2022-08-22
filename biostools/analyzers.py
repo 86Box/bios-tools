@@ -995,7 +995,7 @@ class BonusAnalyzer(Analyzer):
 		self._pci_ids = {}
 
 		self._acpi_table_pattern = re.compile(b'''(DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})(?:[\\x00-\\xFF]{20}|[\\x00-\\xFF]{24})[\\x00\\x20-\\x7E]{4}''')
-		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:|([\\x20-\\x7E]+?)(?: SCSI)? BIOS )''')
+		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:([\\x20-\\x7E]+)|([\\x20-\\x7E]+?)(?: SCSI)? BIOS )''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9\\.]+)''')
 		self._orom_pattern = re.compile(b'''\\x55\\xAA([\\x01-\\xFF])[\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
 		self._phoenixnet_patterns = (
@@ -1059,14 +1059,16 @@ class BonusAnalyzer(Analyzer):
 
 			# Check for Adaptec and NCR SCSI.
 			scsi_roms = []
-			for submatch in self._adaptec_pattern.finditer(rom_data):
-				model = submatch.group(1)
+			submatch = self._adaptec_pattern.search(rom_data)
+			if submatch:
+				model = submatch.group(1) or submatch.group(2)
 				if model:
 					model = ' ' + util.read_string(model)
 				else:
 					model = ''
 				self.metadata.append(('SCSI', 'Adaptec' + model))
-			for submatch in self._ncr_pattern.finditer(rom_data):
+			submatch = self._ncr_pattern.search(rom_data)
+			if submatch:
 				self.metadata.append(('SCSI', 'NCR ' + util.read_string(submatch.group(1))))
 
 			# Check for PXE and RPL boot.
