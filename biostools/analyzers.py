@@ -443,13 +443,22 @@ class AMIAnalyzer(Analyzer):
 			self.signon = util.read_string(file_data[id_block_index + 0x100:id_block_index + 0x200], terminator=signon_terminator)
 			self.debug_print('Raw sign-on:', repr(self.signon))
 
-			# Extract full version string from the first line as metadata.
-			# First line may be terminated by a carriage return only (MSI MS-7522 AMIBIOS 8)
-			# The actual sign-on starts on the second line.
+			# Separate full copyright string from the sign-on and add it as metadata.
+			# Copyright line may be terminated by a carriage return only (MSI MS-7522: line is blank)
+			# Copyright might not be on the first line (Dell PowerVault 725N)
 			stripped = [x.strip() for x in self.signon.replace('\r', '\n').split('\n')]
-			if stripped[0]:
-				self.metadata.append(('ID', stripped[0]))
-			self.signon = '\n'.join(x for x in stripped[1:] if x).strip('\n')
+			if len(stripped) > 0:
+				copyright = None
+				for x in range(len(stripped)): # search through lines first...
+					if 'American Megatrends' in stripped[x]:
+						copyright = stripped[x]
+						break
+				if not copyright: # ...and assume first line if nothing is found
+					copyright = stripped[0]
+				if copyright:
+					self.metadata.append(('ID', copyright))
+					stripped.remove(copyright)
+			self.signon = '\n'.join(x for x in stripped if x)
 
 			# Add setup type(s) as metadata.
 			# There can be multiple setup modules (PC Chips M559 with switchable Simple/WinBIOS)
