@@ -354,7 +354,7 @@ class AMIAnalyzer(Analyzer):
 		# "Ref. " (Everex EISA 386-BIOS) - let the code handle termination
 		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFD\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6}|\\x6D\\xD4\\xCC\\x8E\\xFE[\\x00-\\xFF]{1,64})''')
 		self._precolor_signon_pattern = re.compile(b'''((?:[0-9]86[A-Za-z]*-|8(?:08)?8-)?BIOS \\(C\\).*(?:AMI|American Megatrends Inc))(?:, for ([\\x0D\\x0A\\x20-\\x7E]+))?''')
-		self._precolor_setup_pattern = re.compile(b'''[A-Za-z][0-9/]+([^\\(]*(SETUP PROGRAM FOR | SETUP UTILITY)[^\\(]*)\\(C\\)19''')
+		self._precolor_setup_pattern = re.compile(b'''[A-Za-z][0-9/]+([\\x20-\\x27\\x29-\\x7E]*(SETUP PROGRAM FOR | SETUP UTILITY)[\\x20-\\x27\\x29-\\x7E]*)\\(C\\)19''')
 		self._precolor_pcchips_pattern = re.compile(b'''ADVANCED SYSTEM SETUP UTILITY VERSION[\\x20-\\x7E]+?PC CHIPS INC''')
 		# Decoded: "\(C\)AMI, \(([^\)]{11,64})\)" (the 64 is arbitrary)
 		self._8088_string_pattern = re.compile(b'''\\xEC\\x5F\\x6C\\x60\\x5A\\x5C\\xEA\\xF0\\xEC([\\x00-\\x6B\\x6D-\\xFF]{11,64})\\x6C''')
