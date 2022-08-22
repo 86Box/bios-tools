@@ -88,6 +88,52 @@ def closest_prefix(base, candidates, candidate_key=lambda x: x):
 	# Return the first/only candidate.
 	return candidates_copy[0]
 
+def common_prefixes(candidates, *args, **kwargs):
+	"""Convert a list of lists of strings into a dict of lists of lists of strings
+	   sorted by common prefixes. Any additional arguments are passed to sorted()."""
+
+	# Make a sorted copy of the candidates list.
+	candidates = sorted(candidates, *args, **kwargs)
+
+	# Go through candidates.
+	groups = {}
+	while len(candidates) > 0:
+		# Determine common prefix for the first and second candidates.
+		# If there is no second entry, a lack of common prefix is assumed.
+		candidate = candidates.pop(0)
+		common_prefix = 0
+		if len(candidates) > 0:
+			next_candidate = candidates[0]
+			for x in range(min(len(candidate), len(next_candidate)) - 1):
+				if candidate[x].lower() == next_candidate[x].lower(): # case insensitive
+					common_prefix = x + 1
+				else:
+					break
+
+		# Is there a common prefix?
+		if common_prefix > 0:
+			# Determine common prefix group for this pair.
+			group = ' '.join(candidate[:common_prefix])
+
+			# Search for subsequent candidates with this prefix.
+			entries = [candidate[common_prefix:], candidates.pop(0)[common_prefix:]]
+			while len(candidates) > 0:
+				if [x.lower() for x in candidates[0][:common_prefix]] == [x.lower() for x in candidate[:common_prefix]]: # case insensitive
+					entries.append(candidates.pop(0)[common_prefix:])
+				else:
+					break
+
+			# Add remainders of this pair to the common prefix group.
+			if group in groups:
+				groups[group] += entries
+			else:
+				groups[group] = entries
+		else:
+			# No, add this candidate as a stand-alone group.
+			groups[' '.join(candidate)] = []
+
+	return groups
+
 def date_cmp(date1, date2, pattern):
 	"""Returns the comparison difference between date1 and date2.
 	   Date format set by the given pattern."""
