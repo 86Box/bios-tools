@@ -179,6 +179,7 @@ static struct {
 			 uint32_t Offset1, uint32_t Offset2);
 } BIOSIdentification[] = {
 	{
+	"AMI Flash Utility for DOS Command mode.", "@ROM", AFUDOSExtract}, {
 	"AMIBIOS W 04 ", "AMIBIOSC", AMI940725Extract}, {
 	"AMIBIOS W 05 ", "AMIBIOSC", AMI941010Extract}, {
 	"AMIBIOS W 05 ", "OSC10/10/94", AMI941010Extract}, { /* NexGen */
@@ -192,7 +193,6 @@ static struct {
 	"AMIBIOSC09", NULL, AMI95Extract}, { /* Hyper-V legacy BIOS */
 	"AMIBIOSC\x00\x00\x00\x00", NULL, AMI95Extract}, { /* Gigabyte GA-8IPXDR F1 */
 	"(AAMMIIBBIIOOSS)", "AMIBIOSC", AMI940725Extract}, { /* 12/15/93 */
-	"AMI Flash Utility for DOS Command mode.", "@ROM", AFUDOSExtract}, {
 	"= Award Decompression Bios =", NULL, AwardExtract}, {
 	"awardext.rom", NULL, AwardExtract}, {
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
