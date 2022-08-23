@@ -106,7 +106,7 @@ def common_prefixes(candidates, *args, **kwargs):
 		common_prefix = 0
 		if len(candidates) > 0:
 			next_candidate = candidates[0]
-			for x in range(min(len(candidate), len(next_candidate)) - 1):
+			for x in range(min(len(candidate), len(next_candidate))):
 				if candidate[x].lower() == next_candidate[x].lower(): # case insensitive
 					common_prefix = x + 1
 				else:
