@@ -343,7 +343,7 @@ class AMIAnalyzer(Analyzer):
 		# Dash separator possible (TritonIDETimings on AMI Apollo and potentially others)
 		self._regtable_split_pattern = re.compile('''[- ]''')
 		# "Cfg" and "Config" (Acrosser AR-B1479 STPC Elite)
-		self._regtable_trim_pattern = re.compile('''[- ]+(?:Table|B(?:oot[- ]?)?Block|BtBlk|POST(?: Init)?|Cfg|Config)''', re.I)
+		self._regtable_trim_pattern = re.compile('''[- ]+(?:Table|B(?:oot[- ]?)?Block|BtBlk|POST(?: Init)?|Cfg|Config|Port)''', re.I)
 		# TriGem weirdness: "TGem" (UMC 486-BIOS) and "TriGem Computer " (SiS 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS|TriGem Computer )|( Access Methods Inc\\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)

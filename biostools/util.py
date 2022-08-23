@@ -93,6 +93,8 @@ def common_prefixes(candidates, *args, **kwargs):
 	   sorted by common prefixes. Any additional arguments are passed to sorted()."""
 
 	# Make a sorted copy of the candidates list.
+	if 'key' not in kwargs:
+		kwargs['key'] = lambda x: [y.lower() for y in x]
 	candidates = sorted(candidates, *args, **kwargs)
 
 	# Go through candidates.
