@@ -370,12 +370,13 @@ class BIOSExtractor(Extractor):
 
 		# Fallback BIOS signatures (slower search), based on bios_extract.c
 		self._signature_pattern = re.compile(
-			b'''AMI(?:BIOS(?: \\(C\\)1993 American Megatrends Inc.,| W 0[45]|C0[6789])|BOOT ROM|EBBLK| Flash Utility for DOS Command mode\\.)|'''
+			b'''AMI(?:BIOS(?: \\(C\\)1993 American Megatrends Inc.,| W 0[45]|C0[6789]|C\\x00{4})|BOOT ROM|EBBLK| Flash Utility for DOS Command mode\\.)|'''
 			b'''SUPER   ROM|'''
 			b'''\\$ASUSAMI\\$|'''
 			b'''= Award Decompression Bios =|'''
 			b'''awardext.rom|'''
 			b'''Phoenix Technologies|'''
+			b'''IBM AT Compatible Phoenix NuBIOS|'''
 			b'''[\\xEE\\xFF]\\x88SYSBIOS|'''
 			b'''\\xEE\\x88\\x42IOS SCU'''
 		)
