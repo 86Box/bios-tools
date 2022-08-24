@@ -645,7 +645,7 @@ class AMIIntelAnalyzer(Analyzer):
 
 			# Apply the version string as a sign-on.
 			self.signon = util.read_string(header_data[112:])
-		else:
+		elif self.vendor_id != 'Intel': # run this part only when delegated
 			# No header found, attempt to manually extract version string from data.
 			for match in AMIIntelAnalyzer._version_pattern.finditer(file_data):
 				self.debug_print('Raw Intel version:', match.group(0))
@@ -656,8 +656,6 @@ class AMIIntelAnalyzer(Analyzer):
 				intel_version = util.read_string(match.group(1) or match.group(2))
 				if (not oem or oem[:2] != '86' or not AMIIntelAnalyzer._86_pattern.match(self.signon)) and intel_version not in self.signon:
 					# Extract the version string as a sign-on.
-					if self.vendor_id == 'Intel':
-						self.version = '?'
 					self.signon = intel_version
 					ret = True
 
