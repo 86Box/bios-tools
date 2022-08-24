@@ -1907,6 +1907,7 @@ class InterleaveExtractor(Extractor):
 			b'Copyright COMPAQ Computer Corporation', # Compaq
 			b'Press any key when ready', # Access Methods
 			b'* AMPRO Little Board', # AMPRO
+			b'Philips ROM BIOS ' # Philips
 		]
 
 		# Interleave the strings.

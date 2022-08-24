@@ -579,6 +579,7 @@ def analyze_process(queue, formatter, scan_base, options):
 		analyzers.MRAnalyzer(),
 		analyzers.MylexAnalyzer(),
 		analyzers.OlivettiAnalyzer(),
+		analyzers.PhilipsAnalyzer(),
 		analyzers.PromagAnalyzer(),
 		analyzers.SchneiderAnalyzer(),
 		analyzers.SystemSoftAnalyzer(),

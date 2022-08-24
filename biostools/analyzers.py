@@ -1786,6 +1786,24 @@ class OlivettiAnalyzer(Analyzer):
 		return True
 
 
+class PhilipsAnalyzer(Analyzer):
+	def __init__(self, *args, **kwargs):
+		super().__init__('Philips', *args, **kwargs)
+
+		self._version_pattern = re.compile(b'''\\x0DPhilips ROM BIOS Version ([\\x21-\\x7E]+) ''')
+
+	def can_handle(self, file_path, file_data, header_data):
+		# Locate version.
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
+
+		# Extract version.
+		self.version = match.group(1).decode('cp437', 'ignore')
+
+		return True
+
+
 class PhoenixAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Phoenix', *args, **kwargs)
@@ -3467,7 +3485,7 @@ class ZenithAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Zenith', *args, **kwargs)
 
-		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2}) \(C\)ZDS CORP''')
+		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2}) \\(C\\)ZDS CORP''')
 		self._monitor_pattern = re.compile(b'''[\\x20-\\x7E]+ Monitor, Version [\\x20-\\x7E]+''')
 
 	def can_handle(self, file_path, file_data, header_data):
