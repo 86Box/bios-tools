@@ -440,8 +440,11 @@ class AMIAnalyzer(Analyzer):
 				signon_terminator += b'''\\x00'''
 
 			# Extract sign-on.
-			self.signon = util.read_string(file_data[id_block_index + 0x100:id_block_index + 0x200], terminator=signon_terminator)
-			self.debug_print('Raw sign-on:', repr(self.signon))
+			signon = util.read_string(file_data[id_block_index + 0x100:id_block_index + 0x200], terminator=signon_terminator)
+			self.debug_print('Raw sign-on:', repr(signon))
+			if self.signon: # Intel may already have a sign-on here
+				self.signon += '\n'
+			self.signon += signon
 
 			# Separate full copyright string from the sign-on and add it as metadata.
 			# Copyright line may be terminated by a carriage return only (MSI MS-7522: line is blank)
