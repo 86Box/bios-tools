@@ -1659,8 +1659,8 @@ class MRAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('MR', *args, **kwargs)
 
-		self._version_older_pattern = re.compile(b'''Ver:? (V[^-]+)(?:-| +Port )([\\x21-\\x7E]+)''')
-		self._version_newer_pattern = re.compile(b'''[A-Z ]{7} \\((?:r|tm)\\)  (V[^ ']+)(?: ([\\x21-\\x7E]+))?''')
+		self._version_older_pattern = re.compile(b'''Ver:? (V[\\x21-\\x2C\\x2E-\\x7E]+)(?:-| +Port )([\\x21-\\x7E]+)''')
+		self._version_newer_pattern = re.compile(b'''[A-Z ]{7} \\((?:r|tm)\\)  (V[\\x21-\\x26\\x28-\\x7E]+) \\x09 ([\\x21-\\x7E]+)''')
 		self._signon_pattern = re.compile(
 			b'''OEM SIGNON >>-->''' # start marker
 			b'''(?:[\\x20-\\x7E][\\x00-\\x1F\\x7F-\\xFF][\\x00-\\xFF]{14})?''' # code inbetween (on older BIOSes)
@@ -1688,7 +1688,7 @@ class MRAnalyzer(Analyzer):
 			# Extract newer format version.
 			match = self._version_newer_pattern.search(file_data)
 			if match:
-				self.debug_print('Raw older version:', match.group(0))
+				self.debug_print('Raw newer version:', match.group(0))
 
 				# Extract version.
 				self.version = util.read_string(match.group(1))
