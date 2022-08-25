@@ -1847,13 +1847,18 @@ class PhoenixAnalyzer(Analyzer):
 		# Backup location used as a last resort.
 		self._40x_version_alt_pattern = re.compile(b'''v([0-9]\\.[0-9]{2}) Copyright 1985-[0-9]+ Phoenix Technologies Ltd''')
 		# Some are cME, some are not; cME was the product name.
-		self._core_version_pattern = re.compile(b'''Phoenix (?:cME )?[A-Za-z]+Core|FirstBIOS[\\x20-\\x7E]+''')
+		# Not all SecureCore Tiano have the SC-T version string...
+		self._core_version_pattern = re.compile(b'''Phoenix (?:(?:cME )?[A-Za-z]+Core|FirstBIOS|BIOS SC-T (v[0-9\\.]+))[\\x20-\\x7E]*''')
+		# ...in which case we use this.
+		self._sct_marker_pattern = re.compile(b'''SecureCore Tiano \\(TM\\) Preboot Agent |CSM_Egroup Code Ending''')
 
 		self._dell_system_pattern = re.compile(b'''Dell System [\\x20-\\x7E]+''')
-		self._dell_version_pattern = re.compile(b'''(?:BIOS [Vv]ersion(?!  =):?|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version [^\\s]+) ([A-Z0-9.]+)''')
+		self._dell_version_pattern = re.compile(b'''(?:BIOS [Vv]ersion(?!  =):?|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version [^\\s]+) ([A-Z0-9\\.]+)''')
 		self._dell_version_code_pattern = re.compile(b'''([A-Z][0-9]{2})''')
 		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved''')
 		self._hp_signon_pattern = re.compile(b'''Version +[\\x21-\\x7E]+ +HP [\\x20-\\x7E]+''')
+		# Versa 2000
+		self._nec_signon_pattern = re.compile(b'''\\xE9[\\x00-\\xFF]{2}(NEC Corporation\\x0D\\x0A[\\x0D\\x0A\\x20-\\x7E]*)''')
 		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Xx86)
 		# "All Rights Reserved\r\n\n\x00" (Commodore 386LT, Tandy 1000RSX)
 		# "All Rights Reserved\r\n\n" (ROM BIOS)
@@ -2465,21 +2470,16 @@ class PhoenixAnalyzer(Analyzer):
 		self._regtable_entries[0] = self._regtable_entries[1]
 
 		self.register_check_list([
-			((self._signon_nec_precheck, self._signon_nec),	AlwaysRunChecker),
-			(self._version_sct,								RegexChecker),
-			(self._version_sct_preboot,						SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			(self._version_tandy,							SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			(self._signon_ast,								SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
-			(self._signon_commodore,						RegexChecker),
-			(self._signon_hp,								RegexChecker),
-			(self._signon_nec_trigger,						RegexChecker),
-			(self._signon_tandy,							RegexChecker),
+			(self._version_tandy,		SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
+			(self._signon_ast,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
+			(self._signon_commodore,	RegexChecker),
+			(self._signon_hp,			RegexChecker),
+			(self._signon_tandy,		RegexChecker),
 		])
 
 	def reset(self):
 		super().reset()
 		self._regtables = {}
-		self._trap_signon_nec = False
 		self._found_signon_tandy = ''
 
 	class BCP:
@@ -2783,9 +2783,16 @@ class PhoenixAnalyzer(Analyzer):
 				# Locate SecureCore/TrustedCore/FirstBIOS version.
 				match = self._core_version_pattern.search(file_data)
 				if match:
-					# Assume base core version if we don't have a better one from BCPSYS.
-					if not self.version:
-						self.version = '4.0 Release 6.0'
+					# Check if this is a SecureCore Tiano version.
+					sct_version = match.group(1)
+					if sct_version:
+						# Extract version.
+						self.version = 'SecureCore Tiano ' + util.read_string(sct_version)
+					else:
+						# Not SecureCore Tiano. Assume base core version
+						# if we don't have a better one from BCPSYS.
+						if not self.version:
+							self.version = '4.0 Release 6.0'
 
 					# Extract full version as metadata.
 					version_string = util.read_string(match.group(0))
@@ -2845,7 +2852,14 @@ class PhoenixAnalyzer(Analyzer):
 								self.metadata.append(('ID', version_string))
 								self.debug_print('Raw ROM BIOS version:', repr(version_string))
 							else:
-								self.debug_print('No version found!')
+								# Locate SecureCore Tiano marker strings, in case no version string was found.
+								if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
+									match = self._sct_marker_pattern.search(file_data)
+								if match:
+									self.debug_print('SecureCore Tiano marker:', match.group(0))
+									self.version = 'SecureCore Tiano'
+								else:
+									self.debug_print('No version found!')
 
 		# Save post-version sign-on to be restored later.
 		post_version = self.signon
@@ -2983,7 +2997,7 @@ class PhoenixAnalyzer(Analyzer):
 				self.signon = util.read_string(signon)
 				self.debug_print('Raw BCPOST sign-on:', repr(self.signon))
 		else:
-			# Determine if this is a Dell BIOS.
+			# Determine if this is a customized Dell BIOS.
 			match = self._dell_system_pattern.search(file_data)
 			if match:
 				# Backup in case no Phoenix version is found, which is possible given compression.
@@ -2991,7 +3005,7 @@ class PhoenixAnalyzer(Analyzer):
 					self.version = 'Dell'
 
 				# Extract the model as a sign-on.
-				self.signon = match.group(0).decode('cp437', 'ignore')
+				self.signon = util.read_string(match.group(0))
 				self.debug_print('Dell model:', self.signon)
 
 				# Add version information to the sign-on, looking at the data after the model first...
@@ -3004,49 +3018,55 @@ class PhoenixAnalyzer(Analyzer):
 						# ...then on byte 48 of some files.
 						match = self._dell_version_code_pattern.match(file_data[0x30:0x33])
 				if match:
-					version_string = match.group(1)
-					self.signon += '\nBIOS Version: ' + version_string.decode('cp437', 'ignore')
-					self.debug_print('Dell version:', version_string)
+					version_string = util.read_string(match.group(1))
+					self.signon += '\nBIOS Version: ' + version_string
+					self.debug_print('Dell version:', repr(version_string))
 			else:
-				# Determine if this is some sort of HP Vectra BIOS.
+				# Determine if this a customized HP Vectra BIOS.
 				match = self._hp_pattern.search(file_data)
 				if match:
 					self.version = 'HP'
 
 					# Extract code as a string.
-					self.string = match.group(1).decode('cp437', 'ignore')
+					self.string = util.read_string(match.group(1))
 
 					# Extract the version number as a sign-on.
 					match = self._hp_signon_pattern.search(file_data)
 					if match:
-						self.signon = match.group(0).decode('cp437', 'ignore')
-						self.debug_print('HP version:', self.signon)
+						self.signon = util.read_string(match.group(0))
+						self.debug_print('HP version:', repr(self.signon))
 				else:
-					# Extract sign-on from Ax86 and older BIOSes.
-					match = self._rombios_signon_pattern.search(file_data)
+					# Determine if this is a customized NEC BIOS.
+					match = self._nec_signon_pattern.search(file_data)
 					if match:
-						copyright_index = match.start(0)
-						if self._rombios_signon_dec_pattern.match(file_data[copyright_index - 48:copyright_index]):
-							self.debug_print('Ignored bogus sign-on on DEC BIOS')
-							match = None
-						else:
-							signon_log = 'std'
+						# Extract the model as a sign-on.
+						self.signon = util.read_string(match.group(1))
+						self.debug_print('NEC model:', repr(self.signon))
 					else:
-						match = self._rombios_signon_alt_pattern.search(file_data)
-						signon_log = 'alt'
-					if match:
-						end = match.end(0)
-						if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
-							signon = util.read_string(file_data[end:end + 256])
-							if len(signon) <= 3: # Phoenix video BIOS (Commodore SL386SX25), bogus data (NEC Powermate V)
+						# Extract sign-on from Ax86 and older BIOSes.
+						match = self._rombios_signon_pattern.search(file_data)
+						if match:
+							copyright_index = match.start(0)
+							if self._rombios_signon_dec_pattern.match(file_data[copyright_index - 48:copyright_index]):
+								self.debug_print('Ignored bogus sign-on on DEC BIOS')
 								match = None
-								self.debug_print('Ignored bogus sign-on (too short)')
 							else:
-								self.signon = signon
-								self.debug_print('Raw old', signon_log, 'sign-on:', repr(self.signon))
+								signon_log = 'std'
 						else:
-							self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
-							match = None
+							match = self._rombios_signon_alt_pattern.search(file_data)
+							signon_log = 'alt'
+						if match:
+							end = match.end(0)
+							if file_data[end] != 0xfa: # (unknown 8088 PLUS 2.52)
+								signon = util.read_string(file_data[end:end + 256])
+								if len(signon) <= 3: # Phoenix video BIOS (Commodore SL386SX25), bogus data (NEC Powermate V)
+									match = None
+									self.debug_print('Ignored bogus sign-on (too short)')
+								else:
+									self.signon = signon
+									self.debug_print('Raw old', signon_log, 'sign-on:', repr(self.signon))
+							else:
+								self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
 
 		# Restore post-version sign-on.
 		if post_version != self.signon:
@@ -3059,34 +3079,6 @@ class PhoenixAnalyzer(Analyzer):
 		if self.signon:
 			self.signon = self.signon.replace('\r', '\n').replace('\x00', ' ')
 			self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
-
-		return True
-
-	def _signon_nec_precheck(self, line):
-		return self._trap_signon_nec
-
-	def _version_sct(self, line, match):
-		'''Phoenix BIOS SC-T (v[^\\s#]+)'''
-		# (SecureCore Tiano)
-		# "SC-T v2.2#AcerSystem" (unknown Acer)
-
-		# Extract version.
-		self.version = 'SecureCore Tiano ' + match.group(1)
-
-		# This is UEFI.
-		self.metadata.append(('UEFI', 'SC-T'))
-
-		return True
-
-	def _version_sct_preboot(self, line, match):
-		'''SecureCore Tiano (TM) Preboot Agent '''
-
-		# Extract version if a more specific one wasn't already found.
-		if not self.version:
-			self.version = 'SecureCore Tiano'
-
-		# This is UEFI.
-		self.metadata.append(('UEFI', 'SC-T'))
 
 		return True
 
@@ -3130,34 +3122,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Extract the version string as a sign-on.
 		self.signon = match.group(0)
-
-		return True
-
-	def _signon_nec_trigger(self, line, match):
-		'''^..(NEC Corporation)$'''
-
-		# This is an NEC BIOS.
-		if not self.version:
-			self.version = 'NEC'
-
-		# Discard any bogus sign-on extracted earlier.
-		self.signon = match.group(1)
-
-		# Read sign-on on the next line or two.
-		self._trap_signon_nec = True
-
-		return True
-
-	def _signon_nec(self, line, match):
-		# Disarm trap once we reach the end.
-		if line == '@((PP((PP,(-)*.':
-			self._trap_signon_nec = False
-			return False
-
-		# Add line to the sign-on, skipping duplicates.
-		signon = line.strip()
-		if signon not in self.signon:
-			self.signon += '\n' + signon
 
 		return True
 
