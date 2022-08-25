@@ -127,6 +127,7 @@ def extract_process(queue, abort_flag, multifile_lock, dir_number_path, next_dir
 		]
 	file_extractors += [
 		extractors.IntelExtractor(),
+		extractors.OCFExtractor(),
 		extractors.OMFExtractor(),
 		extractors.TrimondExtractor(),
 		extractors.InterleaveExtractor(),
