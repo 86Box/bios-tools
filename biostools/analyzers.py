@@ -1042,7 +1042,8 @@ class BonusAnalyzer(Analyzer):
 	def can_handle(self, file_path, file_data, header_data):
 		# PhoenixNet
 		if util.all_match(self._phoenixnet_patterns, file_data):
-			self.metadata.append(('Add-on', 'PhoenixNet'))
+			# TODO: PhoenixNet-specific sign-ons
+			self.metadata.append(('PhoenixNet', ''))
 
 		# ACPI tables
 		acpi_tables = []
@@ -1843,12 +1844,14 @@ class PhoenixAnalyzer(Analyzer):
 		self._sct_version_pattern = re.compile(b'''Phoenix BIOS SC-T (v[0-9\\.]+)[\\x20-\\x7E]*''')
 		# ...in which case we use this.
 		self._sct_marker_pattern = re.compile(b'''SecureCore Tiano \\(TM\\) Preboot Agent |CSM_Egroup Code Ending''')
+		# "BIOS ROM" (Tandy) and "ROM BIOS" (HP)
+		self._compat_pattern = re.compile(b'''(?:BIOS ROM|ROM BIOS)[\\x0D\\x0A\\x20-\\x7E]+Compatibility Software[\\x0D\\x0A\\x20-\\x7E]+Phoenix[\\x0D\\x0A\\x20-\\x7E]+''')
 
 		self._dell_system_pattern = re.compile(b'''Dell System [\\x20-\\x7E]+''')
 		self._dell_version_pattern = re.compile(b'''(?:BIOS [Vv]ersion(?!  =):?|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version [^\\s]+) ([A-Z0-9\\.]+)''')
 		self._dell_version_code_pattern = re.compile(b'''([A-Z][0-9]{2})''')
-		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved''')
-		self._hp_signon_pattern = re.compile(b'''Version +[\\x21-\\x7E]+ +HP [\\x20-\\x7E]+''')
+		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved[\\x20-\\x7E]+''')
+		self._hp_signon_pattern = re.compile(b'''[\\x0D\\x0A]Version +([^ ]+)([\\x20-\\x7E]+)''')
 		# Versa 2000
 		self._nec_signon_pattern = re.compile(b'''\\xE9[\\x00-\\xFF]{2}(NEC Corporation\\x0D\\x0A[\\x0D\\x0A\\x20-\\x7E]*)''')
 		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Xx86)
@@ -2462,16 +2465,12 @@ class PhoenixAnalyzer(Analyzer):
 		self._regtable_entries[0] = self._regtable_entries[1]
 
 		self.register_check_list([
-			(self._version_tandy,		SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
 			(self._signon_commodore,	RegexChecker),
-			(self._signon_hp,			RegexChecker),
-			(self._signon_tandy,		RegexChecker),
 		])
 
 	def reset(self):
 		super().reset()
 		self._regtables = {}
-		self._found_signon_tandy = ''
 
 	class BCP:
 		def __init__(self, signature, version_maj, version_min, offset, data):
@@ -2830,14 +2829,25 @@ class PhoenixAnalyzer(Analyzer):
 							self.metadata.append(('ID', version_string))
 							self.debug_print('Raw ROM BIOS version:', repr(version_string))
 						else:
-							# Locate SecureCore Tiano marker strings, in case no version string was found.
-							if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
-								match = self._sct_marker_pattern.search(file_data)
+							# Locate Compatibility Software version.
+							match = self._compat_pattern.search(file_data)
 							if match:
-								self.debug_print('SecureCore Tiano marker:', match.group(0))
-								self.version = 'SecureCore Tiano'
+								# Set catch-all version.
+								self.version = 'Tandy'
+
+								# Extract full version string as metadata.
+								version_string = util.read_string(match.group(0))
+								self.metadata.append(('ID', version_string))
+								self.debug_print('Raw Compatibility Software version:', repr(version_string))
 							else:
-								self.debug_print('No version found!')
+								# Locate SecureCore Tiano marker strings, in case no version string was found.
+								if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
+									match = self._sct_marker_pattern.search(file_data)
+								if match:
+									self.debug_print('SecureCore Tiano marker:', match.group(0))
+									self.version = 'SecureCore Tiano'
+								else:
+									self.debug_print('No version found!')
 
 		# Save post-version sign-on to be restored later.
 		post_version = self.signon
@@ -3073,18 +3083,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		return True
 
-	def _version_tandy(self, line, match):
-		'''$ Tandy Corporation '''
-
-		# This is a Tandy BIOS with Phoenix Compatibility Software.
-		if not self.version:
-			self.version = 'Tandy'
-
-		# Set Tandy sign-on if we already found one.
-		self.signon = self._found_signon_tandy
-
-		return True
-
 	def _signon_commodore(self, line, match):
 		'''^ *(Commodore [^\s]+ BIOS Rev\. [^\s]+)'''
 
@@ -3092,28 +3090,6 @@ class PhoenixAnalyzer(Analyzer):
 		self.signon = match.group(1)
 
 		return True
-
-	def _signon_hp(self, line, match):
-		'''^(?:[A-Z]{2,3})\.(?:[0-9]{2})\.(?:[0-9]{2})(?: \((?:[A-Z]{2,3})\.(?:[0-9]{2})\.(?:[0-9]{2})\)|$)'''
-
-		# This is an HP BIOS.
-		if not self.version:
-			self.version = 'HP'
-
-		# Extract the version string as a sign-on.
-		self.signon = match.group(0)
-
-		return True
-
-	def _signon_tandy(self, line, match):
-		'''^\!BIOS ROM version ([^\s]+)'''
-
-		# Extract the Tandy version as a sign-on.
-		self._found_signon_tandy = line[1:]
-
-		# Set sign-on if we already determined this is a Tandy BIOS.
-		if self.version == 'Tandy':
-			self.signon = self._found_signon_tandy
 
 
 class PromagAnalyzer(Analyzer):
