@@ -1,6 +1,6 @@
 import getopt, os, queue, subprocess, sys, threading, time
 
-algos = ['lh5', 'lzari', 'bcd6f1', 'lzh']
+algos = ['lh5', 'lzari', 'lzh', 'notlzss', 'notlzari', 'notlzh']
 longest_algo = 0
 thread_status = []
 term_size = os.get_terminal_size()

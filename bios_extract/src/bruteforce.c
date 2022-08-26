@@ -14,6 +14,7 @@
 #include "bios_extract.h"
 #include "lh5_extract.h"
 #include "lzss_extract.h"
+#include "phoenix_extract.h"
 
 /* for phoenix.c */
 unsigned char *MMapOutputFile(char *filename, int size) { return NULL; }
@@ -137,12 +138,19 @@ int main(int argc, char *argv[])
 					break;
 
 				case 2:
-					PhoenixBCD6F1Decode(bufs[params[0]].buf + params[1], params[2], bufs[params[3]].buf + params[4], params[5]);
-					ret = 0;
+					ret = unlzh(bufs[params[0]].buf + params[1], params[2], bufs[params[3]].buf + params[4], params[5]);
 					break;
 
 				case 3:
-					ret = unlzh(bufs[params[0]].buf + params[1], params[2], bufs[params[3]].buf + params[4], params[5]);
+					ret = unnotlzss(bufs[params[0]].buf + params[1], params[2], bufs[params[3]].buf + params[4], params[5], ' ');
+					break;
+
+				case 4:
+					ret = unnotlzari(bufs[params[0]].buf + params[1], params[2], bufs[params[3]].buf + params[4], params[5], ' ');
+					break;
+
+				case 5:
+					ret = unnotlzh(bufs[params[0]].buf + params[1], params[2], bufs[params[3]].buf + params[4], params[5]);
 					break;
 			}
 
