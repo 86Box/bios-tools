@@ -964,37 +964,72 @@ class AwardPowerAnalyzer(Analyzer):
 		super().__init__('AwardPower', *args, **kwargs)
 		self.vendor = 'Award'
 
-		self.register_check_list([
-			(self._version,	RegexChecker),
-			(self._string,	RegexChecker)
-		])
+		self._check_pattern = re.compile(b'''PowerBIOS Setup''')
+		self._id_block_pattern = re.compile(b'''IBM COMPATIBLE BIOS COPYRIGHT AWARD SOFTWARE INC\\.''')
+		self._strings_pattern = re.compile(b'''[\\x01-\\xFF]+\\x00''')
+		self._version_pattern = re.compile('''Version ([\\x21-\\x7E]+)''')
+		self._siemens_string_pattern = re.compile(b'''- [\\x20-\\x7E]+\\x0D\\x0A\\x00''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		if b'PowerBIOS Setup' not in file_data or b'Award Software International, Inc.' not in file_data:
+		if not self._check_pattern.search(file_data):
 			return False
 
-		# Identify as PowerBIOS.
+		# Determine location of the identification block.
+		match = self._id_block_pattern.search(file_data)
+		if not match:
+			return False
+		id_block_index = match.start(0)
+		self.debug_print('ID block starts at', hex(id_block_index))
+
+		# Extract string list.
+		strings = []
+		for match in self._strings_pattern.finditer(file_data[id_block_index + 0x82:id_block_index + 0x102]):
+			entry = match.group(0)
+			self.debug_print('String list entry:', entry)
+			if len(entry) <= 2: # skip empty strings (Siemens FM456-2 after serial)
+				continue
+			strings.append(util.read_string(entry))
+
+		# Parse string list.
 		self.version = 'PowerBIOS'
+		if len(strings) > 0:
+			# Extract ID string.
+			if len(strings) > 1:
+				self.string = strings.pop()
+
+				# Extraneous "m" on some strings (Siemens FM356/456-4)
+				if self.string[0:1] == 'm':
+					self.string = self.string[1:]
+
+				# Modified string display routine (Siemens FM456-2)
+				if self.string.strip() == 'Serial No.':
+					# This modified string begins with the entry point date.
+					match = NoInfoAnalyzer._entrypoint_date_pattern.search(file_data)
+					if match:
+						self.string = util.read_string(match.group(1))
+
+					# It continues on at a different point in the image.
+					match = self._siemens_string_pattern.search(file_data)
+					if match:
+						self.string += ' ' + util.read_string(match.group(0)).strip()
+
+			# Extract full version string as metadata.
+			# Copyright line not always present (Siemens FM456-2)
+			stripped = (x.strip() for x in strings)
+			version_string = '\n'.join(x for x in stripped if x)
+			self.debug_print('Raw version string:', repr(version_string))
+			self.metadata.append(('ID', version_string))
+
+			# Extract version.
+			match = self._version_pattern.search(version_string)
+			if match:
+				self.version += ' ' + match.group(1)
+
+		# Extract sign-on.
+		self.signon = util.read_string(file_data[id_block_index - 0xe00e:id_block_index - 0xdf0e])
+		self.debug_print('Raw sign-on:', repr(self.signon))
 
 		return True
-
-	def _version(self, line, match):
-		'''PowerBIOS  Version (.+)'''
-
-		# Add version number if there isn't one already.
-		if ' ' not in self.version:
-			self.version += ' ' + match.group(1).lstrip()
-			return True
-
-		return False
-
-	def _string(self, line, match):
-		'''-3[12357ABCDE][A-Z0-9]{6}'''
-
-		# PowerBIOS has an Award identification block similar to v4.xx,
-		# but it doesn't always contain the string. (SIMATIC M7-400 MOV450)
-		# Just detect the string heuristically and take the whole line.
-		self.string = line.strip(' -')
 
 
 class BonusAnalyzer(Analyzer):
