@@ -1846,12 +1846,12 @@ class PhoenixAnalyzer(Analyzer):
 		self._sct_marker_pattern = re.compile(b'''SecureCore Tiano \\(TM\\) Preboot Agent |CSM_Egroup Code Ending''')
 		# "BIOS ROM" (Tandy) and "ROM BIOS" (HP)
 		self._compat_pattern = re.compile(b'''(?:BIOS ROM|ROM BIOS)[\\x0D\\x0A\\x20-\\x7E]+Compatibility Software[\\x0D\\x0A\\x20-\\x7E]+Phoenix[\\x0D\\x0A\\x20-\\x7E]+''')
-
+		# Prefix decoded from CP437: "┌─+┐"
+		self._commodore_signon_pattern = re.compile(b'''\\xDA\\xC4+\\xBF[\\x01-\\xFF]+''')
 		self._dell_system_pattern = re.compile(b'''Dell System [\\x20-\\x7E]+''')
 		self._dell_version_pattern = re.compile(b'''(?:BIOS [Vv]ersion(?!  =):?|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version [^\\s]+) ([A-Z0-9\\.]+)''')
 		self._dell_version_code_pattern = re.compile(b'''([A-Z][0-9]{2})''')
 		self._hp_pattern = re.compile(b'''([\\x21-\\x7E]+ [\\x21-\\x7E]+) \\(C\\)Copyright 1985-.... Hewlett-Packard Company, All Rights Reserved[\\x20-\\x7E]+''')
-		self._hp_signon_pattern = re.compile(b'''[\\x0D\\x0A]Version +([^ ]+)([\\x20-\\x7E]+)''')
 		# Versa 2000
 		self._nec_signon_pattern = re.compile(b'''\\xE9[\\x00-\\xFF]{2}(NEC Corporation\\x0D\\x0A[\\x0D\\x0A\\x20-\\x7E]*)''')
 		# "All Rights Reserved\r\n\n\x00\xF4\x01" (Xx86)
@@ -2464,10 +2464,6 @@ class PhoenixAnalyzer(Analyzer):
 		}
 		self._regtable_entries[0] = self._regtable_entries[1]
 
-		self.register_check_list([
-			(self._signon_commodore,	RegexChecker),
-		])
-
 	def reset(self):
 		super().reset()
 		self._regtables = {}
@@ -2832,13 +2828,29 @@ class PhoenixAnalyzer(Analyzer):
 							# Locate Compatibility Software version.
 							match = self._compat_pattern.search(file_data)
 							if match:
-								# Set catch-all version.
-								self.version = 'Tandy'
-
-								# Extract full version string as metadata.
+								# Extract full version string.
 								version_string = util.read_string(match.group(0))
-								self.metadata.append(('ID', version_string))
 								self.debug_print('Raw Compatibility Software version:', repr(version_string))
+
+								# Determine if this is HP, and if so, extract the identifier/date as a string.
+								match = self._hp_pattern.search(file_data)
+								if match:
+									self.version = 'HP'
+									self.string = util.read_string(match.group(1))
+									self.debug_print('HP string:', repr(self.string))
+
+									# Extract version/model from the version string as a sign-on.
+									version_index = version_string.rfind('\n\rVersion')
+									if version_index > -1:
+										self.signon = version_string[version_index:].strip()
+										version_string = version_string[:version_index]
+								else:
+									# Assume Tandy as a catch-all.
+									self.version = 'Tandy'
+									self.debug_print('Looks like Tandy')
+
+								# Add full version string as metadata.
+								self.metadata.append(('ID', version_string.strip()))
 							else:
 								# Locate SecureCore Tiano marker strings, in case no version string was found.
 								if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
@@ -2848,9 +2860,6 @@ class PhoenixAnalyzer(Analyzer):
 									self.version = 'SecureCore Tiano'
 								else:
 									self.debug_print('No version found!')
-
-		# Save post-version sign-on to be restored later.
-		post_version = self.signon
 
 		# Extract sign-on from BCPOST on 4.0x and newer BIOSes.
 		if bios_maj != None and bios_min != None and code_segment != None:
@@ -3023,19 +3032,11 @@ class PhoenixAnalyzer(Analyzer):
 					self.signon += '\nBIOS Version: ' + version_string
 					self.debug_print('Dell version:', repr(version_string))
 			else:
-				# Determine if this a customized HP Vectra BIOS.
-				match = self._hp_pattern.search(file_data)
+				# Determine if this a customized Commodore BIOS.
+				match = self._commodore_signon_pattern.search(file_data)
 				if match:
-					self.version = 'HP'
-
-					# Extract code as a string.
-					self.string = util.read_string(match.group(1))
-
-					# Extract the version number as a sign-on.
-					match = self._hp_signon_pattern.search(file_data)
-					if match:
-						self.signon = util.read_string(match.group(0))
-						self.debug_print('HP version:', repr(self.signon))
+					self.signon = util.read_string(match.group(0))
+					self.debug_print('Raw Commodore sign-on:', repr(self.signon))
 				else:
 					# Determine if this is a customized NEC BIOS.
 					match = self._nec_signon_pattern.search(file_data)
@@ -3069,25 +3070,10 @@ class PhoenixAnalyzer(Analyzer):
 							else:
 								self.debug_print('Ignored bogus sign-on, first bytes:', repr(file_data[end:end + 8]))
 
-		# Restore post-version sign-on.
-		if post_version != self.signon:
-			if self.signon:
-				self.signon = post_version + '\n' + self.signon
-			else:
-				self.signon = post_version
-
 		# Split sign-on lines.
 		if self.signon:
 			self.signon = self.signon.replace('\r', '\n').replace('\x00', ' ')
 			self.signon = '\n'.join(x.strip() for x in self.signon.split('\n') if x.strip()).strip('\n')
-
-		return True
-
-	def _signon_commodore(self, line, match):
-		'''^ *(Commodore [^\s]+ BIOS Rev\. [^\s]+)'''
-
-		# Extract the version string as a sign-on.
-		self.signon = match.group(1)
 
 		return True
 
