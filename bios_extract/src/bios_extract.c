@@ -195,6 +195,7 @@ static struct {
 	"(AAMMIIBBIIOOSS)", "AMIBIOSC", AMI940725Extract}, { /* 12/15/93 */
 	"= Award Decompression Bios =", NULL, AwardExtract}, {
 	"awardext.rom", NULL, AwardExtract}, {
+	"PowerBIOS Setup\x00", NULL, AwardExtract}, { /* Siemens PowerBIOS */
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
 	"\x00IBM AT Compatible Phoenix NuBIOS", "BCPSEGMENT", PhoenixExtract}, { /* Phoenix copyrights scrubbed (Gateway Solo 2500) */
 	"\xEE\x88SYSBIOS", "\xEE\x88", SystemSoftExtract}, {
