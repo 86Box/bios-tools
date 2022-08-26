@@ -3343,8 +3343,13 @@ class WhizproAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Whizpro', *args, **kwargs)
 
+		self._check_pattern = re.compile(b'''\\$[A-Z]{7}''')
+
 	def can_handle(self, file_path, file_data, header_data):
-		if b'$PREPOST' not in file_data or b'$BOOTBLK' not in file_data:
+		found_segments = []
+		for match in self._check_pattern.finditer(file_data):
+			found_segments.append(match.group(0))
+		if b'$PREPOST' not in found_segments or b'$BOOTBLK' not in found_segments:
 			return False
 
 		# Extract build date as version, as there's no actual
@@ -3363,28 +3368,6 @@ class WhizproAnalyzer(Analyzer):
 		self.signon = util.read_string(file_data[id_block_index:id_block_index + 0x20])
 
 		return True
-
-	def _signon_precheck(self, line):
-		return self._trap_signon
-
-	def _signon(self, line, match):
-		# The sign-on is one line before the string, so we must store all
-		# lines, then act upon the last stored line when the string is found.
-		self._found_signon = line
-
-		return True
-
-	def _string(self, line, match):
-		'''^[A-Z]-.+-[0-9]+$'''
-
-		# Extract string.
-		self.string = match.group(0)
-
-		# Extract sign-on.
-		self.signon = self._found_signon
-
-		# Disarm sign-on trap.
-		self._trap_signon = False
 
 
 class ZenithAnalyzer(Analyzer):
