@@ -1809,8 +1809,8 @@ class PhoenixAnalyzer(Analyzer):
 		super().__init__('Phoenix', *args, **kwargs)
 
 		# "Phoenix ROM BIOS" (Dell Latitude CP/CPI)
-		# No Phoenix copyrights, fallback to NuBIOS (Gateway Solo 2500)
-		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess|\\x00IBM AT Compatible Phoenix NuBIOS\\x00''')
+		# No Phoenix copyrights, fallback to NuBIOS (Gateway Solo 2500, AST Advantage! 4075P)
+		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess|\\x00IBM AT Compatible Phoenix NuBIOS''')
 		self._ignore_pattern = re.compile(b'''search=f000,0,ffff,S,"|\\x00\\xC3\\x82as Ltd. de Phoenix del \\xC2\\x83 de Tecnolog\\xC3\\x83\\x00''')
 		self._bcpsegment_pattern = re.compile(b'''BCPSEGMENT''')
 
@@ -1839,16 +1839,8 @@ class PhoenixAnalyzer(Analyzer):
 			b'''[\\x00-\\xFF]+''' # metric ton of code inbetween
 			b'''(PhoenixBIOS\\(TM\\) )\\x00''' # Phoenix brand
 		)
-		self._40x_version_pattern = re.compile(
-			b'''Phoenix(?:MB(?: BIOS)?|(?: [A-Za-z]*?)?BIOS) +(?:Developmental +)?(?:Plug and Play +)?''' # branch ("PhoenixMB" (4alp001) but what has "PhoenixMB BIOS" was lost to time, "Developmental" (HP Vectra 56-56x, DEC Multia), "Plugh and Play" (ALR Sequel))
-			b'''(?:Version +)?(?:[0-9]+(?:\\.[0-9]+)? Release )?[0-9]+\\.[\\x21-\\x2D\\x2F-\\x7E]+''' # actual version (multiple spaces before version (Siemens Nixdorf), can be single digit (ServerBIOS 2/3 Release 6.0))
-			b'''[\\x08\\x20-\\x7E]*''' # added patch levels (HP "4.02. " <ASCII backspace> "18", 4.05".Z.00", 6.0".I", ALR "5.10.3") and OEM info (Micronics M55Hi-Plus 6.12)
-		)
-		# Backup location used as a last resort.
-		self._40x_version_alt_pattern = re.compile(b'''v([0-9]\\.[0-9]{2}) Copyright 1985-[0-9]+ Phoenix Technologies Ltd''')
-		# Some are cME, some are not; cME was the product name.
-		# Not all SecureCore Tiano have the SC-T version string...
-		self._core_version_pattern = re.compile(b'''Phoenix (?:(?:cME )?[A-Za-z]+Core|FirstBIOS|BIOS SC-T (v[0-9\\.]+))[\\x20-\\x7E]*''')
+		# Not all SecureCore Tiano have this version string...
+		self._sct_version_pattern = re.compile(b'''Phoenix BIOS SC-T (v[0-9\\.]+)[\\x20-\\x7E]*''')
 		# ...in which case we use this.
 		self._sct_marker_pattern = re.compile(b'''SecureCore Tiano \\(TM\\) Preboot Agent |CSM_Egroup Code Ending''')
 
@@ -2471,7 +2463,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		self.register_check_list([
 			(self._version_tandy,		SubstringChecker, SUBSTRING_FULL_STRING | SUBSTRING_CASE_SENSITIVE),
-			(self._signon_ast,			SubstringChecker, SUBSTRING_BEGINNING | SUBSTRING_CASE_SENSITIVE),
 			(self._signon_commodore,	RegexChecker),
 			(self._signon_hp,			RegexChecker),
 			(self._signon_tandy,		RegexChecker),
@@ -2521,7 +2512,7 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Skip BCP parsing if this is not 4.0x or newer.
 		raw_data = b''
-		bios_maj = bios_min = code_segment = None
+		bios_maj = bios_min = code_segment = regtable_segment = None
 		if self._bcpsegment_pattern.search(file_data):
 			# Load raw BIOS data.
 			compressed = os.path.isdir(file_path)
@@ -2536,6 +2527,12 @@ class PhoenixAnalyzer(Analyzer):
 					raw_data = file_data
 			else:
 				raw_data = file_data
+
+			# Remove footer (platform.bin?) (Tyan Tiger MP)
+			if len(raw_data) & 0xffff:
+				last_block = len(raw_data) & ~0xffff
+				if raw_data[last_block:last_block + 2] == b'BC':
+					raw_data = raw_data[:last_block]
 
 			# Create a virtual memory space with the file loaded to its end.
 			virtual_mem = bytearray(0x100000)
@@ -2587,7 +2584,7 @@ class PhoenixAnalyzer(Analyzer):
 				# Stop looking if this appears to be a valid BCPSEGMENT.
 				if valid_bcp:
 					# Set initial code segment.
-					code_segment = (bcpsegment_offset & -0x10000) >> 4
+					code_segment = regtable_segment = (bcpsegment_offset & ~0xffff) >> 4
 					break
 
 			self.debug_print('Found BCPs:', bcp)
@@ -2708,6 +2705,9 @@ class PhoenixAnalyzer(Analyzer):
 							self._add_regtable(regtable_type >> 4, regtable_model)
 					else:
 						self.debug_print('Potentially bogus register table pointer array with', int((regtable_end - regtable_start) / 2), 'entries')
+				else:
+					# Restore code segment for BCPOST version string extraction.
+					regtable_segment = code_segment
 
 			# Extract chipset information from BCPCHP.
 			for bcpchp in bcp.get('BCPCHP', []):
@@ -2764,102 +2764,80 @@ class PhoenixAnalyzer(Analyzer):
 			if regtable_metadata:
 				self.metadata.append(('Table', regtable_metadata[1:]))
 
-		# Locate main 4.0x version.
-		match = self._40x_version_pattern.search(file_data)
-		if match:
-			# Extract full version string as metadata.
-			version_string = util.read_string(match.group(0))
-			self.metadata.append(('ID', version_string))
-			self.debug_print('Raw 4.0x version:', repr(version_string))
-		else:
-			# Locate backup 4.0x version, but only if we don't have a better one from BCPSYS.
-			if not self.version:
-				match = self._40x_version_alt_pattern.search(file_data)
+		# Check version manually if this is a non-BCP BIOS.
+		if not self.version:
+			# Locate SecureCore Tiano version.
+			match = self._sct_version_pattern.search(file_data)
 			if match:
-				# Extract base core version.
-				self.version = util.read_string(match.group(1))
-				self.debug_print('Backup 4.0x version:', repr(match.group(0)))
-			else:
-				# Locate SecureCore/TrustedCore/FirstBIOS version.
-				match = self._core_version_pattern.search(file_data)
-				if match:
-					# Check if this is a SecureCore Tiano version.
-					sct_version = match.group(1)
-					if sct_version:
-						# Extract version.
-						self.version = 'SecureCore Tiano ' + util.read_string(sct_version)
-					else:
-						# Not SecureCore Tiano. Assume base core version
-						# if we don't have a better one from BCPSYS.
-						if not self.version:
-							self.version = '4.0 Release 6.0'
+				# Extract version.
+				self.version = 'SecureCore Tiano ' + util.read_string(match.group(1))
 
-					# Extract full version as metadata.
-					version_string = util.read_string(match.group(0))
-					self.metadata.append(('ID', version_string.replace('(tm)', '')))
-					self.debug_print('Raw Core version:', repr(version_string))
+				# Extract full version as metadata.
+				version_string = util.read_string(match.group(0))
+				self.metadata.append(('ID', version_string))
+				self.debug_print('Raw SecureCore Tiano version:', repr(version_string))
+			else:
+				# Locate Xx86 version.
+				match = self._xx86_version_pattern.search(file_data)
+				if match:
+					# Extract version.
+					branch = match.group(4)
+					if branch: # for Pentium
+						branch = (branch.strip().split(b'/')[-1] + b' ' + match.group(5))
+					else: # Xx86
+						branch = match.group(3) or b'??86'
+					self.version = util.read_string(branch + b' ' + match.group(6))
+
+					# Extract full version string as metadata.
+					version_string = util.read_string(match.group(1) + (match.group(2) or b'') + match.group(6) + (match.group(7) or b''))
+					self.metadata.append(('ID', version_string))
+					self.debug_print('Raw Xx86 version:', repr(version_string))
 				else:
-					# Locate Xx86 version.
-					match = self._xx86_version_pattern.search(file_data)
+					# Locate GRiD-customized Xx86 version.
+					match = self._xx86_grid_version_pattern.search(file_data)
 					if match:
 						# Extract version.
-						branch = match.group(4)
-						if branch: # for Pentium
-							branch = (branch.replace(b'(TM)', b'').strip().split(b'/')[-1] + b' ' + match.group(5))
-						else: # Xx86
-							branch = match.group(3) or b'??86'
-						self.version = util.read_string(branch + b' ' + match.group(6))
+						branch = match.group(2) or b'??86'
+						self.version = util.read_string(branch + b' ' + match.group(3))
 
 						# Extract full version string as metadata.
-						version_string = util.read_string(match.group(1) + (match.group(2) or b'') + match.group(6) + (match.group(7) or b''))
-						self.metadata.append(('ID', version_string.replace(' (TM)', '').replace('(TM)', '')))
-						self.debug_print('Raw Xx86 version:', repr(version_string))
+						version_string = util.read_string(match.group(4) + match.group(1))
+						self.metadata.append(('ID', version_string))
+						self.debug_print('Raw GRiD Xx86 version:', repr(version_string))
 					else:
-						# Locate GRiD-customized Xx86 version.
-						match = self._xx86_grid_version_pattern.search(file_data)
+						# Locate ROM BIOS version.
+						match = self._rombios_version_pattern.search(file_data)
 						if match:
 							# Extract version.
-							branch = match.group(2) or b'??86'
-							self.version = util.read_string(branch + b' ' + match.group(3))
+							self.version = util.read_string(match.group(3))
+
+							# Add PLUS prefix if present.
+							pre_version = match.group(2)
+							if pre_version:
+								self.version = util.read_string(pre_version) + self.version
+
+							# Extract version prefix if present.
+							pre_version = match.group(1)
+							if pre_version:
+								# Shorten 80286/80386(/80486?)
+								if len(pre_version) >= 5 and pre_version[:2] == b'80':
+									pre_version = pre_version[2:]
+
+								self.version = util.read_string(pre_version).replace('  ', ' ') + self.version # double space on V20
 
 							# Extract full version string as metadata.
-							version_string = util.read_string(match.group(4) + match.group(1))
-							self.metadata.append(('ID', version_string.replace('(TM)', '')))
-							self.debug_print('Raw GRiD Xx86 version:', repr(version_string))
+							version_string = util.read_string(match.group(0).replace(b'\xF0', b''))
+							self.metadata.append(('ID', version_string))
+							self.debug_print('Raw ROM BIOS version:', repr(version_string))
 						else:
-							# Locate ROM BIOS version.
-							match = self._rombios_version_pattern.search(file_data)
+							# Locate SecureCore Tiano marker strings, in case no version string was found.
+							if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
+								match = self._sct_marker_pattern.search(file_data)
 							if match:
-								# Extract version.
-								self.version = util.read_string(match.group(3))
-
-								# Add PLUS prefix if present.
-								pre_version = match.group(2)
-								if pre_version:
-									self.version = util.read_string(pre_version) + self.version
-
-								# Extract version prefix if present.
-								pre_version = match.group(1)
-								if pre_version:
-									# Shorten 80286/80386(/80486?)
-									if len(pre_version) >= 5 and pre_version[:2] == b'80':
-										pre_version = pre_version[2:]
-
-									self.version = util.read_string(pre_version).replace('  ', ' ') + self.version # double space on V20
-
-								# Extract full version string as metadata.
-								version_string = util.read_string(match.group(0).replace(b'\xF0', b''))
-								self.metadata.append(('ID', version_string))
-								self.debug_print('Raw ROM BIOS version:', repr(version_string))
+								self.debug_print('SecureCore Tiano marker:', match.group(0))
+								self.version = 'SecureCore Tiano'
 							else:
-								# Locate SecureCore Tiano marker strings, in case no version string was found.
-								if header_data == b'\x00\xFFUEFIExtract\xFF\x00':
-									match = self._sct_marker_pattern.search(file_data)
-								if match:
-									self.debug_print('SecureCore Tiano marker:', match.group(0))
-									self.version = 'SecureCore Tiano'
-								else:
-									self.debug_print('No version found!')
+								self.debug_print('No version found!')
 
 		# Save post-version sign-on to be restored later.
 		post_version = self.signon
@@ -2941,6 +2919,19 @@ class PhoenixAnalyzer(Analyzer):
 							self.debug_print('Loaded strings file:', file_in_dir, '=>', languages)
 						else:
 							self.debug_print('Bad strings file:', file_in_dir)
+
+			# Read version string pointer.
+			version_offset, = struct.unpack('<H', bcpost.data[0x1b:0x1d])
+
+			# Extract full version string as metadata.
+			if regtable_segment:
+				self.debug_print('Version string pointer:', hex(regtable_segment), ':', hex(version_offset))
+				version_offset += regtable_segment << 4
+				if virtual_mem[version_offset:version_offset + 1] == b'\x00': # pointer may be off by one (Gateway Solo 2500)
+					version_offset += 1
+				version_string = util.read_string(virtual_mem[version_offset:version_offset + 4096])
+				self.debug_print('Raw 4.0x version:', repr(version_string))
+				self.metadata.append(('ID', version_string.strip()))
 
 			# Read sign-on string pointer.
 			signon_segment = code_segment
@@ -3091,17 +3082,6 @@ class PhoenixAnalyzer(Analyzer):
 
 		# Set Tandy sign-on if we already found one.
 		self.signon = self._found_signon_tandy
-
-		return True
-
-	def _signon_ast(self, line, match):
-		'''AST System BIOS Version '''
-
-		# This is an AST BIOS.
-		self.version = 'AST'
-
-		# Extract version as a sign-on.
-		self.signon = line
 
 		return True
 

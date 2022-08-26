@@ -196,7 +196,7 @@ static struct {
 	"= Award Decompression Bios =", NULL, AwardExtract}, {
 	"awardext.rom", NULL, AwardExtract}, {
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
-	"IBM AT Compatible Phoenix NuBIOS", "BCPSEGMENT", PhoenixExtract}, { /* Phoenix copyrights scrubbed (Gateway Solo 2500) */
+	"\x00IBM AT Compatible Phoenix NuBIOS", "BCPSEGMENT", PhoenixExtract}, { /* Phoenix copyrights scrubbed (Gateway Solo 2500) */
 	"\xEE\x88SYSBIOS", "\xEE\x88", SystemSoftExtract}, {
 	"\xEE\x88\x42IOS SCU", "\xEE\x88", SystemSoftExtract}, {
 	"\xFF\x88SYSBIOS", "\xFF\x88", SystemSoftExtract}, { /* Insyde */
