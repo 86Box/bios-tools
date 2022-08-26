@@ -73,7 +73,7 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 * Many common file types known not to be useful, such as images, PDFs, Office documents and hardware information tool reports, are automatically discarded.
 * Interleaved ROMs are merged through a heuristic filename and string detection, which may lead to incorrect merging if the chunks to different interleaved ROMs are present in the same directory.
 * The FAT filesystem extractor relies on assumptions which may not hold true for all disk images.
-* EPA (Award), PCX (AMI) and other image formats are automatically converted to PNG if the aforementioned optional dependency is installed.
+* EPA (Award), PCX (AMI), PGX (Phoenix) and other image formats are automatically converted to PNG if the aforementioned optional dependency is installed.
 * Extraction of the following BIOS distribution formats is **not implemented** due to the use of unknown compression methods:
   * ICL `.LDB`
 
@@ -82,11 +82,13 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 ### AMI
 
 * The string on **UEFI** is a hidden string located within the AMIBIOS 8-based Compatibility Support Module (CSM). A missing string may indicate a missing CSM.
+* Metadata tag **Setup** indicates the setup type for AMIBIOS Color through 7: **Color**, **Easy**, **HiFlex**, **Intel**, **New**, **Simple** or **WinBIOS**.
 
 ### Award
 
-* The core version can be followed by `(Phoenix)` on BIOSes which identify as **Phoenix AwardBIOS**, or `(Workstation)` on ones which identify as **Award WorkstationBIOS**.
 * OEM modifications which may interfere with detection: **Sukjung** (string)
+* Metadata tag **PhoenixNet** indicates the presence of PhoenixNet features, even if those were disabled by the OEM.
+* Metadata tag **UEFI** indicates Gigabyte Hybrid EFI.
 
 ### IBM
 
@@ -94,27 +96,22 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 
 ### Phoenix
 
-* Phoenix has no concept of a string. The BCPSYS build information is extracted as one.
-* OEM modifications which may interfere with detection: **DEC** (sign-on), potentially others where the version information was modified.
+* Some OEMs have modified Phoenix to a point where detection may not be perfect.
 
 ### SystemSoft
 
 * Insyde-compressed modules (identified by magic bytes `FF 88`) cannot be decompressed, limiting the analyzer's ability to identify Insyde-branded SystemSoft BIOSes.
 
-## Add-on reference
+## Metadata reference
 
-Depending on the contents of each BIOS, the following tags may be displayed on the analyzer output's "Add-ons" column:
+Depending on the contents of each BIOS, the following tags may be displayed on the analyzer output's "Metadata" column:
 
-* **ACPI**: Appears to contain an ACPI table. Does not necessarily indicate ACPI actually works.
-* **Adaptec**: Adaptec ISA or PCI SCSI option ROM.
-* **NCR3/4**: NCR/Symbios PCI SCSI option ROM with SDMS version 3 or 4 (respectively).
-* **PXE**: PXE-compliant network boot ROM, usually associated with on-board Ethernet.
-* **RPL**: Novell NetWare RPL-compliant network boot ROM, usually associated with on-board Ethernet.
-* **SLI**: NVIDIA SLI license for non-nForce motherboards.
-* **UEFI**: The BIOS core is UEFI-compliant. Does not necessarily indicate UEFI support is available.
-* **VGA**: Video BIOS, usually associated with on-board video.
-
-### BIOS-specific add-ons
-
-* AMIBIOS (Color through 7) setup types: **Color**, **EasySetup**, **HiFlex**, **IntelSetup**, **NewSetup**, **SimpleSetup**, **WinBIOS**.
-* Award: **PhoenixNet** indicates the presence of PhoenixNet features, even if those were disabled by the OEM. **UEFI** indicates Gigabyte Hybrid EFI.
+* **ACPI**: Appears to contain the ACPI tables specified. Does not necessarily indicate ACPI actually works.
+* **Build**: Build information contained within the BIOS.
+* **ID**: How the BIOS identifies itself during POST.
+* **LAN**: PXE or Novell NetWare RPL-compliant network boot ROM, usually associated with on-board Ethernet.
+* **SCSI**: Adaptec or NCR/Symbios SCSI option ROM. Model (Adaptec) or SDMS version (NCR/Symbios) information is extracted from the ROM.
+* **SLI**: NVIDIA SLI license for non-nForce motherboards. Model information is extracted from the license header.
+* **Table**: Register table information contained within the BIOS. May help in identifying chipset and Super I/O devices.
+* **UEFI**: Appears to contain traces of UEFI. Does not necessarily indicate UEFI support is available.
+* **VGA**: Non-PCI video BIOS, usually associated with on-board video.
