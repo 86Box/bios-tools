@@ -1255,22 +1255,14 @@ class CentralPointAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('CPS', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version,	RegexChecker)
-		])
+		self._pattern = re.compile(b'''BIOS [Vv]([\\x21-\\x7E]+)[\\x00-\\xFF] Copyright [\\x21-\\x7E]+ +Central Point Software, Inc\\.''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		return b'Central Point Software, Inc.' in file_data
-
-	def _version(self, line, match):
-		'''^BIOS ([^\s]+) (?:.+) Central Point Software, Inc\.'''
-
 		# Extract version.
-		self.version = match.group(1).rstrip('.')
-
-		# Lowercase v for consistency.
-		if self.version[0] == 'V':
-			self.version = 'v' + self.version[1:]
+		match = self._pattern.search(file_data)
+		if not match:
+			return False
+		self.version = 'v' + util.read_string(match.group(1))
 
 		return True
 
@@ -1279,29 +1271,28 @@ class ChipsAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('C&T', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version,	RegexChecker),
-		])
+		self._check_pattern = re.compile(b''' Chips & Technologies''')
+		self._signon_pattern = re.compile(b'''\\x01\\xE4\\x00\\xF0\\x2F\\x00([\\x01-\\xFF]+)''') # (GW-286CT, Amstrad PC5286...)
+		self._signon_alt_pattern = re.compile(b'''\\x0D\\x0A\\x00((?:[\\x01-\\xFF]+ )?BIOS Version [\\x01-\\xFF]+)''') # (Reply PS/2 stuff)
 
 	def can_handle(self, file_path, file_data, header_data):
-		return b'Chips & Technologies, Inc.' in file_data and b'BIOS Version ' in file_data
+		if not self._check_pattern.search(file_data):
+			return False
 
-	def _version(self, line, match): # TODO: remove prefix, because teknor "TEK701 BIOS Version 2.2\r\nsign-on..."
-		'''(?:^|(?:CHIPS (.+)|Chips & Technologies (.+) ROM|(Reply Corporation(?: .+)?)) )BIOS Version ([^\(]+)(?:\(([^\)]+)\)( .+)?)?'''
+		# Locate sign-on.
+		match = self._signon_pattern.search(file_data)
+		if not match:
+			match = self._signon_alt_pattern.search(file_data)
+		if not match:
+			return False
 
-		# Stop if this is a VBIOS.
-		string = match.group(1) or match.group(2) or match.group(3) or ''
-		if string[-4:] == ' VGA' or '/' in match.group(4):
-			return True
+		# There seems to be no consistent core versioning scheme.
+		# Not even the full version string is consistent...
+		self.version = '?'
 
-		# Extract version.
-		self.version = match.group(4).rstrip(', ')
-
-		# Extract string.
-		self.string = string
-
-		# Extract sign-on.
-		self.signon = (match.group(5) or '') + (match.group(6) or '')
+		# ...so we extract the full version string as a sign-on.
+		self.signon = util.read_string(match.group(1))
+		self.debug_print('Raw version string:', repr(self.signon))
 
 		return True
 
