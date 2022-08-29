@@ -800,6 +800,12 @@ class AwardAnalyzer(Analyzer):
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
 		# "V" instead of "v" (286 Modular BIOS V3.03 NFS 11/10/87)
 		self._version_pattern = re.compile(''' (?:v([^-\\s]+)|V(?:ersion )?[^0-9]*([0-9]\\.[0-9][0-9A-Z]?))(?:[. ]([\\x20-\\x7E]+))?''')
+		self._phoenixnet_patterns = (
+			re.compile(b'''CPLRESELLERID'''),
+			re.compile(b'''BINCPUTBL'''),
+			re.compile(b'''BINIDETBL'''),
+		)
+		self._phoenixnet_signon_pattern = re.compile('''MB(?:LOGO|TEXT)[0-9]?\\.TPL$''')
 
 	def can_handle(self, file_path, file_data, header_data):
 		if not self._award_pattern.search(file_data):
@@ -881,6 +887,42 @@ class AwardAnalyzer(Analyzer):
 				# Flag Gigabyte Hybrid EFI as UEFI.
 				if self._gigabyte_hefi_pattern.search(file_data):
 					self.metadata.append('UEFI', 'Gigabyte Hybrid')
+
+				# Detect PhoenixNet.
+				if util.all_match(self._phoenixnet_patterns, file_data):
+					# Extract PhoenixNet sign-on from ROS filesystem.
+					phoenixnet_signon = ''
+					if os.path.isdir(file_path):
+						# Look for ROS filesystem directory in the extracted payload.
+						for file_in_dir in os.listdir(file_path):
+							file_in_dir_path = os.path.join(file_path, file_in_dir)
+							if os.path.isdir(file_in_dir_path):
+								# Look for sign-on file in the ROS filesystem.
+								for file_in_ros in os.listdir(file_in_dir_path):
+									if self._phoenixnet_signon_pattern.match(file_in_ros):
+										# Check if the sign-on file is valid.
+										file_in_ros_path = os.path.join(file_in_dir_path, file_in_ros)
+										if os.path.isfile(file_in_ros_path) and os.path.getsize(file_in_ros_path) >= 0xa:
+											# Read the sign-on file.
+											self.debug_print('Reading PhoenixNet sign-on from ROS', repr(file_in_dir), 'file', repr(file_in_ros))
+											try:
+												f = open(file_in_ros_path, 'rb')
+												f.seek(9)
+												this_phoenixnet_signon = util.read_string(f.read(4096))
+												f.close()
+												if this_phoenixnet_signon:
+													phoenixnet_signon = this_phoenixnet_signon.strip()
+													self.debug_print('Raw PhoenixNet sign-on:', repr(this_phoenixnet_signon))
+													break
+											except:
+												pass
+
+								# Stop if a sign-on file was found.
+								if phoenixnet_signon:
+									break
+
+					# TODO: PhoenixNet-specific sign-ons
+					self.metadata.append(('PhoenixNet', phoenixnet_signon))
 
 			if self.version == 'v6.00PG' and self._gigabyte_eval_pattern.match(self.signon):
 				# Reconstruct actual sign-on of a Gigabyte fork BIOS through
@@ -1043,11 +1085,6 @@ class BonusAnalyzer(Analyzer):
 		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:([\\x20-\\x7E]+)|([\\x20-\\x7E]+?)(?: SCSI)? BIOS )''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9\\.]+)''')
 		self._orom_pattern = re.compile(b'''\\x55\\xAA([\\x01-\\xFF])[\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
-		self._phoenixnet_patterns = (
-			re.compile(b'''CPLRESELLERID'''),
-			re.compile(b'''BINCPUTBL'''),
-			re.compile(b'''BINIDETBL'''),
-		)
 		self._pxe_patterns = (
 			re.compile(b'''PXE-M0F: Exiting '''),
 			re.compile(b'''PXE-EC6: UNDI driver image is invalid\\.'''),
@@ -1075,11 +1112,6 @@ class BonusAnalyzer(Analyzer):
 			self.metadata.append((key, ' '.join(entries)))
 
 	def can_handle(self, file_path, file_data, header_data):
-		# PhoenixNet
-		if util.all_match(self._phoenixnet_patterns, file_data):
-			# TODO: PhoenixNet-specific sign-ons
-			self.metadata.append(('PhoenixNet', ''))
-
 		# ACPI tables
 		acpi_tables = []
 		for match in self._acpi_table_pattern.finditer(file_data):

@@ -87,7 +87,7 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 ### Award
 
 * OEM modifications which may interfere with detection: **Sukjung** (string)
-* Metadata tag **PhoenixNet** indicates the presence of PhoenixNet features, even if those were disabled by the OEM.
+* Metadata tag **PhoenixNet** indicates the presence of PhoenixNet features, even if those were disabled by the OEM, and contains its splash screen's sign-on text.
 * Metadata tag **UEFI** indicates Gigabyte Hybrid EFI.
 
 ### IBM
