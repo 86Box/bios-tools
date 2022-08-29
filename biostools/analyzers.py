@@ -1298,24 +1298,37 @@ class ChipsAnalyzer(Analyzer):
 
 
 class CommodoreAnalyzer(Analyzer):
+	# Prefix decoded from CP437: "┌─+┐"
+	# Reused by PhoenixAnalyzer.
+	_signon_pattern = re.compile(b'''\\xDA\\xC4+\\xBF[\\x01-\\xFF]+''')
+
 	def __init__(self, *args, **kwargs):
 		super().__init__('Commodore', *args, **kwargs)
 
-		self.register_check_list([
-			(self._version,	RegexChecker),
-		])
+		self._version_pattern = re.compile(b'''Commodore [\\x20-\\x7E]+ Rom Bios Version ([\\x20-\\x7E]+)[\\x0D\\x0A\\x20-\\x7E]*''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		return b'Commodore Business Machines' in file_data
-
-	def _version(self, line, match):
-		'''Commodore (.+) BIOS(?:\s+)(?:V|Rev\. )([^\s]+)'''
-
 		# Extract version.
-		self.version = 'V' + match.group(2)
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
+		self.version = util.read_string(match.group(1))
 
-		# Extract string.
-		self.string = match.group(1)
+		# Extract full version string as metadata.
+		version_string = util.read_string(match.group(0))
+		self.debug_print('Raw version:', repr(version_string))
+
+		# Extract sign-on.
+		match = CommodoreAnalyzer._signon_pattern.search(file_data)
+		if match:
+			self.signon = util.read_string(match.group(0))
+			self.debug_print('Raw sign-on:', repr(self.signon))
+
+			# Trim sign-on to the first, bigger box.
+			# The smaller box and some BIOS strings follow. (Commodore PC30)
+			linebreak_index = self.signon.find('\r\n\r\n')
+			if linebreak_index > -1:
+				self.signon = self.signon[:linebreak_index]
 
 		return True
 
@@ -1872,8 +1885,6 @@ class PhoenixAnalyzer(Analyzer):
 		self._sct_marker_pattern = re.compile(b'''SecureCore Tiano \\(TM\\) Preboot Agent |CSM_Egroup Code Ending''')
 		# "BIOS ROM" (Tandy) and "ROM BIOS" (HP)
 		self._compat_pattern = re.compile(b'''(?:BIOS ROM|ROM BIOS)[\\x0D\\x0A\\x20-\\x7E]+Compatibility Software[\\x0D\\x0A\\x20-\\x7E]+Phoenix[\\x0D\\x0A\\x20-\\x7E]+''')
-		# Prefix decoded from CP437: "┌─+┐"
-		self._commodore_signon_pattern = re.compile(b'''\\xDA\\xC4+\\xBF[\\x01-\\xFF]+''')
 		self._dell_system_pattern = re.compile(b'''Dell System [\\x20-\\x7E]+''')
 		self._dell_version_pattern = re.compile(b'''(?:BIOS [Vv]ersion(?!  =):?|(?:80[0-9]{2,3}|Phoenix) ROM BIOS PLUS Version [^\\s]+) ([A-Z0-9\\.]+)''')
 		self._dell_version_code_pattern = re.compile(b'''([A-Z][0-9]{2})''')
@@ -3059,7 +3070,7 @@ class PhoenixAnalyzer(Analyzer):
 					self.debug_print('Dell version:', repr(version_string))
 			else:
 				# Determine if this a customized Commodore BIOS.
-				match = self._commodore_signon_pattern.search(file_data)
+				match = CommodoreAnalyzer._signon_pattern.search(file_data)
 				if match:
 					self.signon = util.read_string(match.group(0))
 					self.debug_print('Raw Commodore sign-on:', repr(self.signon))
