@@ -179,7 +179,7 @@ static struct {
 			 uint32_t Offset1, uint32_t Offset2);
 } BIOSIdentification[] = {
 	{
-	"AMI Flash Utility for ", "@ROM\xF0", AFUDOSExtract}, {
+	"AMI Flash Utility for ", "@ROM", AFUDOSExtract}, {
 	"AMIBIOS W 04 ", "AMIBIOSC", AMI940725Extract}, {
 	"AMIBIOS W 05 ", "AMIBIOSC", AMI941010Extract}, {
 	"AMIBIOS W 05 ", "OSC10/10/94", AMI941010Extract}, { /* NexGen */
@@ -262,9 +262,16 @@ int main(int argc, char *argv[])
 
 		if (BIOSIdentification[i].String2) {
 			len = strlen(BIOSIdentification[i].String2);
-			tmp =
-		    	memmem(BIOSImage, FileLength - len,
-			       BIOSIdentification[i].String2, len);
+			if (BIOSIdentification[i].Handler == AFUDOSExtract) {
+				/* Hack for AFUWIN containing another @ROM string. */
+				tmp =
+					memmem(BIOSImage + Offset1, FileLength - len - Offset1,
+				       BIOSIdentification[i].String2, len);
+			} else {
+				tmp =
+					memmem(BIOSImage, FileLength - len,
+				       BIOSIdentification[i].String2, len);
+			}
 			if (!tmp)
 				continue;
 			Offset2 = tmp - BIOSImage;
