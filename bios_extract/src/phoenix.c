@@ -1004,10 +1004,8 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 	Offset &= (BIOSLength - 1);
 	if (!Offset) {
 		fprintf(stderr, "BCPSYS module offset is NULL.\n");
-		if (!FFV) {
-			return FALSE;
-		}
-		return PhoenixFFV(BIOSImage, BIOSLength, FFV);
+		if (FFV)
+			PhoenixFFV(BIOSImage, BIOSLength, FFV);
 	}
 
 	while (Offset) {
