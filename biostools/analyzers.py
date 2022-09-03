@@ -344,7 +344,7 @@ class AMIAnalyzer(Analyzer):
 		self._regtable_split_pattern = re.compile('''[- ]''')
 		# "Cfg" and "Config" (Acrosser AR-B1479 STPC Elite)
 		self._regtable_trim_pattern = re.compile('''[- ]+(?:Table|B(?:oot[- ]?)?Block|BtBlk|POST(?: Init)?|Cfg|Config|Port)''', re.I)
-		# TriGem weirdness: "TGem" (UMC 486-BIOS) and "TriGem Computer " (SiS 486-BIOS)
+		# TriGem weirdness: "TGem-HCS,PSC,JGS" (UMC 486-BIOS) and "TriGem Computer " (SiS 486-BIOS)
 		self._precolor_block_pattern = re.compile(b'''\\(C\\)(?:[0-9]{4}(?:AMI,404-263-8181|TGem-HCS,PSC,JGS|TriGem Computer )|( Access Methods Inc\\.))''')
 		# "Date:-" might not have a space after it (Intel AMI)
 		# "\xFF\xFF\xFF\xFFFLASH-" (Everex EISA 386-BIOS)
@@ -356,7 +356,8 @@ class AMIAnalyzer(Analyzer):
 		# Decoded: "\xFE([^- ]{4}-(?:[^-]{4}-)?[^-]{6}|Ref\. [\x00-\xFF]{1,64})"
 		# "Ref. " (Everex EISA 386-BIOS) - let the code handle termination
 		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFD\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6}|\\x6D\\xD4\\xCC\\x8E\\xFE[\\x00-\\xFF]{1,64})''')
-		self._precolor_signon_pattern = re.compile(b'''((?:[0-9]86[A-Za-z]*-|8(?:08)?8-)?BIOS \\(C\\).*(?:AMI|American Megatrends Inc))(?:, for ([\\x0D\\x0A\\x20-\\x7E]+))?''')
+		# Text before "BIOS" cannot capture . due to AMI copyright prior to ID string.
+		self._precolor_signon_pattern = re.compile(b'''([0-9A-Za-z- ]*BIOS \\(C\\).*(?:AMI|American Megatrends Inc))(?:, for ([\\x0D\\x0A\\x20-\\x7E]+))?''')
 		self._precolor_setup_pattern = re.compile(b'''[A-Za-z][0-9/]+([\\x20-\\x27\\x29-\\x7E]*(SETUP PROGRAM FOR | SETUP UTILITY)[\\x20-\\x27\\x29-\\x7E]*)\\(C\\)19''')
 		self._precolor_pcchips_pattern = re.compile(b'''ADVANCED SYSTEM SETUP UTILITY VERSION[\\x20-\\x7E]+?PC CHIPS INC''')
 		# Decoded: "\(C\)AMI, \(([^\)]{11,64})\)" (the 64 is arbitrary)
