@@ -2890,6 +2890,10 @@ class VMExtractor(PEExtractor):
 				b'sendkey e\n'
 				b'sendkey a\n'
 				b'sendkey kp_enter\n'
+				b'sendkey kp_enter\n'
+				b'sendkey kp_enter\n'
+				b'sendkey kp_enter\n'
+				b'sendkey kp_enter\n'
 				b'sendkey esc\n'
 			)
 
