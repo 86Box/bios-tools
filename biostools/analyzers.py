@@ -887,7 +887,7 @@ class AwardAnalyzer(Analyzer):
 
 				# Flag Gigabyte Hybrid EFI as UEFI.
 				if self._gigabyte_hefi_pattern.search(file_data):
-					self.metadata.append('UEFI', 'Gigabyte Hybrid')
+					self.metadata.append(('UEFI', 'Gigabyte Hybrid EFI'))
 
 				# Detect PhoenixNet.
 				if util.all_match(self._phoenixnet_patterns, file_data):
