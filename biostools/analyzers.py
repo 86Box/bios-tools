@@ -331,7 +331,8 @@ class AMIAnalyzer(Analyzer):
 		super().__init__('AMI', *args, **kwargs)
 
 		self._check_pattern = re.compile(b'''American Megatrends Inc|AMIBIOSC| Access Methods Inc\\.|AMI- ([0-9]{2}/[0-9]{2}/[0-9]{2}) (?:IBM is a TM of IBM|[\\x00-\\xFF]{2}   AMI-[^-]+-BIOS )''')
-		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
+		# Pre-Color entrypoint date can inexplicably have most significant bit set (two characters on arche_486_1989-1991), part 1
+		self._date_pattern = re.compile(b'''([0-9\\xB0-\\xB9]{2}/[0-9\\xB0-\\xB9]{2}/[0-9\\xB0-\\xB9]{2})[^0-9]''')
 		self._uefi_csm_pattern = re.compile('''63-0100-000001-00101111-[0-9]{6}-Chipset-0AAAA000$''')
 		# The "All Rights Reserved" is important to not catch the same header on other files.
 		# "All<Rights Reserved" (Tatung TCS-9850 9600x9, corrupted during production?)
@@ -523,7 +524,8 @@ class AMIAnalyzer(Analyzer):
 				self.debug_print('Pre-Color data start is unknown')
 			if match:
 				# Extract date as the version.
-				self.version = (match.group(1) or (match.group(2) + b'/' + match.group(3) + b'/' + match.group(4))).decode('cp437', 'ignore')
+				# Pre-Color entrypoint date can inexplicably have most significant bit set (two characters on arche_486_1989-1991), part 2
+				self.version = bytes((c & 0x7f) for c in (match.group(1) or (match.group(2) + b'/' + match.group(3) + b'/' + match.group(4)))).decode('cp437', 'ignore')
 				self.debug_print('Version (pre-Color):', self.version)
 
 				# Check pre-Color identification block.
