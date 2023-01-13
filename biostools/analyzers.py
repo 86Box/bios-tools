@@ -358,7 +358,7 @@ class AMIAnalyzer(Analyzer):
 		# "Ref. " (Everex EISA 386-BIOS) - let the code handle termination
 		self._precolor_string_pattern = re.compile(b'''\\xFE([\\x00-\\x95\\x97-\\xFD\\xFF]{4}\\x96(?:[\\x00-\\x95\\x97-\\xFF]{4}\\x96)?[\\x00-\\x95\\x97-\\xFF]{6}|\\x6D\\xD4\\xCC\\x8E\\xFE[\\x00-\\xFF]{1,64})''')
 		# Text before "BIOS" cannot capture . due to AMI copyright prior to ID string.
-		self._precolor_signon_pattern = re.compile(b'''([0-9A-Za-z- ]*BIOS \\(C\\).*(?:AMI|American Megatrends Inc))(?:, for ([\\x0D\\x0A\\x20-\\x7E]+))?''')
+		self._precolor_signon_pattern = re.compile(b'''([0-9A-Za-z- ]*BIOS \\(C\\).*(?:AMI|American Megatrends Inc\\.?))(?:, for ([\\x0D\\x0A\\x20-\\x7E]+))?''')
 		self._precolor_setup_pattern = re.compile(b'''[A-Za-z][0-9/]+([\\x20-\\x27\\x29-\\x7E]*(SETUP PROGRAM FOR | SETUP UTILITY)[\\x20-\\x27\\x29-\\x7E]*)\\(C\\)19''')
 		self._precolor_pcchips_pattern = re.compile(b'''ADVANCED SYSTEM SETUP UTILITY VERSION[\\x20-\\x7E]+?PC CHIPS INC''')
 		# Decoded: "\(C\)AMI, \(([^\)]{11,64})\)" (the 64 is arbitrary)
@@ -529,6 +529,7 @@ class AMIAnalyzer(Analyzer):
 				self.debug_print('Version (pre-Color):', self.version)
 
 				# Check pre-Color identification block.
+				invalid_id = False
 				match = self._precolor_block_pattern.search(file_data)
 				if match:
 					# Determine location of the identification block.
@@ -575,7 +576,6 @@ class AMIAnalyzer(Analyzer):
 						# appear to be valid. (Intel AMI post-Color without string)
 						if self.string[:10] in ('????-0000-', '????-0166-'):
 							self.string = ''
-							return True
 				elif check_match.group(1): # 8088-BIOS header
 					# Extract version.
 					self.version = check_match.group(1).decode('cp437', 'ignore')
