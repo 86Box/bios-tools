@@ -2613,8 +2613,9 @@ class PhoenixAnalyzer(Analyzer):
 				self.debug_print('Probing BCPSEGMENT at', hex(bcpsegment_offset))
 				offset = bcpsegment_offset + 0x0a
 				# Sometimes there's no BCP immediately after BCPSEGMENT (Micronics M54LI)
+				# BCP can be way ahead (366 bytes on DEC Venturis FX) - old 256-byte check didn't cut it
 				if virtual_mem[offset:offset + 3] != b'BCP':
-					next_bcp_offset = virtual_mem[offset:offset + 256].find(b'BCP')
+					next_bcp_offset = virtual_mem[offset:offset + 1024].find(b'BCP')
 					if next_bcp_offset > -1:
 						offset += next_bcp_offset
 					else:
