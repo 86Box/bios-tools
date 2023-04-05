@@ -3225,7 +3225,7 @@ class SchneiderAnalyzer(Analyzer):
 		self._version_pattern = re.compile(b'''EURO PC\s+BIOS (V[\\x20-\\x7E]+)''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		if b'Schneider Rundfunkwerke AG' not in file_data:
+		if b'Schneider Rundfunkwerke AG' not in file_data and b'Schneider Rdf. AG' not in file_data:
 			return False
 
 		# Locate version.
