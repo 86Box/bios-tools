@@ -2569,7 +2569,7 @@ class UEFIExtractor(Extractor):
 		super().__init__(*args, **kwargs)
 
 		# Known UEFI signatures.
-		self._signature_pattern = re.compile(b'''EFI_|D(?:xe|XE)|P(?:ei|EI)''')
+		self._signature_pattern = re.compile(b'''EFI_|D(?:xe|XE)|P(?:ei|EI)|NVAR[\\x00-\\xFF]{7}(?:StdDefaults|PlatformLang|AMITSESetup|SecureBootSetup)\\x00''')
 
 		# Ignore padding and microcode files.
 		self._invalid_file_pattern = re.compile('''(?:Padding|Microcode)_''')
@@ -2587,8 +2587,8 @@ class UEFIExtractor(Extractor):
 		if not self._uefiextract_path:
 			return False
 
-		# Read up to 16 MB as a safety net.
-		file_header += util.read_complement(file_path, file_header)
+		# Read up to 32 MB as a safety net.
+		file_header += util.read_complement(file_path, file_header, 33554432)
 
 		# Stop if no UEFI signatures are found.
 		if not self._signature_pattern.search(file_header):
