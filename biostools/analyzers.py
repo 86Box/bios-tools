@@ -1086,6 +1086,8 @@ class BonusAnalyzer(Analyzer):
 
 		self._acpi_table_pattern = re.compile(b'''(DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})(?:[\\x00-\\xFF]{20}|[\\x00-\\xFF]{24})[\\x00\\x20-\\x7E]{4}''')
 		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:([\\x20-\\x7E]+)|([\\x20-\\x7E]+?)(?: SCSI)? BIOS )''')
+		self._dmi_bios_pattern = re.compile(b'''\\x00[\\x12-\\xFF]''')
+		self._dmi_strings_pattern = re.compile(b'''(?:[\\x20-\\x7E]{1,255}\\x00){1,255}\\x00''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9\\.]+)''')
 		self._orom_pattern = re.compile(b'''\\x55\\xAA([\\x01-\\xFF])[\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
 		self._pxe_patterns = (
@@ -1121,6 +1123,66 @@ class BonusAnalyzer(Analyzer):
 			if struct.unpack('<I', match.group(2))[0] > 36: # length includes header, header is 36 bytes
 				acpi_tables.append(util.read_string(match.group(1)))
 		self._enumerate_metadata('ACPI', acpi_tables)
+
+		# DMI
+		def _read_dmi_strings(header_match, string_value_offsets):
+			header_offset = header_match.start(0)
+
+			# Check if the structure header's handle value is valid.
+			handle = file_data[header_offset + 2:header_offset + 4]
+			if len(handle) != 2 or handle == b'\xFF\xFF\xFF\xFF':
+				return None
+
+			# Extract string index values from the structure.
+			string_values = []
+			found_any = False
+			for rel_string_value_offset in string_value_offsets:
+				# Extract index value and stop if we're past the end of the file.
+				string_value_offset = header_offset + rel_string_value_offset
+				string_value = file_data[string_value_offset:string_value_offset + 1]
+				if len(string_value) != 1:
+					return None
+				string_values.append(string_value[0] - 1)
+
+				# Mark that we found any string being referenced.
+				if string_value[0] > 0:
+					found_any = True
+
+			# Stop if the structure references no string.
+			if not found_any:
+				return None
+
+			# Extract string table from the end of the structure.
+			header_len = header_match.group(0)[1]
+			string_table_offset = header_offset + header_len
+			strings_match = self._dmi_strings_pattern.match(file_data[string_table_offset:string_table_offset + 4096])
+			if strings_match:
+				string_table = strings_match.group(0).split(b'\x00')[:-2]
+
+				# Extract strings from the referenced index values.
+				strings = []
+				for string_value in string_values:
+					# Stop if this index is out of bounds.
+					if string_value >= len(string_table):
+						return None
+
+					# Add string to list.
+					if string_value < 0: # empty if not set
+						strings.append(b'')
+					else:
+						strings.append(string_table[string_value])
+
+				return strings
+
+		def _process_dmi_table(pattern, string_value_offsets):
+			candidates = []
+			for match in pattern.finditer(file_data):
+				candidate = _read_dmi_strings(match, string_value_offsets)
+				if candidate:
+					candidates.append(candidate)
+			self.debug_print(candidates)
+
+		#_process_dmi_table(self._dmi_bios_pattern, (0x04, 0x05, 0x08))
 
 		# SLI certificate
 		match = self._sli_pattern.search(file_data)
@@ -3225,10 +3287,11 @@ class SchneiderAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Schneider', *args, **kwargs)
 
-		self._version_pattern = re.compile(b'''EURO PC\s+BIOS (V[\\x20-\\x7E]+)''')
+		self._schneider_pattern = re.compile(b'''Schneider (?:Rundfunkwerke|Rdf\\.) AG''')
+		self._version_pattern = re.compile(b'''EURO PC\\s+BIOS (V[\\x20-\\x7E]+)''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		if b'Schneider Rundfunkwerke AG' not in file_data:
+		if not self._schneider_pattern.search(file_data):
 			return False
 
 		# Locate version.
