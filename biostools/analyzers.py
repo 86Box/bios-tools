@@ -1232,7 +1232,7 @@ class BonusAnalyzer(Analyzer):
 				continue
 
 			board_mfg, board_product, board_version = candidate
-			dmi_tables.append('[Baseboard] {0} {1} {2}'.format(board_mfg, board_product, board_version))
+			dmi_tables.append('[Board] {0} {1} {2}'.format(board_mfg, board_product, board_version))
 			break
 
 		self._enumerate_metadata('DMI', dmi_tables, delimiter='\n')
