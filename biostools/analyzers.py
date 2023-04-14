@@ -1089,6 +1089,7 @@ class BonusAnalyzer(Analyzer):
 		self._dmi_bios_pattern = re.compile(b'''\\x00([\\x12-\\xFF])''')
 		self._dmi_system_pattern = re.compile(b'''\\x01([\\x08\\x19\\x1B])''')
 		self._dmi_baseboard_pattern = re.compile(b'''\\x02([\\x08-\\xFF])''')
+		self._dmi_processor_pattern = re.compile(b'''\\x04([\\x1A-\\x30])''') # non-standard length 0x20 (ASUS CUV4X-LS, Supermicro S2DGE)
 		self._dmi_strings_pattern = re.compile(b'''(?:[\\x20-\\x7E]{1,255}\\x00){1,255}\\x00''')
 		self._dmi_date_pattern = re.compile('''[0-9]{2}/[0-9]{2}/[0-9]{2}(?:[0-9]{2})?$''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9\\.]+)''')
@@ -1213,11 +1214,11 @@ class BonusAnalyzer(Analyzer):
 				continue
 
 			# Check wake-up type for validity if present.
-			if match.group(1)[0] > 0x18 and file_data[match.start(0) + 0x18] > 0x08:
+			header_offset = match.start(0)
+			if match.group(1)[0] > 0x18 and file_data[header_offset + 0x18] > 0x08:
 				continue
 
 			system_mfg, system_product, system_version = candidate
-
 			dmi_tables.append('[System] {0} {1} {2}'.format(system_mfg, system_product, system_version))
 			break
 
@@ -1228,11 +1229,28 @@ class BonusAnalyzer(Analyzer):
 				continue
 
 			# Check board type for validity if present.
-			if match.group(1)[0] > 0x0d and (file_data[match.start(0) + 0x0d] < 0x01 or file_data[match.start(0) + 0x0d] > 0x0d):
+			header_offset = match.start(0)
+			if match.group(1)[0] > 0x0d and (file_data[header_offset + 0x0d] < 0x01 or file_data[header_offset + 0x0d] > 0x0d):
 				continue
 
 			board_mfg, board_product, board_version = candidate
 			dmi_tables.append('[Board] {0} {1} {2}'.format(board_mfg, board_product, board_version))
+			break
+
+		for match in self._dmi_processor_pattern.finditer(file_data): # SMBIOS Type 4: Processor
+			# Read strings for this candidate.
+			candidate = _read_dmi_strings(match, (0x04, 0x07, 0x10))
+			if not candidate:
+				continue
+
+			# Check type for validity.
+			# Type and family may be invalid 0x00 (Supermicro S2DGE)
+			header_offset = match.start(0)
+			if file_data[header_offset + 0x05] > 0x06:
+				continue
+
+			cpu_socket, cpu_mfg, cpu_version = candidate
+			dmi_tables.append('[CPU] {0} {1} {2}'.format(cpu_socket, cpu_mfg, cpu_version))
 			break
 
 		self._enumerate_metadata('DMI', dmi_tables, delimiter='\n')
