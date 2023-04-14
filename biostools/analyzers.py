@@ -1180,9 +1180,9 @@ class BonusAnalyzer(Analyzer):
 						strings.append('')
 					else:
 						string_contents = string_table[string_value].decode('cp437', 'ignore').strip()
+						strings.append(string_contents)
 						if string_contents:
 							found_any = True
-							strings.append(string_contents)
 
 				# Return strings only if non-empty ones were ever found.
 				if found_any:
