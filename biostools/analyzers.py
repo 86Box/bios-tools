@@ -1086,8 +1086,11 @@ class BonusAnalyzer(Analyzer):
 
 		self._acpi_table_pattern = re.compile(b'''(DSDT|FACP|PSDT|RSDT|SBST|SSDT)([\\x00-\\xFF]{4})(?:[\\x00-\\xFF]{20}|[\\x00-\\xFF]{24})[\\x00\\x20-\\x7E]{4}''')
 		self._adaptec_pattern = re.compile(b'''Adaptec (?:BIOS:([\\x20-\\x7E]+)|([\\x20-\\x7E]+?)(?: SCSI)? BIOS )''')
-		self._dmi_bios_pattern = re.compile(b'''\\x00[\\x12-\\xFF]''')
+		self._dmi_bios_pattern = re.compile(b'''\\x00([\\x12-\\xFF])''')
+		self._dmi_system_pattern = re.compile(b'''\\x01([\\x08\\x19\\x1B])''')
+		self._dmi_baseboard_pattern = re.compile(b'''\\x02([\\x08-\\xFF])''')
 		self._dmi_strings_pattern = re.compile(b'''(?:[\\x20-\\x7E]{1,255}\\x00){1,255}\\x00''')
+		self._dmi_date_pattern = re.compile('''[0-9]{2}/[0-9]{2}/[0-9]{2}(?:[0-9]{2})?$''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9\\.]+)''')
 		self._orom_pattern = re.compile(b'''\\x55\\xAA([\\x01-\\xFF])[\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
 		self._pxe_patterns = (
@@ -1109,12 +1112,12 @@ class BonusAnalyzer(Analyzer):
 			'''[\\x20-\\x2F\\x3A-\\x40\\x5B-\\x60\\x7A-\\x7E]*''', # trim non-alphanumeric characters
 			re.I)
 
-	def _enumerate_metadata(self, key, entries):
+	def _enumerate_metadata(self, key, entries, delimiter=' '):
 		if len(entries) > 0:
 			# De-duplicate and sort before enumerating.
 			entries = list(set(entries))
 			entries.sort()
-			self.metadata.append((key, ' '.join(entries)))
+			self.metadata.append((key, delimiter.join(entries)))
 
 	def can_handle(self, file_path, file_data, header_data):
 		# ACPI tables
@@ -1133,14 +1136,19 @@ class BonusAnalyzer(Analyzer):
 			if len(handle) != 2 or handle == b'\xFF\xFF\xFF\xFF':
 				return None
 
+			# Check if the structure doesn't go beyond the end of the file.
+			table_length = header_match.group(1)[0]
+			if (header_offset + table_length) > len(file_data):
+				return None
+
 			# Extract string index values from the structure.
 			string_values = []
 			found_any = False
 			for rel_string_value_offset in string_value_offsets:
-				# Extract index value and stop if we're past the end of the file.
+				# Extract index value.
 				string_value_offset = header_offset + rel_string_value_offset
 				string_value = file_data[string_value_offset:string_value_offset + 1]
-				if len(string_value) != 1:
+				if len(string_value) != 1: # stop if we're past the end of the file
 					return None
 				string_values.append(string_value[0] - 1)
 
@@ -1160,6 +1168,7 @@ class BonusAnalyzer(Analyzer):
 				string_table = strings_match.group(0).split(b'\x00')[:-2]
 
 				# Extract strings from the referenced index values.
+				found_any = False
 				strings = []
 				for string_value in string_values:
 					# Stop if this index is out of bounds.
@@ -1168,23 +1177,67 @@ class BonusAnalyzer(Analyzer):
 
 					# Add string to list.
 					if string_value < 0: # empty if not set
-						strings.append(b'')
+						strings.append('')
 					else:
-						strings.append(string_table[string_value])
+						string_contents = string_table[string_value].decode('cp437', 'ignore')
+						if string_contents:
+							found_any = True
+							strings.append(string_contents)
 
-				return strings
+				# Return strings only if non-empty ones were ever found.
+				if found_any:
+					return strings
 
-		def _process_dmi_table(pattern, string_value_offsets):
-			candidates = []
-			for match in pattern.finditer(file_data):
-				candidate = _read_dmi_strings(match, string_value_offsets)
-				if candidate:
-					candidates.append(candidate)
-			self.debug_print(candidates)
+		# Go through DMI table candidates.
+		dmi_tables = []
 
-		#_process_dmi_table(self._dmi_bios_pattern, (0x04, 0x05, 0x08))
+		for match in self._dmi_bios_pattern.finditer(file_data): # SMBIOS Type 0: BIOS
+			# Read strings for this candidate.
+			candidate = _read_dmi_strings(match, (0x04, 0x05, 0x08))
+			if not candidate:
+				continue
 
-		# SLI certificate
+			bios_vendor, bios_version, bios_date = candidate
+
+			# Check date for validity.
+			if not self._dmi_date_pattern.match(bios_date):
+				continue
+
+			dmi_tables.append('[BIOS] {0} {1} {2}'.format(bios_vendor, bios_version, bios_date))
+			break
+
+		for match in self._dmi_system_pattern.finditer(file_data): # SMBIOS Type 1: System
+			# Read strings for this candidate.
+			candidate = _read_dmi_strings(match, (0x04, 0x05, 0x06))
+			if not candidate:
+				continue
+
+			# Check wake-up type for validity if present.
+			if match.group(1)[0] > 0x18 and file_data[match.start(0) + 0x18] > 0x08:
+				continue
+
+			system_mfg, system_product, system_version = candidate
+
+			dmi_tables.append('[System] {0} {1} {2}'.format(system_mfg, system_product, system_version))
+			break
+
+		for match in self._dmi_baseboard_pattern.finditer(file_data): # SMBIOS Type 2: Baseboard
+			# Read strings for this candidate.
+			candidate = _read_dmi_strings(match, (0x04, 0x05, 0x06))
+			if not candidate:
+				continue
+
+			# Check board type for validity if present.
+			if match.group(1)[0] > 0x0d and (file_data[match.start(0) + 0x0d] < 0x01 or file_data[match.start(0) + 0x0d] > 0x0d):
+				continue
+
+			board_mfg, board_product, board_version = candidate
+			dmi_tables.append('[Baseboard] {0} {1} {2}'.format(board_mfg, board_product, board_version))
+			break
+
+		self._enumerate_metadata('DMI', dmi_tables, delimiter='\n')
+
+		# SLI certificate in DSDT SLIC
 		match = self._sli_pattern.search(file_data)
 		if match:
 			self.metadata.append(('SLI', util.read_string(match.group(1))))
