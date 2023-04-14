@@ -1179,7 +1179,7 @@ class BonusAnalyzer(Analyzer):
 					if string_value < 0: # empty if not set
 						strings.append('')
 					else:
-						string_contents = string_table[string_value].decode('cp437', 'ignore')
+						string_contents = string_table[string_value].decode('cp437', 'ignore').strip()
 						if string_contents:
 							found_any = True
 							strings.append(string_contents)
