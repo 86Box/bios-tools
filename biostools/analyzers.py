@@ -1234,7 +1234,13 @@ class BonusAnalyzer(Analyzer):
 				continue
 
 			board_mfg, board_product, board_version = candidate
-			dmi_tables.append('[Board] {0} {1} {2}'.format(board_mfg, board_product, board_version))
+
+			# Check for duplicate system and baseboard information.
+			formatted = '{0} {1} {2}'.format(board_mfg, board_product, board_version)
+			if len(dmi_tables) > 0 and dmi_tables[-1] == ('[System] ' + formatted):
+				dmi_tables[-1] = '[Board/System] ' + formatted
+			else:
+				dmi_tables.append('[Board] ' + formatted)
 			break
 
 		for match in self._dmi_processor_pattern.finditer(file_data): # SMBIOS Type 4: Processor
