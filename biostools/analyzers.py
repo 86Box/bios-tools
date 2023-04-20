@@ -1197,6 +1197,7 @@ class BonusAnalyzer(Analyzer):
 			candidate = _read_dmi_strings(match, (0x04, 0x05, 0x08))
 			if not candidate:
 				continue
+			self.debug_print('DMI BIOS table header', codecs.encode(file_data[match.start(0):match.start(0) + 5], 'hex'))
 
 			bios_vendor, bios_version, bios_date = candidate
 
@@ -1212,6 +1213,7 @@ class BonusAnalyzer(Analyzer):
 			candidate = _read_dmi_strings(match, (0x04, 0x05, 0x06))
 			if not candidate:
 				continue
+			self.debug_print('DMI System table header', codecs.encode(file_data[match.start(0):match.start(0) + 5], 'hex'))
 
 			# Check wake-up type for validity if present.
 			header_offset = match.start(0)
@@ -1227,6 +1229,7 @@ class BonusAnalyzer(Analyzer):
 			candidate = _read_dmi_strings(match, (0x04, 0x05, 0x06))
 			if not candidate:
 				continue
+			self.debug_print('DMI Baseboard table header', codecs.encode(file_data[match.start(0):match.start(0) + 5], 'hex'))
 
 			# Check board type for validity if present.
 			header_offset = match.start(0)
@@ -1237,7 +1240,7 @@ class BonusAnalyzer(Analyzer):
 
 			# Check for duplicate system and baseboard information.
 			formatted = '{0} {1} {2}'.format(board_mfg, board_product, board_version)
-			if len(dmi_tables) > 0 and dmi_tables[-1] == ('[System] ' + formatted):
+			if len(dmi_tables) > 0 and dmi_tables[-1][:9] == '[System] ' and util.compare_alnum(dmi_tables[-1][9:], formatted):
 				dmi_tables[-1] = '[Board/System] ' + formatted
 			else:
 				dmi_tables.append('[Board] ' + formatted)
@@ -1248,6 +1251,7 @@ class BonusAnalyzer(Analyzer):
 			candidate = _read_dmi_strings(match, (0x04, 0x07, 0x10))
 			if not candidate:
 				continue
+			self.debug_print('DMI Processor table header', codecs.encode(file_data[match.start(0):match.start(0) + 5], 'hex'))
 
 			# Check type for validity.
 			# Type and family may be invalid 0x00 (Supermicro S2DGE)
@@ -2073,7 +2077,7 @@ class PhoenixAnalyzer(Analyzer):
 		# No "All Rights Reserved" (Yangtech 2.27 / pxxt)
 		self._rombios_signon_alt_pattern = re.compile(b'''\\(R\\)eboot, other keys to continue\\x00\\xFF+''')
 		self._rombios_signon_dec_pattern = re.compile(b'''Copyright \\(C\\) [0-9]{4} Digital Equipment Corporation''')
-		self._segment_pattern = re.compile('''segment_([0-9A-F]{4})\\.rom$''')
+		self._segment_pattern = re.compile('''(?:segment_([0-9A-F]{4})|bioscode_[0-9]+_[0-9A-F]{5,}_000F_([0-9A-F]{4}))\\.rom$''')
 		self._strings_pattern = re.compile('''strings_[0-9A-F_]+\\.rom$''')
 		self._date_pattern = re.compile(b'''((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2}|(?:0{2}[1-9]{2}|1{2}[0-2]{2})/(?:0{2}[1-9]{2}|[12]{2}[0-9]{2}|3{2}[01]{2})/[0-9]{4})[^0-9]''')
 
@@ -2796,7 +2800,75 @@ class PhoenixAnalyzer(Analyzer):
 
 			self.debug_print('Found BCPs:', bcp)
 
+			# If this is a compressed BIOS, load decompressed segments.
+			segment_ranges = []
+			strings_files = []
+			if compressed:
+				# Go through extracted files.
+				for file_in_dir in os.listdir(file_path):
+					match = self._segment_pattern.match(file_in_dir)
+					if match:
+						# Read segment data.
+						try:
+							f = open(os.path.join(file_path, file_in_dir), 'rb')
+							data = f.read()
+							f.close()
+						except:
+							self.debug_print('Could not load segment file:', file_in_dir)
+							continue
+
+						# Load segment data into the virtual memory space.
+						self.debug_print('Loaded segment file:', file_in_dir)
+						try:
+							offset = int(match.group(1), 16) << 4 # segment
+						except:
+							offset = int(match.group(2), 16) # bioscode 000F (DMI offsets only make sense if this is loaded to segment 0000 instead)
+						target_len = min(len(virtual_mem) - offset, len(data))
+						if target_len >= 0:
+							virtual_mem[offset:offset + target_len] = data[:target_len]
+							segment_ranges.append((offset, offset + target_len))
+					elif self._strings_pattern.match(file_in_dir):
+						# Read string data.
+						try:
+							f = open(os.path.join(file_path, file_in_dir), 'rb')
+							data = f.read()
+							f.close()
+						except:
+							self.debug_print('Could not load strings file:', file_in_dir)
+							continue
+
+						# SecureCore may have 4 bytes before the STRPACK header.
+						offset = data.find(b'STRPACK-BIOS')
+						if offset > -1:
+							# Load each string table.
+							offset += 0x1c
+							languages = []
+							while True:
+								# Parse string table header.
+								lang_header = data[offset:offset + 6]
+								if len(lang_header) != 6: # end reached
+									break
+								lang_size, _, lang_code = struct.unpack('<HH2s', lang_header)
+								if lang_size == 0:
+									break
+
+								# Add string table data, prioritizing the English language.
+								if lang_code == b'us':
+									strings_files.insert(0, data[offset:offset + lang_size])
+								else:
+									strings_files.append(data[offset:offset + lang_size])
+								languages.append(lang_code)
+
+								# Move on to the next table.
+								offset += lang_size
+
+							strings_files.append(data[offset:])
+							self.debug_print('Loaded strings file:', file_in_dir, '=>', languages)
+						else:
+							self.debug_print('Bad strings file:', file_in_dir)
+
 			# Extract information from BCPSYS.
+			dmi_segment = code_segment
 			bcpsys = bcp.get('BCPSYS', [None])[0]
 			if bcpsys:
 				# BCPSYS versions observed:
@@ -2867,12 +2939,14 @@ class PhoenixAnalyzer(Analyzer):
 						regtable_segment = code_segment
 					elif regtable_segment == 0x7000: # (Intel)
 						self.debug_print('Remapping Intel register table segment', hex(regtable_segment))
-						regtable_segment = code_segment = 0xe000
-					elif regtable_segment <= 0xe31f: # invalid segments: DE35 (HP Pavilion 2200), E31F (HP Brio 80xx)
+						regtable_segment = dmi_segment = code_segment = 0xe000 # dmi_segment might not be valid, haven't seen Intel with DMI
+					elif regtable_segment <= 0xe31f: # invalid segments: 0000 (Siemens Nixdorf 4.06), DE35 (HP Pavilion 2200), E31F (HP Brio 80xx)
 						self.debug_print('Register table segment', hex(regtable_segment), 'too low, resetting to', hex(code_segment))
+						if regtable_segment == 0x0000: # DMI at 0000 is truthful (Siemens Nixdorf 4.06)
+							dmi_segment = regtable_segment
 						regtable_segment = code_segment
 					else:
-						code_segment = regtable_segment
+						code_segment = dmi_segment = regtable_segment
 				elif bcpsys.version_maj == 1 and bcpsys.version_min >= 5 and data_size >= 0x6d:
 					regtable_start, regtable_end, code_segment = struct.unpack('<HHH', bcpsys.data[0x67:0x6d])
 					regtable_segment = (bcpsys.offset >> 4) & 0xf000 # not always F000 due to inverted BIOSes
@@ -2963,6 +3037,43 @@ class PhoenixAnalyzer(Analyzer):
 
 					# Add to register table list.
 					self._add_regtable(6, model)
+
+			# Extract DMI information from BCPDMI if required.
+			if not self._bonus_dmi:
+				def _read_dmi_string(offset):
+					if offset in (0x0000, 0xffff):
+						return ''
+					else:
+						string_offset = (dmi_segment << 4) + offset
+						return util.read_string(virtual_mem[string_offset:string_offset + 256]).strip()
+
+				for bcpdmi in bcp.get('BCPDMI', []):
+					# BCPDMI versions observed:
+					# - 2.10 (4.05-4.0R6)
+					# - 2.11 (4.0R6-SecureCore)
+					self.debug_print('BCPDMI version:', bcpdmi.version_maj, bcpdmi.version_min)
+					self.debug_print('DMI table segment:', hex(dmi_segment))
+
+					dmi_tables = []
+
+					if len(bcpdmi.data) >= 0x1c:
+						system_mfg, system_product, system_version = (_read_dmi_string(offset) for offset in struct.unpack('<HHH', bcpdmi.data[0x16:0x1c]))
+
+						if system_mfg or system_product or system_version:
+							dmi_tables.append('[System] {0} {1} {2}'.format(system_mfg, system_product, system_version))
+
+					if len(bcpdmi.data) >= 0x10:
+						board_mfg, board_product, board_version = (_read_dmi_string(offset) for offset in struct.unpack('<HHH', bcpdmi.data[0x0a:0x10]))
+
+						if board_mfg or board_product or board_version:
+							# Check for duplicate system and baseboard information.
+							formatted = '{0} {1} {2}'.format(board_mfg, board_product, board_version)
+							if len(dmi_tables) > 0 and dmi_tables[-1][:9] == '[System] ' and util.compare_alnum(dmi_tables[-1][9:], formatted):
+								dmi_tables[-1] = '[Board/System] ' + formatted
+							else:
+								dmi_tables.append('[Board] ' + formatted)
+
+					BonusAnalyzer._enumerate_metadata(self, 'DMI', dmi_tables, delimiter='\n')
 
 			# Add all found register table information as metadata.
 			regtable_metadata = ''
@@ -3086,70 +3197,6 @@ class PhoenixAnalyzer(Analyzer):
 			# - 1.3 (4.0R6)
 			# - 1.4 (SecureCore)
 			self.debug_print('BCPOST version:', bcpost.version_maj, bcpost.version_min)
-
-			# If this is a compressed BIOS, load decompressed segments.
-			segment_ranges = []
-			strings_files = []
-			if compressed:
-				# Go through extracted files.
-				for file_in_dir in os.listdir(file_path):
-					match = self._segment_pattern.match(file_in_dir)
-					if match:
-						# Read segment data.
-						try:
-							f = open(os.path.join(file_path, file_in_dir), 'rb')
-							data = f.read()
-							f.close()
-						except:
-							self.debug_print('Could not load segment file:', file_in_dir)
-							continue
-
-						# Load segment data into the virtual memory space.
-						self.debug_print('Loaded segment file:', file_in_dir)
-						offset = int(match.group(1), 16) << 4
-						target_len = min(len(virtual_mem) - offset, len(data))
-						if target_len >= 0:
-							virtual_mem[offset:offset + target_len] = data[:target_len]
-							segment_ranges.append((offset, offset + target_len))
-					elif self._strings_pattern.match(file_in_dir):
-						# Read string data.
-						try:
-							f = open(os.path.join(file_path, file_in_dir), 'rb')
-							data = f.read()
-							f.close()
-						except:
-							self.debug_print('Could not load strings file:', file_in_dir)
-							continue
-
-						# SecureCore may have 4 bytes before the STRPACK header.
-						offset = data.find(b'STRPACK-BIOS')
-						if offset > -1:
-							# Load each string table.
-							offset += 0x1c
-							languages = []
-							while True:
-								# Parse string table header.
-								lang_header = data[offset:offset + 6]
-								if len(lang_header) != 6: # end reached
-									break
-								lang_size, _, lang_code = struct.unpack('<HH2s', lang_header)
-								if lang_size == 0:
-									break
-
-								# Add string table data, prioritizing the English language.
-								if lang_code == b'us':
-									strings_files.insert(0, data[offset:offset + lang_size])
-								else:
-									strings_files.append(data[offset:offset + lang_size])
-								languages.append(lang_code)
-
-								# Move on to the next table.
-								offset += lang_size
-
-							strings_files.append(data[offset:])
-							self.debug_print('Loaded strings file:', file_in_dir, '=>', languages)
-						else:
-							self.debug_print('Bad strings file:', file_in_dir)
 
 			# Read version string pointer.
 			version_offset, = struct.unpack('<H', bcpost.data[0x1b:0x1d])

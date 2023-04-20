@@ -368,12 +368,14 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 		# Check for an analyzer which can handle this file.
 		analyzer_file_path = combined and scan_dir_path or scan_file_path
 		bonus_analyzer_metadata = bonus_analyzer_oroms = None
+		bonus_analyzer_dmi = False
 		file_analyzer = None
 		strings = None
 		for analyzer in file_analyzers:
 			# Reset this analyzer.
 			analyzer.reset()
 			analyzer._file_path = scan_file_path
+			analyzer._bonus_dmi = bonus_analyzer_dmi
 
 			# Check if the analyzer can handle this file.
 			try:
@@ -389,6 +391,7 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 				if bonus_analyzer_metadata == None:
 					bonus_analyzer_metadata = analyzer.metadata
 					bonus_analyzer_oroms = analyzer.oroms
+					bonus_analyzer_dmi = 'DMI' in (key for key, value in bonus_analyzer_metadata)
 				continue
 
 			# Run strings on the file data if required (only once if requested by analyzer).

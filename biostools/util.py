@@ -18,6 +18,7 @@
 import errno, multiprocessing, os, math, random, re, shutil, traceback, urllib.request
 from biostools.pciutil import *
 
+alnum_lower_pattern = re.compile('''[a-z0-9]+''')
 date_pattern_mmddyy = re.compile('''(?P<month>[0-9]{2})/(?P<day>[0-9]{2})/(?P<year>[0-9]{2,4})''')
 number_pattern = re.compile('''[0-9]+''')
 ascii_backspace_pattern = re.compile(b'''[\\x00-\\xFF]\\x08''')
@@ -135,6 +136,10 @@ def common_prefixes(candidates, *args, **kwargs):
 			groups[' '.join(candidate)] = []
 
 	return groups
+
+def compare_alnum(s1, s2):
+	"""Compare the alphanumeric content of two strings."""
+	return ''.join(alnum_lower_pattern.findall(s1.lower())) == ''.join(alnum_lower_pattern.findall(s2.lower()))
 
 def date_cmp(date1, date2, pattern):
 	"""Returns the comparison difference between date1 and date2.

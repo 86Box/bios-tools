@@ -433,11 +433,11 @@ BadFragment:
 
 	ModuleName = PhoenixModuleNameGet(Module->Type);
 	if (ModuleName) {
-		filename = malloc(strlen(ModuleName) + 13);
-		sprintf(filename, "%s_%1d_%05X.rom", ModuleName, Module->Id, Offset + Module->HeadLen);
+		filename = malloc(strlen(ModuleName) + 23);
+		sprintf(filename, "%s_%1d_%05X_%04X_%04X.rom", ModuleName, Module->Id, Offset + Module->HeadLen, Module->Segment, Module->Offset);
 	} else {
-		filename = malloc(15);
-		sprintf(filename, "%02X_%1d_%05X.rom", Module->Type, Module->Id, Offset + Module->HeadLen);
+		filename = malloc(25);
+		sprintf(filename, "%02X_%1d_%05X_%04X_%04X.rom", Module->Type, Module->Id, Offset + Module->HeadLen, Module->Segment, Module->Offset);
 	}
 
 	fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
