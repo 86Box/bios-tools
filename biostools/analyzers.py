@@ -2757,7 +2757,7 @@ class PhoenixAnalyzer(Analyzer):
 				bcpsegment_offset = match.start(0)
 				self.debug_print('Probing BCPSEGMENT at', hex(bcpsegment_offset))
 				offset = bcpsegment_offset + 0x0a
-				# Sometimes there's no BCP immediately after BCPSEGMENT (Micronics M54LI)
+				# Sometimes there's no BCP immediately after BCPSEGMENT (Micronics M54Li)
 				# BCP can be way ahead (366 bytes on DEC Venturis FX) - old 256-byte check didn't cut it
 				if virtual_mem[offset:offset + 3] != b'BCP':
 					next_bcp_offset = virtual_mem[offset:offset + 1024].find(b'BCP')
@@ -2947,8 +2947,10 @@ class PhoenixAnalyzer(Analyzer):
 						regtable_segment = code_segment
 					else:
 						code_segment = dmi_segment = regtable_segment
-				elif bcpsys.version_maj == 1 and bcpsys.version_min >= 5 and data_size >= 0x6d:
-					regtable_start, regtable_end, code_segment = struct.unpack('<HHH', bcpsys.data[0x67:0x6d])
+				elif bcpsys.version_maj == 1 and bcpsys.version_min >= 5 and data_size >= 0x6b:
+					regtable_start, regtable_end = struct.unpack('<HH', bcpsys.data[0x67:0x6b])
+					if data_size >= 0x6d: # data can end without this value (BCPSYS 1.5 on Micronics M54Li 07)
+						code_segment, = struct.unpack('<H', bcpsys.data[0x6b:0x6d])
 					regtable_segment = (bcpsys.offset >> 4) & 0xf000 # not always F000 due to inverted BIOSes
 				else:
 					regtable_segment = None
