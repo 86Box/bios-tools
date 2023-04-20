@@ -2042,7 +2042,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._xx86_version_pattern = re.compile(
 			b'''(PhoenixBIOS\\(TM\\) )''' # Phoenix brand
 			b'''[\\x00-\\xFF]{0,512}?''' # variable amount of code inbetween (or nothing at all (DEC))
-			b'''(([A-Z][0-9]86|for ([\\x20-\\x7E]+?) (?:CPU )?- ([^ ]+))''' # branch (can be missing entirely (Wearnes LPX))
+			b'''(([A-Z][0-9]86|for ([\\x20-\\x7E]+?)(?: ?\\(TM\\))? (?:CPU )?- ([^ ]+))''' # branch (can be missing entirely (Wearnes LPX))
 			b''' Version )?([0-9]\\.[0-9]{2})''' # actual version
 			b'''([\\x20-\\x7E]*)''' # added patch levels (Samsung SPC-6033P) and OEM info (Micronics M5PE)
 		)
