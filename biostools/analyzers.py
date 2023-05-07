@@ -339,7 +339,11 @@ class AMIAnalyzer(Analyzer):
 		# AMIBIOS 6+ version corner cases:
 		# - Second digit not 0 (I forget which one had 000000)
 		# - Can be 4-digit instead of 6-digit (Biostar)
-		self._id_block_pattern = re.compile(b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))([\\x00-\\xFF]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)''')
+		# - Copyright string overwritten with "0$RAIDUAC0" structure (Iwill DJ800)
+		self._id_block_pattern = re.compile(
+			b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF])|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))'''
+			b'''(?:([\\x00-\\xFF]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)|[0-9]\\$RAIDUAC[0-9])'''
+		)
 		self._regtable_pattern = re.compile(b'''\\$\\$CT\\x01([\\x20-\\x7E]+)''')
 		# Dash separator possible (TritonIDETimings on AMI Apollo and potentially others)
 		self._regtable_split_pattern = re.compile('''[- ]''')
