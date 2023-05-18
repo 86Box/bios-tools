@@ -2039,7 +2039,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._rombios_version_pattern = re.compile(
 			b'''(?:Phoenix )?''' # Phoenix brand (not always present)
 			b'''((?:80[0-9a-zA-Z]+|V[1-4]0 |[0-9]{3})(?:/EISA)? )?ROM BIOS (PLUS )?''' # branch (whatever lacked the "80" was lost to time)
-			b'''Ver(?:sion)? ?([0-9]\\.[A-Z]?[0-9]{2})''' # actual version (can have short "Ver" with (JE1000) or without (BXM-8) space on small BIOSes, or letter before version (Dell fork "1.P10"))
+			b'''Ver(?:sion|s\\.)? ?([0-9]\\.[A-Z]?[0-9]{2})''' # actual version (can have short "Ver" with (JE1000) or without (BXM-8) space on small BIOSes, or "Vers." (NEC 80286 3.05T), or letter before version (Dell fork "1.P10"))
 			b'''[\\x20-\\x7E]*''' # added patch levels and OEM info
 		)
 		# Covers the Xx86 and for Pentium family.
