@@ -793,7 +793,6 @@ class AwardAnalyzer(Analyzer):
 		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|COPYRIGHT AWARD SOFTWARE INC\\.|Award Decompression Bios''')
 		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}(?:A w a r d|Award) Software Inc\\.|IBM COMPATIBLE A(S)T BIOS''')
 		self._early_pattern = re.compile(b'''([0-9A-Z][\\x21-\\x7E]+) BIOS V([0-9.]+)[\\x21-\\x7E]* COPYRIGHT''')
-		self._early_modular_prefix_pattern = re.compile('''(.+) Modular BIOS ''')
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\\([a-zA-Z0-9]{1,8}\\) EVALUATION ROM - NOT FOR SALE$''')
 		self._gigabyte_hefi_pattern = re.compile(b'''EFI CD/DVD Boot Option''')
@@ -938,24 +937,6 @@ class AwardAnalyzer(Analyzer):
 				if match:
 					self.debug_print('Sign-on reconstructed from Gigabyte data')
 					self.signon = (match.group(1) + b' ' + match.group(2)).decode('cp437', 'ignore')
-			elif 'Award' not in version_string.split('\n')[0] or '8088 Modular' in version_string: # "386SX Modular BIOS v3.15", "i-8088 Modular BIOS Version 3.0F"
-				# Extract early Modular type as the string.
-				match = self._early_modular_prefix_pattern.match(version_string)
-				if match:
-					self.string = match.group(1)
-					self.debug_print('Using early Modular type:', repr(self.string))
-
-				# Append post-version data to the string.
-				if version_match:
-					post_version = version_match.group(3)
-					if post_version:
-						post_version = post_version.strip()
-					if post_version:
-						self.debug_print('Raw post-version data:', repr(post_version))
-						if match:
-							self.string += '\n' + post_version
-						else:
-							self.string = post_version
 
 			found = True
 			break
@@ -992,9 +973,6 @@ class AwardAnalyzer(Analyzer):
 
 					# Extract version.
 					self.version = 'v' + match.group(2).decode('cp437', 'ignore')
-
-					# Extract BIOS type as a string.
-					self.string = match.group(1).decode('cp437', 'ignore')
 
 					# Extract sign-on.
 					self.signon = util.read_string(file_data[id_block_index + 0x3c:id_block_index + 0x8c])
