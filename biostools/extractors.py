@@ -967,7 +967,6 @@ class ImageExtractor(Extractor):
 							# Special marker that the palette should be read.
 							width = -width
 
-			print('pgx', width, height)
 			if width != 0 and height != 0:
 				func = self._convert_pgx
 		if not func:
@@ -2896,6 +2895,7 @@ class VMExtractor(PEExtractor):
 			f.write(b' -writeromfile\r\n')
 		else:
 			f.write(b' a: <c:\\y.txt\r\n')
+		f.write(b'pause\r\n')
 		f.close()
 
 		# Assemble QEMU monitor commands for Compaq Softpaq.
