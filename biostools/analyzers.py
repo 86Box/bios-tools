@@ -2919,10 +2919,7 @@ class PhoenixAnalyzer(Analyzer):
 					regtable_start, regtable_end, regtable_segment = struct.unpack('<HHH', bcpsys.data[0x65:0x6b])
 					if bcpsys.version_maj == 3 and bcpsys.version_min <= 1:
 						regtable_segment = code_segment
-					elif regtable_segment == 0x7000: # (Intel)
-						self.debug_print('Remapping Intel register table segment', hex(regtable_segment))
-						regtable_segment = dmi_segment = code_segment = 0xe000 # dmi_segment might not be valid, haven't seen Intel with DMI
-					elif regtable_segment <= 0xe31f: # invalid segments: 0000 (Siemens Nixdorf 4.06), DE35 (HP Pavilion 2200), E31F (HP Brio 80xx)
+					elif regtable_segment <= 0xe31f: # invalid segments: 0000 (Siemens Nixdorf 4.06), 7000 (Intel), DE35 (HP Pavilion 2200), E31F (HP Brio 80xx)
 						self.debug_print('Register table segment', hex(regtable_segment), 'too low, resetting to', hex(code_segment))
 						if regtable_segment == 0x0000: # DMI at 0000 is truthful (Siemens Nixdorf 4.06)
 							dmi_segment = regtable_segment
