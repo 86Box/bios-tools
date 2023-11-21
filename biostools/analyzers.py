@@ -2013,6 +2013,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess|\\x00IBM AT Compatible Phoenix NuBIOS''')
 		self._ignore_pattern = re.compile(b'''search=f000,0,ffff,S,"|\\x00\\xC3\\x82as Ltd. de Phoenix del \\xC2\\x83 de Tecnolog\\xC3\\x83\\x00''')
 		self._bcpsegment_pattern = re.compile(b'''BCPSEGMENT''')
+		self._valid_id_pattern = re.compile('''[\\x00\\x20-\\x7E]{8,}''')
 
 		self._rombios_version_pattern = re.compile(
 			b'''(?:Phoenix )?''' # Phoenix brand (not always present)
@@ -2921,13 +2922,28 @@ class PhoenixAnalyzer(Analyzer):
 					regtable_start, regtable_end, regtable_segment = struct.unpack('<HHH', bcpsys.data[0x65:0x6b])
 					if bcpsys.version_maj == 3 and bcpsys.version_min <= 1:
 						regtable_segment = code_segment
-					elif regtable_segment <= 0xe31f: # invalid segments: 0000 (Siemens Nixdorf 4.06), 7000 (Intel), DE35 (HP Pavilion 2200), E31F (HP Brio 80xx)
-						self.debug_print('Register table segment', hex(regtable_segment), 'too low, resetting to', hex(code_segment))
-						if regtable_segment == 0x0000: # DMI at 0000 is truthful (Siemens Nixdorf 4.06)
-							dmi_segment = regtable_segment
-						regtable_segment = code_segment
 					else:
-						code_segment = dmi_segment = regtable_segment
+						# Cut ahead of the BCPOST reading further down to check if the ID string is valid,
+						# so we can detect if this image is being honest about its register table segment.
+						bcpost = bcp.get('BCPOST', [None])[0]
+						dmi_segment = regtable_segment
+						if bcpost and len(bcpost.data) >= 0x1d:
+							version_offset, = struct.unpack('<H', bcpost.data[0x1b:0x1d])
+							version_offset += regtable_segment << 4
+							version_string = util.read_string(virtual_mem[version_offset:version_offset + 4096])
+							if not self._valid_id_pattern.match(version_string):
+								self.debug_print('Potentially bogus ID string, changing register table segment from', hex(regtable_segment), 'to 0xf000')
+								# DMI at 0000 is valid (Siemens Nixdorf 4.06)
+								if regtable_segment == 0x0000:
+									dmi_segment = regtable_segment
+								else:
+									dmi_segment = 0xf000
+								regtable_segment = 0xf000
+						elif regtable_segment <= 0xe31f:
+							# Old strategy (set by HP Brio 80xx) as a backup.
+							self.debug_print('No BCPOST and register table segment', hex(regtable_segment), 'appears low, changing to 0xf000')
+							dmi_segment = regtable_segment = 0xf000
+						code_segment = regtable_segment
 				elif bcpsys.version_maj == 1 and bcpsys.version_min >= 5 and data_size >= 0x6b:
 					regtable_start, regtable_end = struct.unpack('<HH', bcpsys.data[0x67:0x6b])
 					if data_size >= 0x6d: # data can end without this value (BCPSYS 1.5 on Micronics M54Li 07)
