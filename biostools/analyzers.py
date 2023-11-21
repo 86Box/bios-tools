@@ -3361,7 +3361,7 @@ class QuadtelAnalyzer(Analyzer):
 		super().__init__('Quadtel', *args, **kwargs)
 
 		self._id_block_pattern = re.compile(b'''Copyright 19..-.... Quadtel Corp\\. Version''')
-		self._version_pattern = re.compile('''(?:(?:Quadtel|QUADTEL|PhoenixBIOS) )?(.+) BIOS Version ([^\\r\\n]+)''')
+		self._version_pattern = re.compile('''(?:(?:Quadtel|QUADTEL|PhoenixBIOS) )?.+ BIOS Version ([^\\r\\n]+)''')
 		self._date_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})[^0-9]''')
 
 	def can_handle(self, file_path, file_data, header_data):
@@ -3378,12 +3378,12 @@ class QuadtelAnalyzer(Analyzer):
 			version_string = util.read_string(file_data[id_block_index + 0xc8:id_block_index + 0x190]) # may contain space followed by backspace (ZEOS Marlin)
 			version_match = self._version_pattern.search(version_string) # may start with a linebreak (Phoenix-Quadtel)
 			if version_match:
-				self.version = version_match.group(2).rstrip('.').strip().rstrip('.') # remove trailing "." (first for quadt286, second for Quadtel GC113)
+				self.version = version_match.group(1).rstrip('.').strip().rstrip('.') # remove trailing "." (first for quadt286, second for Quadtel GC113)
 				if self.version[0:1] == 'Q': # flag Phoenix-Quadtel
 					self.version = self.version[1:] + ' (Phoenix)'
 
-				# Extract BIOS type as the string.
-				self.string = version_match.group(1).strip()
+				# Extract full version string as metadata.
+				self.metadata.append(('ID', version_match.group(0)))
 
 			# Extract sign-on.
 			self.signon = util.read_string(file_data[id_block_index + 0x190:id_block_index + 0x290]).strip()
@@ -3394,8 +3394,8 @@ class QuadtelAnalyzer(Analyzer):
 		# Add newest date found to the string.
 		for match in self._date_pattern.finditer(file_data):
 			date = match.group(1).decode('cp437', 'ignore')
-			linebreak_index = self.string.find('\n')
-			if linebreak_index > -1:
+			if self.string:
+				linebreak_index = self.string.find('\n')
 				if util.date_gt(date, self.string[linebreak_index + 1:], util.date_pattern_mmddyy):
 					self.string = self.string[:linebreak_index + 1] + match.group(0).decode('cp437', 'ignore')
 			else:
