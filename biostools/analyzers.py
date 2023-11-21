@@ -2720,10 +2720,12 @@ class PhoenixAnalyzer(Analyzer):
 			else:
 				raw_data = file_data
 
-			# Remove footer (platform.bin?) (Tyan Tiger MP)
+			# Remove footer.
 			if len(raw_data) & 0xffff:
 				last_block = len(raw_data) & ~0xffff
-				if raw_data[last_block:last_block + 2] == b'BC':
+				if (raw_data[last_block:last_block + 2] == b'BC' or # platform.bin? (Tyan Tiger MP)
+					(len(raw_data) & 0xffff) <= 16 # 11-byte footer consisting of ASCII text + CRLF (NEC)
+					):
 					raw_data = raw_data[:last_block]
 
 			# Create a virtual memory space with the file loaded to its end.
