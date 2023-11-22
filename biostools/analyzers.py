@@ -3617,9 +3617,10 @@ class WhizproAnalyzer(Analyzer):
 		date_index = len(file_data) - 0x0b
 		self.version = util.read_string(file_data[date_index:date_index + 8])
 
-		# Determine location of the identification block. I've only ever
-		# seen 512K BIOSes; other sizes are assumed to work the same way.
-		id_block_index = len(file_data) - 0x20110
+		# Determine location of the identification block.
+		# 256K BIOS = end - 0x10110
+		# 512K BIOS = end - 0x20110
+		id_block_index = len(file_data) - ((len(file_data) >> 2) + 0x110)
 
 		# Extract string.
 		self.string = util.read_string(file_data[id_block_index + 0xe0:id_block_index + 0x100])
