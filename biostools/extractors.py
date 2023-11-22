@@ -2900,7 +2900,6 @@ class VMExtractor(PEExtractor):
 			f.write(b' -writeromfile\r\n')
 		else:
 			f.write(b' a: <c:\\y.txt\r\n')
-		f.write(b'pause\r\n')
 		f.close()
 
 		# Assemble QEMU monitor commands for Compaq Softpaq.
