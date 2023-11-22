@@ -1096,6 +1096,32 @@ class BonusAnalyzer(Analyzer):
 			'''[\\x20-\\x2F\\x3A-\\x40\\x5B-\\x60\\x7A-\\x7E]*''', # trim non-alphanumeric characters
 			re.I)
 
+		# Read BIOSSIG database.
+		self._biossig_patterns = []
+		if os.path.exists('BIOSSIG.DBA'):
+			with open('BIOSSIG.DBA', 'rb') as f:
+				column_pattern = re.compile(b'''"([^"]+)"(?:,|$)''')
+				hex_pattern = re.compile(b'''(?:[0-9A-F]{2}){1,}$''')
+
+				# Go through pattern declaration entries.
+				for match in re.finditer(b'''known_bios\\(((?:"[^"]+",)+"[^"]+")\\)''', f.read()):
+					columns = column_pattern.findall(match.group(1))
+
+					# Decode patterns.
+					byte_patterns = []
+					for x in range(5, len(columns) - 3, 2): # last entry appears to be a CRC
+						addr, pattern = columns[x:x + 2]
+						addr = int(addr, 16) - 0x100000 # store offset from top of image
+						if hex_pattern.match(pattern):
+							pattern = codecs.decode(pattern, 'hex')
+						else:
+							# Nasty hack to get rid of UTF-8, as the file wasn't preserved properly.
+							pattern = pattern.replace(b'\xc3\xba', b'\x00')
+						byte_patterns.append((addr, pattern))
+
+					pattern_key = b'\n'.join(columns[:2]).decode('cp437', 'ignore')
+					self._biossig_patterns.append((pattern_key, byte_patterns))
+
 	def _enumerate_metadata(self, key, entries, delimiter=' '):
 		if len(entries) > 0:
 			# De-duplicate and sort before enumerating.
@@ -1104,6 +1130,22 @@ class BonusAnalyzer(Analyzer):
 			self.metadata.append((key, delimiter.join(entries)))
 
 	def can_handle(self, file_path, file_data, header_data):
+		# BIOSSIG patterns
+		for pattern_key, pattern_list in self._biossig_patterns:
+			# Go through patterns.
+			found = True
+			for pattern_addr, pattern_bytes in pattern_list:
+				if file_data[pattern_addr:pattern_addr + len(pattern_bytes)] != pattern_bytes:
+					# Not what we're looking for.
+					found = False
+					break
+			if not found:
+				continue
+
+			# Successful match, report as metadata.
+			self.metadata.append(('BIOSSIG', pattern_key))
+			break
+
 		# ACPI tables
 		acpi_tables = []
 		for match in self._acpi_table_pattern.finditer(file_data):
