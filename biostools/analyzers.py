@@ -790,8 +790,9 @@ class AwardAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Award', *args, **kwargs)
 
+		# Interleaved "Award Software Inc." (AST)
 		# "COPYRIGHT AWARD SOFTWARE INC." (early XT/286)
-		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|COPYRIGHT AWARD SOFTWARE INC\\.|Award Decompression Bios''')
+		self._award_pattern = re.compile(b'''(?:Award|A w a r d) Software Inc\\.|AAwwaarrdd SSooffttwwaarree IInncc\\.\\.|COPYRIGHT AWARD SOFTWARE INC\\.|Award Decompression Bios''')
 		self._ast_pattern = re.compile(b'''\\(c\\) COPYRIGHT 1984,[0-9]{4}(?:A w a r d|Award) Software Inc\\.|IBM COMPATIBLE A(S)T BIOS''')
 		self._early_pattern = re.compile(b'''([0-9A-Z][\\x21-\\x7E]+) BIOS V([0-9.]+)[\\x21-\\x7E]* COPYRIGHT''')
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
@@ -964,6 +965,8 @@ class AwardAnalyzer(Analyzer):
 				for line in lines:
 					if line[:10] == 'Copyright ' or line[:19] == 'All Rights Reserved':
 						continue
+					elif 'IBM IS A TRADEMARK OF INTERNATIONAL BUSINESS MACHINES CORP.' in line:
+						break
 					self.signon += line + '\n'
 			else:
 				# Handle early XT/286 BIOS.
