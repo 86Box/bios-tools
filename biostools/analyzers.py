@@ -1399,15 +1399,24 @@ class CDIAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('CDI', *args, **kwargs)
 
+		self._ncr_pattern = re.compile(b'''NCR'S VERSION IBM(?: CORP\\.)? [AX]T ROM''')
+
 	def can_handle(self, file_path, file_data, header_data):
-		if b' COMPUTER DEVICES INC. ' not in file_data:
+		match = self._ncr_pattern.search(file_data)
+		if not match and b' COMPUTER DEVICES INC. ' not in file_data:
 			return False
 
-		# No version information, outside of NCR.
-		if b'NCR\'S VERSION IBM CORP. AT ROM' in file_data:
+		# No version information, outside of whether it's NCR.
+		# Whether or not *only* CDI+NCR existed remains to be seen.
+		if match:
 			self.version = 'NCR'
 		else:
 			self.version = '?'
+
+		# Look for entrypoint dates.
+		NoInfoAnalyzer.get_entrypoint_dates(self, file_data)
+		if self.string:
+			self.debug_print('Entry point date:', self.string)
 
 		return True
 
@@ -1748,7 +1757,7 @@ class IBMSurePathAnalyzer(Analyzer):
 		NoInfoAnalyzer.get_entrypoint_dates(self, file_data)
 		if old_string:
 			if self.string:
-				self.debug_print('entry point date:', self.string)
+				self.debug_print('Entry point date:', self.string)
 				self.string = old_string + '\n' + self.string
 			else:
 				self.string = old_string
