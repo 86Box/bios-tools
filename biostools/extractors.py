@@ -906,7 +906,7 @@ class ImageExtractor(Extractor):
 			# Read 64 KB, which is enough to ascertain any potential logo type,
 			# even if embedded in the file. (Monorail SiS 550x: PCX in AMI module)
 			dest_dir_file_path = os.path.join(dest_dir_0, dest_dir_file)
-			if os.path.isdir(dest_dir_file_path):
+			if os.path.isdir(dest_dir_file_path) or dest_dir_file == ':header:':
 				continue
 			f = open(dest_dir_file_path, 'rb')
 			dest_dir_file_header = f.read(65536)
@@ -943,6 +943,10 @@ class ImageExtractor(Extractor):
 			# Get width and height for a Phoenix Graphics image.
 			width, height = struct.unpack('<HH', file_header[10:14])
 			if width == 0 and height == 0 and file_header[2:17] == b'\x09\x00\x00\x80\x02\x16\x00\x00\x00\x00\x00\x00\x00\x00\x0F':
+				# Ignore invalid image at the beginning of the compressed payload (Micronics Tigercat)
+				if not any_offset or os.path.basename(file_path) == 'remainder.rom':
+					return False
+
 				# Some HP 4.0R6 have a width and height of 0 on 640x480 images.
 				width = 640
 				height = 480
