@@ -2706,7 +2706,7 @@ class VMExtractor(PEExtractor):
 			b'''(Copyright Daniel Valot |\\x00ARDI -  \\x00)|''' # IBM ARDI
 			b'''(Ready to build distribution image with the following attributes:)|''' # Zenith in-house
 			b'''(Error reading the Softpaq File information)|''' # Compaq Softpaq
-			b'''(DELLXBIOS[\\x00-\\xFF]+;C_FILE_INFO[\\x00-\\xFF]+<<NMSG>>)''' # Dell in-house
+			b'''((?:Intel Flash Memory Update Utility|DELLXBIOS[\\x00-\\xFF]+;C_FILE_INFO)[\\x00-\\xFF]+<<NMSG>>)''' # Dell in-house
 		)
 		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
 		self._rompaq_pattern = re.compile(b'''[\\x00-\\xFF]{12}[A-Z0-9]{7}\\x00[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00''')
