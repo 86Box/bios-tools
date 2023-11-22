@@ -865,11 +865,11 @@ class AwardAnalyzer(Analyzer):
 				self.string = util.read_string(file_data[id_block_index + 0xc71:id_block_index + 0xce0])
 				self.debug_print('Raw string:', repr(self.string))
 
-				# Check if no string was inserted where it should
-				# have been. (Gateway/Swan Anigma Award v4.28/4.32)
+				# Check if this version is not too old to have a string.
+				# (ASUS v4.00, Gateway/Swan Anigma Award v4.28/4.32)
 				if ' Award Software Inc. ' in self.string:
-					# Extrapolate a string with just the ID a bit further down.
-					self.string = '??/??/??-??????-' + util.read_string(file_data[id_block_index + 0xce0:id_block_index + 0xcf0])
+					# Use the BIOS ID further down.
+					self.string = util.read_string(file_data[id_block_index + 0xce0:id_block_index + 0xcf0])
 				else:
 					# bp/rom.by patches may include a new date in the "modul.tmp"
 					# patch code. If one is present, apply it to the string.
