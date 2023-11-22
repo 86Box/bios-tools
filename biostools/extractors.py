@@ -2691,6 +2691,50 @@ class UEFIExtractor(Extractor):
 		return dest_dir_0
 
 
+class UnshieldExtractor(Extractor):
+	"""Extract InstallShield CAB archives."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		# InstallShield CAB signature.
+		self._signature_pattern = re.compile(b'''ISc\\x28''')
+
+		# /dev/null handle for suppressing output.
+		self._devnull = open(os.devnull, 'wb')
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if this is apparently not an InstallShield CAB.
+		match = self._signature_pattern.match(file_header)
+		if not match:
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Run unshield command.
+		try:
+			subprocess.run(['unshield', 'x', os.path.abspath(file_path)], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+		except:
+			pass
+
+		# Assume failure if nothing was extracted.
+		files_extracted = os.listdir(dest_dir)
+		if len(files_extracted) < 1:
+			self.debug_print('Extraction produced no files:', file_path)
+			return False
+
+		# Remove archive file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory path.
+		return dest_dir_0
+
+
 class VMExtractor(PEExtractor):
 	"""Extract files which must be executed in a virtual machine."""
 

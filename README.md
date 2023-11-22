@@ -30,6 +30,7 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 * **Standard gcc toolchain** for building the essential `bios_extract` tool.
 * **7-Zip** command line utility installed as `7z`.
 * **QEMU** (`qemu-system-i386`) for optionally extracting files which need to be executed.
+* **Unshield** for optionally extracting InstallShield installers.
 
 ### Installation
 
