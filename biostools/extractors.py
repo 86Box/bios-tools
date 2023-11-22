@@ -2702,7 +2702,7 @@ class VMExtractor(PEExtractor):
 			b'''( FastPacket V[0-9])|''' # Siemens Nixdorf FastPacket
 			b''', Sydex, Inc\\. All Rights Reserved\\.|''' # IBM Sydex
 			b'''Disk eXPress Self-Extracting Diskette Image|''' # HP DXP
-			b'''(\\x00Diskette Image Decompression Utility\\.\\x00)|''' # NEC in-house
+			b'''(\\x00Diskette Image Decompression Utility(?: +v%s|\\.)\\x00)|''' # NEC in-house
 			b'''(Copyright Daniel Valot |\\x00ARDI -  \\x00)|''' # IBM ARDI
 			b'''(Ready to build distribution image with the following attributes:)|''' # Zenith in-house
 			b'''(Error reading the Softpaq File information)|''' # Compaq Softpaq
@@ -2879,6 +2879,7 @@ class VMExtractor(PEExtractor):
 			f.write(b'exit\r\n') # just in case
 			f.write(b':sfx\r\n')
 			f.write(b'move /y config.old config.sys\r\n') # just in case again (snapshot shouldn't persist changes)
+			f.write(b'echo 0|') # later revision prompts for standard or LS-120 drive
 		elif match.group(3): # ARDI
 			f.write(b'echo.|')
 		elif match.group(4) or match.group(6): # Zenith in-house, Dell in-house
