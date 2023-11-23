@@ -3192,10 +3192,11 @@ class PhoenixAnalyzer(Analyzer):
 							pre_version = match.group(1)
 							if pre_version:
 								# Shorten 80286/80386(/80486?)
-								if len(pre_version) >= 5 and pre_version[:2] == b'80':
+								pre_version = util.read_string(pre_version).replace('  ', ' ').strip()
+								if len(pre_version) >= 5 and pre_version[:2] == '80':
 									pre_version = pre_version[2:]
 
-								self.version = util.read_string(pre_version).replace('  ', ' ') + self.version # double space on V20
+								self.version = pre_version + ' ' + self.version # double space on V20
 
 							# Extract full version string as metadata.
 							version_string = util.read_string(match.group(0).replace(b'\xF0', b''))
