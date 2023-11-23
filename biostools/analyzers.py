@@ -1554,9 +1554,10 @@ class CompaqAnalyzer(NoInfoAnalyzer):
 
 		self._copyright_pattern = re.compile(b'''Copyright ([0-9]+ by )?COMPAQ Computer Corporation''')
 		self._error_pattern = re.compile(b'''Insert (?:DIAGNOSTIC diskette in Drive |COMPAQ DOS diskette)|You must load COMPAQ BASIC|[0-9]{2}/[0-9]{2}/[0-9]{2} +[^ ]+ +Copyright [0-9]+ by COMPAQ Computer Corporation''')
+		self._entrypoint_pattern = re.compile(b'''[0-9]{2}COMPAQ\\xEA[\\x00-\\xFF]{2}\\x00\\xF0(?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2} ''')
 
 	def has_strings(self, file_data):
-		return self._copyright_pattern.search(file_data) and self._error_pattern.search(file_data)
+		return (self._copyright_pattern.search(file_data) and self._error_pattern.search(file_data)) or self._entrypoint_pattern.search(file_data)
 
 
 class CopamAnalyzer(NoInfoAnalyzer):
