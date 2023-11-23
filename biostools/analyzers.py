@@ -3489,10 +3489,10 @@ class SystemSoftAnalyzer(Analyzer):
 		super().__init__('SystemSoft', *args, **kwargs)
 
 		self._systemsoft_pattern = re.compile(b'''(?:SystemSoft|Insyde Software(?: Presto)?) BIOS ''')
-		self._version_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x7E]+) (?:Vers(?:\\.|ion) 0?([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?| *\\(c\\))''')
+		self._version_pattern = re.compile(b'''[\\x20-\\x7E]+ BIOS [Ff]or [\\x20-\\x7E]+ (?:Vers(?:\\.|ion) 0?([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?| *\\(c\\))''')
 		self._version_mobilepro_pattern = re.compile(b'''(Insyde Software Presto|SystemSoft MobilePRO) BIOS Version ([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
-		self._string_for_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x27\\x29-\\x7E]+)\\(''')
-		self._string_scu_pattern = re.compile(b''' SCU [Ff]or ([\\x20-\\x7E]+) [Cc]hipset''')
+		self._string_for_pattern = re.compile(b'''([\\x20-\\x7E]+ BIOS [Ff]or [\\x20-\\x27\\x29-\\x7E]+)\\(''')
+		self._string_scu_pattern = re.compile(b'''([\\x20-\\x7E]+ SCU [Ff]or [\\x20-\\x7E]+ [Cc]hipset)''')
 		self._signon_pattern = re.compile(b'''(?:\\x0D\\x0A){1,}\\x00\\x08\\x00([\\x20-\\x7E]+)''')
 		self._signon_old_pattern = re.compile(b'''(?:[\\x0D\\x0A\\x20-\\x7E]+\\x00){1,}\\x00+([\\x0D\\x0A\\x20-\\x7E]+)''')
 
@@ -3506,19 +3506,19 @@ class SystemSoftAnalyzer(Analyzer):
 			self.debug_print('All-in-one version string:', aio_match.group(0))
 
 			# Extract version, which may or may not exist. (HP OmniBook XE2)
-			self.version = (aio_match.group(2) or b'?').decode('cp437', 'ignore')
+			self.version = (aio_match.group(1) or b'?').decode('cp437', 'ignore')
 
 			# Unknown version. (NCR Notepad 3130)
 			if len(self.version) <= 2:
 				self.version = '?'
 
-			# Extract chipset as a string.
-			self.string = aio_match.group(1).decode('cp437', 'ignore')
-
-			# Extract any additional information after the version into the string.
-			additional_info = aio_match.group(3)
-			if additional_info:
-				self.string = self.string.strip() + ' ' + additional_info.decode('cp437', 'ignore').strip()
+			# Extract version string as metadata.
+			aio_version = aio_match.group(0).decode('cp437', 'ignore')
+			if aio_version[:4] == 'IBM ':
+				aio_version = aio_version[4:]
+			if aio_version[-4:] == ' (c)':
+				aio_version = aio_version[:-4]
+			self.metadata.append(('ID', aio_version))
 
 		# Look for the MobilePRO/Presto version string.
 		mp_match = self._version_mobilepro_pattern.search(file_data)
@@ -3528,10 +3528,8 @@ class SystemSoftAnalyzer(Analyzer):
 			# Extract version.
 			self.version = (mp_match.group(1).split(b' ')[-1] + b' ' + mp_match.group(2)).decode('cp437', 'ignore')
 
-			# Extract any additional information after the version into the string.
-			additional_info = mp_match.group(3)
-			if additional_info:
-				self.string = self.string.strip() + ' ' + additional_info.decode('cp437', 'ignore').strip()
+			# Extract version string as metadata.
+			self.metadata.append(('ID', mp_match.group(0).decode('cp437', 'ignore')))
 
 		# Stop if we haven't found a version.
 		if not self.version:
@@ -3545,12 +3543,10 @@ class SystemSoftAnalyzer(Analyzer):
 			if not match:
 				match = self._string_for_pattern.search(file_data)
 			if match:
-				self.debug_print('SCU/chipset string:', match.group(0))
+				self.debug_print('SCU/chipset string:', match.group(1))
 
-				# Prepend chipset into the string if not already found.
-				chipset = match.group(1).decode('cp437', 'ignore')
-				if self.string[:len(chipset)] != chipset:
-					self.string = chipset.strip() + ' ' + self.string.strip()
+				# Extract SCU string as metadata.
+				self.metadata.append(('ID', match.group(1).decode('cp437', 'ignore')))
 
 		# Extract sign-on after the version string.
 		match = mp_match or aio_match
