@@ -1574,7 +1574,7 @@ class CorebootAnalyzer(Analyzer):
 		super().__init__('coreboot', *args, **kwargs)
 
 		self._identifier_pattern = re.compile(b'''coreboot-%s%s |Sage_coreboot-|Jumping to LinuxBIOS\\.''')
-		self._version_coreboot_pattern = re.compile(b'''#(?: This image was built using coreboot |define COREBOOT_VERSION ")([\\x20-\\x21\\x23-\\x7E]+)''')
+		self._version_coreboot_pattern = re.compile(b'''(?:#(?: This image was built using coreboot |define COREBOOT_VERSION ")|COREBOOT_VERSION: )([\\x20-\\x21\\x23-\\x7E]+)''')
 		self._version_linuxbios_pattern = re.compile(b'''((LinuxBIOS|coreboot)-([^_ ]+)[_ ](?:Normal |Fallback )?(?:.* )?)starting\\.\\.\\.''')
 		self._build_pattern = re.compile(b'''#define COREBOOT_BUILD "([^"]+?)"''')
 
