@@ -3488,7 +3488,7 @@ class SystemSoftAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('SystemSoft', *args, **kwargs)
 
-		self._systemsoft_pattern = re.compile(b'''(?:SystemSoft|Insyde Software Presto) BIOS ''')
+		self._systemsoft_pattern = re.compile(b'''(?:SystemSoft|Insyde Software(?: Presto)?) BIOS ''')
 		self._version_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x7E]+) (?:Vers(?:\\.|ion) 0?([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?| *\\(c\\))''')
 		self._version_mobilepro_pattern = re.compile(b'''(Insyde Software Presto|SystemSoft MobilePRO) BIOS Version ([^ \\x0D\\x0A]+)(?: ([\\x20-\\x7E]+))?''')
 		self._string_for_pattern = re.compile(b''' BIOS [Ff]or ([\\x20-\\x27\\x29-\\x7E]+)\\(''')
