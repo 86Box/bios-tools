@@ -215,7 +215,7 @@ class AcerAnalyzer(Analyzer):
 
 		self._check_pattern = re.compile(b'''Copyright \\(C\\) Acer Incorporated 1990|Acer Boot Block v1\\.0''')
 		self._version_pattern = re.compile(
-			b'''(?:ACER|\\x00{4})\\x00(V[\\x20-\\x7E]+)\\x00\\x00|''' # V2.x and V3.x - can be all NULs instead of ACER (AOpen DX2G Plus)
+			b'''(?:ACER|\\x00{4})\\x00(V[0-9\\.]+)\\x00\\x00|''' # V2.x and V3.x - can be all NULs instead of ACER (AOpen DX2G Plus)
 			b'''(V[0-9\\.]+)[\\x00 ][0-9]{2}/[0-9]{2}/[0-9]{2,4}\\x00|''' # V1.x and V2.x - observed: space + 2-digit year; NUL + 4-digit year
 			b'''[\\x20-\\x7E]*ACER BIOS (V[\\x20-\\x7E]+)\\x00{2}''' # V1.0
 		)
