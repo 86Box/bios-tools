@@ -47,7 +47,7 @@ FROM debian:bullseye
 # Install runtime dependencies.
 RUN sed -i -e 's/main/main contrib non-free/' /etc/apt/sources.list && \
 	apt-get update && \
-	DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip p7zip-full p7zip-rar unshield qemu-system-x86 && \
+	DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip p7zip-full p7zip-rar innoextract unshield qemu-system-x86 && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists
 

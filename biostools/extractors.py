@@ -2300,6 +2300,13 @@ class PEExtractor(ArchiveExtractor):
 			if ret:
 				return ret
 
+		# Cover Inno Setup installers.
+		if file_header[48:52] == b'Inno':
+			# Determine if this executable can be extracted with innoextract.
+			ret = self._extract_inno(file_path, file_header, dest_dir)
+			if ret:
+				return ret
+
 		# Read up to 16 MB as a safety net.
 		file_header += util.read_complement(file_path, file_header)
 
@@ -2445,6 +2452,32 @@ class PEExtractor(ArchiveExtractor):
 			f.close()
 		except:
 			pass
+
+		# Remove file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory path.
+		return dest_dir
+
+	def _extract_inno(self, file_path, file_header, dest_dir):
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Run innoextract command.
+		try:
+			subprocess.run(['innoextract', '-e', os.path.abspath(file_path)], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+		except:
+			pass
+
+		# Assume failure if nothing was extracted.
+		files_extracted = os.listdir(dest_dir)
+		if len(files_extracted) < 1:
+			self.debug_print('Extraction produced no files:', file_path)
+			return False
 
 		# Remove file.
 		try:
