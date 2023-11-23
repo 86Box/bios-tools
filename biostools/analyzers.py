@@ -213,93 +213,72 @@ class AcerAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Acer', *args, **kwargs)
 
-		self.register_check_list([
-			(self._signon_486,							RegexChecker),
-			((self._version_precheck, self._version),	RegexChecker),
-			(self._string,								RegexChecker),
-		])
-
-	def reset(self):
-		super().reset()
-		self._cpus = []
-		self._trap_version = False
+		self._check_pattern = re.compile(b'''Copyright \\(C\\) Acer Incorporated 1990|Acer Boot Block v1\\.0''')
+		self._version_pattern = re.compile(
+			b'''(?:ACER|\\x00{4})\\x00(V[\\x20-\\x7E]+)\\x00\\x00|''' # V2.x and V3.x - can be all NULs instead of ACER (AOpen DX2G Plus)
+			b'''(V[0-9\\.]+)[\\x00 ][0-9]{2}/[0-9]{2}/[0-9]{2,4}\\x00|''' # V1.x and V2.x - observed: space + 2-digit year; NUL + 4-digit year
+			b'''[\\x20-\\x7E]*ACER BIOS (V[\\x20-\\x7E]+)\\x00{2}''' # V1.0
+		)
+		# Project code may be 2 digits instead of 3 (AcerNote 350P)
+		self._string_pattern = re.compile(b'''(?:([\\x20-\\x7E]{4,})\\x00)?([A-Z]{3}[0-9A-F]{2}[A-Z0-9]{2,3}-[A-Z0-9]{3}-[0-9]{6}-[\\x21-\\x7E]+)(?: +([\\x20-\\x7E]+))?''')
+		# Multiple choices and dot before string (J3)
+		# May have one (J3) or two (V10) NULs before string
+		self._string_v1_pattern = re.compile(b'''((?:[\\x20-\\x7E]{4,}\\x00)+)([\\x20-\\x7E]{8})\\x00\\x00?\\.([\\x20-\\x7E]{5})\\x00''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		return b'Copyright (C) Acer Incorporated 1990' in file_data or b'Acer Boot Block v1.0' in file_data
-
-	def _version_precheck(self, line):
-		return self._trap_version
-
-	def _version_r(self, line, match):
-		'''^R([0-9])\.([0-9])'''
-
-		# Extract version.
-		self.version = match.group(0)
-
-		return True
-
-	def _version(self, line, match):
-		'''V([0-9])\.([0-9])'''
-
-		# Extract version.
-		self.version = match.group(0)
-
-		return True
-
-	def _signon_486(self, line, match):
-		'''^(?:((?:PCI/)?(?:E)?ISA) )?(.+) BIOS $'''
-
-		# Stop if the CPU is invalid.
-		cpu = match.group(2)
-		if cpu in ('E)', 'AM') or 'SCSI' in cpu or '(tm)' in cpu:
-			# "E)", "SCSI" (V55LA-2 R03-B1S0)
-			# "(tm)" (Fortress 1100)
-			# "AM" (V66LT)
+		if not self._check_pattern.search(file_data):
 			return False
 
-		# Add CPU to the sign-on if it wasn't already seen.
-		if cpu not in self._cpus:
-			self._cpus.append(cpu)
-			linebreak_index = self.signon.find('\n')
-			if linebreak_index > -1:
-				first_signon_line = self.signon[:linebreak_index]
-			else:
-				first_signon_line = self.signon
+		# Extract version.
+		match = self._version_pattern.search(file_data)
+		if not match:
+			return False
+		version_string = match.group(1) or match.group(2) or match.group(3)
+		self.debug_print('Raw version string:', version_string)
+		self.version = util.read_string(version_string)
 
-			if first_signon_line:
-				first_signon_line += '/'
-			first_signon_line += cpu
+		# Extract V1.0 identification string as metadata.
+		if match.group(3):
+			id_string = match.group(0).rstrip(b'\x00')
+			self.debug_print('Raw V1.0 ID string:', id_string)
+			self.metadata.append(('ID', util.read_string(id_string)))
 
-			if linebreak_index > -1:
-				self.signon = first_signon_line + self.signon[linebreak_index:]
-			else:
-				self.signon = first_signon_line
+		match = self._string_pattern.search(file_data)
+		if match:
+			# Extract V2.0 identification string as metadata.
+			id_string = match.group(1)
+			if id_string:
+				self.debug_print('Raw V2 ID string:', id_string)
+				self.metadata.append(('ID', util.read_string(id_string)))
 
-		# Add any prefix to the sign-on.
-		prefix = match.group(1)
-		if prefix and self.signon[:len(prefix) + 1] != (prefix + ' '):
-			self.signon = prefix + ' ' + self.signon
+			# Extract string.
+			string = match.group(2)
+			self.debug_print('Raw V2 string:', string)
+			self.string = util.read_string(string)
 
-		# Read revision on the next non-string line.
-		self._trap_version = True
+			# Extract sign-on.
+			signon = match.group(3)
+			if signon:
+				self.debug_print('Raw V2 sign-on:', signon)
+				self.signon = util.read_string(signon).strip()
+		else:
+			match = self._string_v1_pattern.search(file_data)
+			if match:
+				# Extract string.
+				string = match.group(3)
+				self.debug_print('Raw V1 string:', string)
+				self.string = util.read_string(string)
 
-		return True
+				# Extract revision as a sign-on.
+				signon = match.group(2)
+				self.debug_print('Raw V1 revision:', signon)
+				self.signon = util.read_string(signon)
 
-	def _string(self, line, match):
-		'''([A-Z]{3}[0-9A-F]{2}[A-Z0-9]{3}-[A-Z0-9]{3}-[0-9]{6}-[^\s]+)(?:\s+(.+))?'''
-
-		# Extract string.
-		self.string = match.group(1)
-
-		# Extract sign-on if present.
-		signon = match.group(2)
-		if signon:
-			if self.signon:
-				self.signon += '\n'
-			self.signon = signon.strip()
-
-		# Read version on the next line.
-		self._trap_version = True
+				# Extract identification string as metadata.
+				id_string = match.group(1)
+				self.debug_print('Raw V1 ID strings:', id_string)
+				id_string = id_string.replace(b' \x00', b'\n').replace(b'\x00', b'\n')
+				self.metadata.append(('ID', util.read_string(id_string)))
 
 		return True
 
