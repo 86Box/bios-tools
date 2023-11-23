@@ -137,7 +137,7 @@ class ArchiveExtractor(Extractor):
 
 		# Known signatures for archive files.
 		self._signature_pattern = re.compile(
-			b'''PK\\x03\\x04|''' # zip
+			b'''(?:PK00)?PK\\x03\\x04|''' # zip
 			b'''Rar!\\x1A\\x07|''' # rar
 			b'''7z\\xBC\\xAF\\x27\\x1C|''' # 7z
 			b'''MSCF|''' # cab
@@ -2452,6 +2452,8 @@ class PEExtractor(ArchiveExtractor):
 			f.close()
 		except:
 			pass
+		import time
+		time.sleep(60)
 
 		# Remove file.
 		try:
