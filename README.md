@@ -111,6 +111,7 @@ Depending on the contents of each BIOS, the following tags may be displayed on t
 * **Build**: Build information contained within the BIOS.
 * **ID**: How the BIOS identifies itself during POST.
 * **LAN**: PXE or Novell NetWare RPL-compliant network boot ROM, usually associated with on-board Ethernet.
+* **OROM**: Non-PCI option ROM, usually associated with on-board devices.
 * **SCSI**: Adaptec or NCR/Symbios SCSI option ROM. Model (Adaptec) or SDMS version (NCR/Symbios) information is extracted from the ROM.
 * **SLI**: NVIDIA SLI license for non-nForce motherboards. Model information is extracted from the license header.
 * **Table**: Register table information contained within the BIOS. May help in identifying chipset and Super I/O devices.

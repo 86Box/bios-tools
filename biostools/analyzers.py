@@ -1058,7 +1058,8 @@ class BonusAnalyzer(Analyzer):
 		self._dmi_strings_pattern = re.compile(b'''(?:[\\x20-\\x7E]{1,255}\\x00){1,255}\\x00''')
 		self._dmi_date_pattern = re.compile('''[0-9]{2}/[0-9]{2}/[0-9]{2}(?:[0-9]{2})?$''')
 		self._ncr_pattern = re.compile(b''' SDMS \\(TM\\) V([0-9\\.]+)''')
-		self._orom_pattern = re.compile(b'''\\x55\\xAA([\\x01-\\xFF])[\\x00-\\xFF]{21}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
+		self._orom_pattern = re.compile(b'''\\x55\\xAA([\\x01-\\xFF])([\\x00-\\xFF])[\\x00-\\xFF]{20}([\\x00-\\xFF]{4})([\\x00-\\xFF]{2}IBM)?''')
+		self._orom_string_pattern = re.compile(b'''[\\x0D\\x0A\\x20-\\x7E]{9,}''')
 		self._pxe_patterns = (
 			re.compile(b'''PXE-M0F: Exiting '''),
 			re.compile(b'''PXE-EC6: UNDI driver image is invalid\\.'''),
@@ -1311,30 +1312,42 @@ class BonusAnalyzer(Analyzer):
 			self._enumerate_metadata('LAN', lan_roms)
 
 			# Check for the VGA BIOS compatibility marker string and add it as metadata.
-			vga_marker = match.group(3)
-			if vga_marker:
+			orom_marker = match.group(4)
+			orom_is_vga = False
+			if orom_marker:
+				orom_is_vga = True
+
 				# Find ASCII strings around the marker. There must be a space before/after
 				# the marker to avoid parsing of non-text bytes as ASCII characters.
-				vga_start = match.start(3) + 2 - rom_offset
+				vga_start = match.start(4) + 2 - rom_offset
 				if rom_data[vga_start - 1:vga_start] == b' ':
 					while vga_start > 0 and rom_data[vga_start - 1] >= 0x20 and rom_data[vga_start - 1] <= 0x7e:
 						vga_start -= 1
-				vga_end = match.end(3) - rom_offset
+				vga_end = match.end(4) - rom_offset
 				if rom_data[vga_end:vga_end + 1] == b' ':
 					while vga_end < len(rom_data) and rom_data[vga_end] >= 0x20 and rom_data[vga_end] <= 0x7e:
 						vga_end += 1
-				vga_marker = util.read_string(rom_data[vga_start:vga_end]).strip()
+				orom_marker = util.read_string(rom_data[vga_start:vga_end]).strip()
 
 				# Find an ASCII string after the IBM header, and if one is found, use it instead.
 				additional_match = self._vga_string_pattern.search(rom_data[vga_end:])
 				if additional_match:
-					vga_marker = self._vga_trim_pattern.sub('', vga_marker).strip()
-					if vga_marker:
-						vga_marker += '\n'
-					vga_marker += util.read_string(additional_match.group(0).replace(b'\x00', b' ')).strip()
+					orom_marker = self._vga_trim_pattern.sub('', orom_marker).strip()
+					if orom_marker:
+						orom_marker += '\n'
+					orom_marker += util.read_string(additional_match.group(0).replace(b'\x00', b' ')).strip()
+			elif match.group(2) in b'\xe9\xeb':
+				# Find ASCII strings near the header if the entry point jump looks valid.
+				string_match = self._orom_string_pattern.search(rom_data[5:4096]) # spec says data starts at 6, but a short jump can make it start at 5
+				if string_match and b'NetWare Ready ROM' in string_match.group(0): # ignore RPL signature
+					string_match = self._orom_string_pattern.search(rom_data[string_match.end(0):4096])
+				if string_match:
+					orom_marker = util.read_string(string_match.group(0)).strip()
+					if len(orom_marker) > 256: # ignore Adaptec's essay about 1 GB drives
+						orom_marker = None
 
 			# Extract PCI and PnP data structure pointers.
-			pci_header_ptr, pnp_header_ptr = struct.unpack('<HH', match.group(2))
+			pci_header_ptr, pnp_header_ptr = struct.unpack('<HH', match.group(3))
 
 			# Check for a valid PCI data structure.
 			if pci_header_ptr >= 26:
@@ -1348,8 +1361,8 @@ class BonusAnalyzer(Analyzer):
 
 						# Make sure the vendor ID is not bogus.
 						if vendor_id not in (0x0000, 0xffff):
-							# The generic VGA marker is no longer required.
-							vga_marker = None
+							# The extracted option ROM marker is no longer required.
+							orom_marker = None
 
 							# Add IDs to the option ROM list.
 							self.oroms.append((vendor_id, device_id))
@@ -1401,19 +1414,19 @@ class BonusAnalyzer(Analyzer):
 
 						# Take valid data only.
 						if device_id[:2] != b'\x00\x00' and (vendor or device):
-							# The generic VGA marker is no longer required.
-							vga_marker = None
+							# The extracted option ROM marker is no longer required.
+							orom_marker = None
 
 							# Add PnP ID (endianness swapped to help the front-end in
 							# processing it), vendor name and device name to the list.
 							self.oroms.append((struct.unpack('>I', device_id)[0], vendor, device))
 
-			# Add generic VGA marker if no PCI/PnP data was found.
-			if vga_marker:
+			# Add extracted option ROM marker if no PCI/PnP data was found.
+			if orom_marker:
 				# Strip lines that are too short or have a single repeated character.
-				stripped = (x.strip() for x in vga_marker.replace('\r', '\n').split('\n'))
-				vga_marker = '\n'.join(x for x in stripped if len(x) > 3 and x[:10] != (x[0] * min(len(x), 10))).strip('\n')
-				self.oroms.append((-1, 'VGA', vga_marker))
+				stripped = (x.strip() for x in orom_marker.replace('\r', '\n').split('\n'))
+				orom_marker = '\n'.join(x for x in stripped if len(x) > 3 and x[:10] != (x[0] * min(len(x), 10))).strip('\n')
+				self.oroms.append((-1, 'VGA' if orom_is_vga else 'OROM', orom_marker))
 
 		# This analyzer should never return True.
 		return False
