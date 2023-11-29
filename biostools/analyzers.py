@@ -1336,8 +1336,11 @@ class BonusAnalyzer(Analyzer):
 					if orom_marker:
 						orom_marker += '\n'
 					orom_marker += util.read_string(additional_match.group(0).replace(b'\x00', b' ')).strip()
-			elif match.group(2) in b'\xe9\xeb':
-				# Find ASCII strings near the header if the entry point jump looks valid.
+			elif rom_size >= 4096 and not rom_size & 0x7ff and match.group(2) in b'\xe9\xeb':
+				# Find ASCII strings near what appears to be a header.
+				# Not much we can do to check the validity of a header,
+				# outside of the size which is a >= 4K multiple of 2K
+				# in most cases, and the entry point jump instruction.
 				string_match = self._orom_string_pattern.search(rom_data[5:4096]) # spec says data starts at 6, but a short jump can make it start at 5
 				if string_match and b'NetWare Ready ROM' in string_match.group(0): # ignore RPL signature
 					string_match = self._orom_string_pattern.search(rom_data[string_match.end(0):4096])
