@@ -1622,12 +1622,12 @@ class CorebootAnalyzer(Analyzer):
 		return False
 
 
-class DTKGoldStarAnalyzer(Analyzer):
+class DTKAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
-		super().__init__('DTKGoldStar', *args, **kwargs)
+		super().__init__('DTK', *args, **kwargs)
 
 		self._dtk_pattern = re.compile(b'''Datatech Enterprises Co\\., Ltd\\.|DATATECH ENTERPRISES CO\\., LTD\\.|\\x0ADTK Corp\\.|\\(C\\) Copyright by GoldStar Co\\.,Ltd\\.|GOLDSTAR  SYSTEM  SETUP''')
-		self._version_pattern = re.compile(b'''(?:(DTK|GoldStar) ([\\x20-\\x7E]+) BIOS Ver(?:sion)? |(DTK)/([^/]+)/BIOS )([^\s]+)(?: ([^\s]+))?''')
+		self._version_pattern = re.compile(b'''(?:(?:DTK|GoldStar) [\\x20-\\x7E]+ BIOS Ver(?:sion)? |(?:DTK)/[\\x21-\\x2E\\x30-\\x7E]+/BIOS )([\\x21-\\x7E]+)(?: [\\x20-\\x7E]+)?''')
 
 	def reset(self):
 		super().reset()
@@ -1640,23 +1640,13 @@ class DTKGoldStarAnalyzer(Analyzer):
 		# Locate version string.
 		match = self._version_pattern.search(file_data)
 		if match:
-			self.debug_print('DTK version:', match.group(0))
-
-			# Extract vendor.
-			self.vendor = (match.group(1) or match.group(3) or b'GoldStar').decode('cp437', 'ignore')
+			# Extract version string as metadata.
+			dtk_ver = match.group(0)
+			self.debug_print('DTK version:', dtk_ver)
+			self.metadata.append(('ID', dtk_ver.decode('cp437', 'ignore')))
 
 			# Extract version.
-			self.version = match.group(5).decode('cp437', 'ignore')
-
-			# Extract string.
-			self.string = (match.group(2) or match.group(4) or b'').decode('cp437', 'ignore')
-			if self.string[-4:] == ' ROM':
-				self.string = self.string[:-4]
-
-			# Add revision to string.
-			revision = (match.group(6) or b'').decode('cp437', 'ignore')
-			if revision and revision != '(C)':
-				self.string += '\n' + revision
+			self.version = match.group(1).decode('cp437', 'ignore')
 
 			return True
 

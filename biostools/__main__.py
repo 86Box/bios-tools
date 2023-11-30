@@ -573,7 +573,7 @@ def analyze_process(queue, formatter, scan_base, options):
 		analyzers.CompaqAnalyzer(),
 		analyzers.CopamAnalyzer(),
 		analyzers.CorebootAnalyzer(),
-		analyzers.DTKGoldStarAnalyzer(),
+		analyzers.DTKAnalyzer(),
 		analyzers.GeneralSoftwareAnalyzer(),
 		analyzers.IBMSurePathAnalyzer(),
 		analyzers.IBMAnalyzer(),
