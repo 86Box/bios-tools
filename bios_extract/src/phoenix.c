@@ -1001,17 +1001,19 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		phx.commonCharacterLZSS = ' ';
 	}
 
-	Offset = le32toh(*((uint32_t *) (((char *)SYS) + 0x77)));
-	Offset &= (BIOSLength - 1);
-	if (!Offset) {
-		fprintf(stderr, "BCPSYS module offset is NULL.\n");
-		if (FFV)
-			PhoenixFFV(BIOSImage, BIOSLength, FFV);
-	}
+	if (SYS->Length >= 0x7b) {
+		Offset = le32toh(*((uint32_t *) (((char *)SYS) + 0x77)));
+		Offset &= (BIOSLength - 1);
+		if (!Offset) {
+			fprintf(stderr, "BCPSYS module offset is NULL.\n");
+			if (FFV)
+				PhoenixFFV(BIOSImage, BIOSLength, FFV);
+		}
 
-	while (Offset) {
-		Offset = PhoenixModule(BIOSImage, BIOSLength, Offset);
-		Offset &= BIOSLength - 1;
+		while (Offset) {
+			Offset = PhoenixModule(BIOSImage, BIOSLength, Offset);
+			Offset &= BIOSLength - 1;
+		}
 	}
 
 	/* All scans below based on phoedeco */
