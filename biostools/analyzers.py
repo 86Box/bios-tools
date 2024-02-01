@@ -2054,7 +2054,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._phoenix_pattern = re.compile(b'''Phoenix (?:Technologies Ltd|Software Associates|Compatibility Corp|ROM BIOS)|PPhhooeenniixx  TTeecchhnnoollooggiieess|\\x00IBM AT Compatible Phoenix NuBIOS''')
 		self._ignore_pattern = re.compile(b'''search=f000,0,ffff,S,"|\\x00\\xC3\\x82as Ltd. de Phoenix del \\xC2\\x83 de Tecnolog\\xC3\\x83\\x00''')
 		self._bcpsegment_pattern = re.compile(b'''BCPSEGMENT''')
-		self._valid_id_pattern = re.compile('''[\\x00\\x20-\\x7E]{8,}''')
+		self._valid_id_pattern = re.compile(b'''[\\x20-\\x7E][\\x00\\x20-\\x7E]{7,}''')
 
 		self._rombios_version_pattern = re.compile(
 			b'''(?:Phoenix )?''' # Phoenix brand (not always present)
@@ -2971,15 +2971,24 @@ class PhoenixAnalyzer(Analyzer):
 						if bcpost and len(bcpost.data) >= 0x1d:
 							version_offset, = struct.unpack('<H', bcpost.data[0x1b:0x1d])
 							version_offset += regtable_segment << 4
-							version_string = util.read_string(virtual_mem[version_offset:version_offset + 4096])
+							version_string = virtual_mem[version_offset:version_offset + 4096]
 							if not self._valid_id_pattern.match(version_string):
-								self.debug_print('Potentially bogus ID string, changing register table segment from', hex(regtable_segment), 'to 0xf000')
-								# DMI at 0000 is valid (Siemens Nixdorf 4.06)
-								if regtable_segment == 0x0000:
-									dmi_segment = regtable_segment
+								prev_regtable_segment = regtable_segment
+								if regtable_segment < 0x8000:
+									# Some images report a bogus table segment such as
+									# 0x5000 (DEC 440LX DEVEL61F). This can probably be
+									# made to check for segments beyond the image size.
+									regtable_segment |= 0x8000
 								else:
-									dmi_segment = 0xf000
-								regtable_segment = 0xf000
+									# DMI at 0000 is valid (Siemens Nixdorf 4.06)
+									if regtable_segment == 0x0000:
+										dmi_segment = regtable_segment
+									else:
+										dmi_segment = 0xf000
+									regtable_segment = 0xf000
+								self.debug_print('Potentially bogus ID string, changing register table segment from', hex(prev_regtable_segment), 'to', hex(regtable_segment))
+							else:
+								version_string = util.read_string(version_string)
 						elif regtable_segment <= 0xe31f:
 							# Old strategy (set by HP Brio 80xx) as a backup.
 							self.debug_print('No BCPOST and register table segment', hex(regtable_segment), 'appears low, changing to 0xf000')
