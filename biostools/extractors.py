@@ -2453,8 +2453,6 @@ class PEExtractor(ArchiveExtractor):
 			f.close()
 		except:
 			pass
-		import time
-		time.sleep(60)
 
 		# Remove file.
 		try:
