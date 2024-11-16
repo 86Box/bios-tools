@@ -19,9 +19,9 @@ import io, re, urllib.request
 
 clean_device_abbr = [
 	# Generic patterns to catch extended abbreviations: "Abbreviated Terms (AT)"
-	('([A-Z])[^\s]+ ([A-Z])[^\s]+ (?:\(|\[|\{|/)\\2\\3(?:$|\)|\]|\})', '\\2\\3'),
-	('([A-Z])[^\s]+ ([A-Z])[^\s]+ ([A-Z])[^\s]+ (?:\(|\[|\{|/)\\2\\3\\4(?:$|\)|\]|\})', '\\2\\3\\4'),
-	('([A-Z])[^\s]+ ([A-Z])[^\s]+ ([A-Z])[^\s]+ ([A-Z])[^\s]+ (?:\(|\[|\{|/)\\2\\3\\4\\5(?:$|\)|\]|\})', '\\2\\3\\4\\5'),
+	('([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\(|\[|\{|/)\\2\\3(?:$|\)|\]|\})', '\\2\\3'),
+	('([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\(|\[|\{|/)\\2\\3\\4(?:$|\)|\]|\})', '\\2\\3\\4'),
+	('([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\(|\[|\{|/)\\2\\3\\4\\5(?:$|\)|\]|\})', '\\2\\3\\4\\5'),
 
 	# Manual patterns
 	('100Base-TX?', 'FE'),
@@ -43,7 +43,7 @@ clean_device_abbr = [
 	('High Definition Audio', 'HDA'),
 	('Host Adapter', 'HBA'),
 	('Host Bus Adapter', 'HBA'),
-	('Host Controller', 'HC'),
+	('Host[- ]Controller', 'HC'), # dash = 1106:3104
 	('Input/Output', 'I/O'),
 	('Integrated ([^\s]+) (?:Graphics|GPU)', '\\2 iGPU'), # VIA CLE266
 	('Integrated (?:Graphics|GPU)', 'iGPU'),
@@ -75,7 +75,7 @@ clean_device_abbr = [
 clean_device_bit_pattern = re.compile('''( |^|\(|\[|\{|/)(?:([0-9]{1,4}) )?(?:(K)(?:ilo)?|(M)(?:ega)?|(G)(?:iga)?)bit( |$|\)|\]|\})''', re.I)
 clean_device_suffix_pattern = re.compile(''' (?:Adapter|Card|Device|(?:Host )?Controller)( (?: [0-9#]+)?|$|\)|\]|\})''', re.I)
 clean_vendor_abbr_pattern = re.compile(''' \[([^\]]+)\]''')
-clean_vendor_suffix_pattern = re.compile(''' (?:Semiconductors?|(?:Micro)?electronics?|Interactive|Technolog(?:y|ies)|(?:Micro)?systems|Computer(?: works)?|Products|Group|and subsidiaries|of(?: America)?|Co(?:rp(?:oration)?|mpany)?|Inc|LLC|Ltd|GmbH|AB|AG|SA|(?:\(|\[|\{).*)$''', re.I)
+clean_vendor_suffix_pattern = re.compile('''[ ,.](?:Semiconductors?|(?:Micro)?electronics?|Interactive|Technolog(?:y|ies)|(?:Micro)?systems|Computer(?: works)?|Products|Group|and subsidiaries|of(?: America)?|Co(?:rp(?:oration)?|mpany)?|Inc|LLC|Ltd|GmbH(?: & .+)?|AB|AG|SA|(?:\(|\[|\{).*)$''', re.I)
 clean_vendor_force = {
 	'National Semiconductor Corporation': 'NSC',
 }
