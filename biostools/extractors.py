@@ -2777,14 +2777,14 @@ class VMExtractor(PEExtractor):
 
 		# Known signatures.
 		self._floppy_pattern = re.compile(
-			b'''( FastPacket V[0-9])|''' # Siemens Nixdorf FastPacket
+			b'''(?P<fastpacket> FastPacket V[0-9])|''' # Siemens Nixdorf FastPacket
 			b''', Sydex, Inc\\. All Rights Reserved\\.|''' # IBM Sydex
 			b'''Disk eXPress Self-Extracting Diskette Image|''' # HP DXP
-			b'''(\\x00Diskette Image Decompression Utility(?: +v%s|\\.)\\x00)|''' # NEC in-house
-			b'''(Copyright Daniel Valot |\\x00ARDI -  \\x00)|''' # IBM ARDI
-			b'''(Ready to build distribution image with the following attributes:)|''' # Zenith in-house
-			b'''(Error reading the Softpaq File information)|''' # Compaq Softpaq
-			b'''((?:Intel Flash Memory Update Utility|DELLXBIOS[\\x00-\\xFF]+;C_FILE_INFO)[\\x00-\\xFF]+<<NMSG>>)''' # Dell in-house
+			b'''(?P<nec>\\x00Diskette Image Decompression Utility(?: +v%s|\\.)\\x00)|''' # NEC in-house
+			b'''(?P<ardi>Copyright Daniel Valot |\\x00ARDI -  \\x00)|''' # IBM ARDI
+			b'''(?P<zenith>Ready to build distribution image with the following attributes:)|''' # Zenith in-house
+			b'''(?P<softpaq>Error reading the Softpaq File information)|''' # Compaq Softpaq
+			b'''(?P<dell>Intel Flash Memory Update Utility|DELLXBIOS[\\x00-\\xFF]+;C_FILE_INFO)[\\x00-\\xFF]+<<NMSG>>''' # Dell in-house
 		)
 		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
 		self._rompaq_pattern = re.compile(b'''[\\x00-\\xFF]{12}[A-Z0-9]{7}\\x00[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00''')
@@ -2933,7 +2933,7 @@ class VMExtractor(PEExtractor):
 		floppy_media = 'floppy.144'
 
 		# Copy original file and blank floppy image to the destination directory.
-		if match.group(6): # Dell in-house names the extracted file after the executable
+		if match.group('dell'): # Dell in-house names the extracted file after the executable
 			exe_name = 'dell.exe'
 		else:
 			exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'
@@ -2946,7 +2946,7 @@ class VMExtractor(PEExtractor):
 		# Create batch file for calling the executable.
 		bat_path = os.path.join(dest_dir, 'autoexec.bat')
 		f = open(bat_path, 'wb')
-		if match.group(2): # NEC in-house
+		if match.group('nec'):
 			# This SFX has trouble with (at least) the FreeDOS memory manager.
 			# Work around that by moving config.sys out of the way to disable the
 			# memory manager, rebooting the system, then executing the SFX proper.
@@ -2958,23 +2958,23 @@ class VMExtractor(PEExtractor):
 			f.write(b':sfx\r\n')
 			f.write(b'move /y config.old config.sys\r\n') # just in case again (snapshot shouldn't persist changes)
 			f.write(b'echo 0|') # later revision prompts for standard or LS-120 drive
-		elif match.group(3): # ARDI
+		elif match.group('ardi'):
 			f.write(b'echo.|')
-		elif match.group(4) or match.group(6): # Zenith in-house, Dell in-house
+		elif match.group('zenith') or match.group('dell'):
 			f.write(b'a:\r\n')
-		elif match.group(5): # Compaq Softpaq
+		elif match.group('softpaq'):
 			# Create flag file for sending the monitor commands.
 			flag_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.dat'
 			flag_path = os.path.join(dest_dir, flag_name)
 			f.write(b'echo. >d:\\' + flag_name.encode('cp437', 'ignore') + b'\r\n')
 		f.write(b'd:' + exe_name.encode('cp437', 'ignore'))
-		if match.group(1): # FastPacket
+		if match.group('fastpacket'):
 			f.write(b' /b a:\r\n')
-		elif match.group(3) or match.group(5): # ARDI or Compaq Softpaq
+		elif match.group('ardi') or match.group('softpaq'):
 			f.write(b'\r\n')
-		elif match.group(4): # Zenith in-house
+		elif match.group('zenith'):
 			f.write(b' <c:\\agreed.txt\r\n')
-		elif match.group(6): # Dell in-house
+		elif match.group('dell'):
 			f.write(b' -writeromfile\r\n')
 		else:
 			f.write(b' a: <c:\\y.txt\r\n')
@@ -2982,7 +2982,7 @@ class VMExtractor(PEExtractor):
 
 		# Assemble QEMU monitor commands for Compaq Softpaq.
 		monitor_cmd = None
-		if match.group(5):
+		if match.group('softpaq'):
 			monitor_cmd = (
 				b'sendkey pgdn\n'
 				b'sendkey a\n'
@@ -3003,7 +3003,7 @@ class VMExtractor(PEExtractor):
 		self._run_qemu(hdd=os.path.join(self._dep_dir, 'freedos.img'), floppy=image_path, floppy_snapshot=False, vvfat=dest_dir, monitor_cmd=monitor_cmd, monitor_flag_file=flag_path)
 
 		# Detect and recover from a Softpaq crash.
-		if match.group(5):
+		if match.group('softpaq'):
 			temp_image_path = os.path.join(dest_dir, 'image')
 			if os.path.exists(temp_image_path) and os.path.getsize(temp_image_path) > 0:
 				try:
