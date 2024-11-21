@@ -137,7 +137,7 @@ class ArchiveExtractor(Extractor):
 
 		# Known signatures for archive files.
 		self._signature_pattern = re.compile(
-			b'''(?:PK00)?PK\\x03\\x04|''' # zip
+			b'''PK(?:00PK)?\\x03\\x04|''' # zip
 			b'''Rar!\\x1A\\x07|''' # rar
 			b'''7z\\xBC\\xAF\\x27\\x1C|''' # 7z
 			b'''MSCF|''' # cab
@@ -2272,10 +2272,10 @@ class PEExtractor(ArchiveExtractor):
 
 		# Signatures for flash tool executables which may have an embedded ROM.
 		self._flashtool_pattern = re.compile(
-			b'''(Software\\\\AMI\\\\AFUWIN)|''' # AMIBIOS 8 AFUWIN (many ASRock)
-			b'''(AOpen FLASH ROM Utility R)|''' # AOpen (AP61)
+			b'''(?P<afuwin>Software\\\\AMI\\\\AFUWIN)|''' # AMIBIOS 8 AFUWIN (many ASRock)
+			b'''(?P<aopen>AOpen FLASH ROM Utility R)|''' # AOpen (AP61)
 			b'''Micro Firmware, Incorporated \\* |''' # Micro Firmware (Intel Monsoon surfaced so far)
-			b'''(ASUS Floppy Image Self-Extrator\\.)''' # ASUS floppy self-extractor (P4VP-MX)
+			b'''(?P<asus>ASUS Floppy Image Self-Extrator\\.)''' # ASUS floppy self-extractor (P4VP-MX)
 		)
 
 		# Path to the deark utility.
@@ -2383,7 +2383,7 @@ class PEExtractor(ArchiveExtractor):
 	def _extract_flashtool(self, file_path, file_header, dest_dir, match):
 		# Determine embedded ROM start and end offsets.
 		dest_file_name = 'flashtool.bin'
-		if match.group(1): # AFUWIN
+		if match.group('afuwin'):
 			# Look for markers and stop if one of them wasn't found.
 			rom_start_offset = file_header.find(b'_EMBEDDED_ROM_START_\x00')
 			if rom_start_offset == -1:
@@ -2393,7 +2393,7 @@ class PEExtractor(ArchiveExtractor):
 			rom_end_offset = file_header.find(b'_EMBEDDED_ROM_END_\x00', rom_start_offset)
 			if rom_end_offset == -1:
 				return False
-		elif match.group(3): # ASUS floppy self-extractor
+		elif match.group('asus'):
 			# Change output file name.
 			dest_file_name = 'floppy.img'
 
@@ -2416,7 +2416,7 @@ class PEExtractor(ArchiveExtractor):
 			rom_end_offset = file_size
 
 			# Adjust offsets if needed.
-			if match.group(2): # AOpen
+			if match.group('aopen'):
 				# Stop if this file appears to be standalone AOFLASH.
 				if file_size < 32768:
 					return False
