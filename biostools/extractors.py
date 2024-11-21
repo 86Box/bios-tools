@@ -496,59 +496,56 @@ class BIOSExtractor(Extractor):
 			for dest_dir_file in dest_dir_files:
 				# Read and check for ROS header.
 				dest_dir_file_path = os.path.join(dest_dir_0, dest_dir_file)
-				in_f = open(dest_dir_file_path, 'rb')
-				dest_dir_file_header = in_f.read(3)
+				if not os.path.isfile(dest_dir_file_path):
+					continue
+				with open(dest_dir_file_path, 'rb') as in_f:
+					if in_f.read(3) == b'ROS':
+						self.debug_print('Extracting PhoenixNet ROS:', dest_dir_file)
 
-				if dest_dir_file_header == b'ROS':
-					self.debug_print('Extracting PhoenixNet ROS:', dest_dir_file)
+						# Create new destination directory for the expanded ROS.
+						dest_dir_ros = os.path.join(dest_dir_0, dest_dir_file + ':')
+						if util.try_makedirs(dest_dir_ros):
+							# Skip initial header.
+							in_f.seek(32)
 
-					# Create new destination directory for the expanded ROS.
-					dest_dir_ros = os.path.join(dest_dir_0, dest_dir_file + ':')
-					if util.try_makedirs(dest_dir_ros):
-						# Skip initial header.
-						in_f.seek(32)
+							# Parse file entries.
+							while True:
+								# Read file entry header.
+								header = in_f.read(32)
+								if len(header) != 32:
+									break
+								file_size, = struct.unpack('<H', header[10:12])
 
-						# Parse file entries.
-						while True:
-							# Read file entry header.
-							header = in_f.read(32)
-							if len(header) != 32:
-								break
-							file_size, = struct.unpack('<H', header[10:12])
-
-							# Read data.
-							if header[28] & 0x10:
-								# Workaround for an annoying entry type where the size field is wrong (compressed?)
-								pos = in_f.tell()
-								data = in_f.read(65536 + 32)
-								match = self._phoenixnet_workaround_pattern.search(data)
-								if match:
-									file_size = match.start(0) - 17
-									in_f.seek(pos + file_size)
-									data = data[:file_size]
+								# Read data.
+								if header[28] & 0x10:
+									# Workaround for an annoying entry type where the size field is wrong (compressed?)
+									pos = in_f.tell()
+									data = in_f.read(65536 + 32)
+									match = self._phoenixnet_workaround_pattern.search(data)
+									if match:
+										file_size = match.start(0) - 17
+										in_f.seek(pos + file_size)
+										data = data[:file_size]
+									else:
+										in_f.seek(0, 2)
 								else:
-									in_f.seek(0, 2)
-							else:
-								data = in_f.read(file_size)
+									data = in_f.read(file_size)
 
-							# Generate a file name.
-							file_name = (util.read_string(header[17:25]) + '.' + util.read_string(header[25:28])).replace('/', '\\')
+								# Generate a file name.
+								file_name = (util.read_string(header[17:25]) + '.' + util.read_string(header[25:28])).replace('/', '\\')
 
-							# Write data.
-							if len(file_name) > 1:
-								self.debug_print('ROS file:', file_name)
-								out_f = open(os.path.join(dest_dir_ros, file_name), 'wb')
-								out_f.write(data)
-								out_f.close()
+								# Write data.
+								if len(file_name) > 1:
+									self.debug_print('ROS file:', file_name)
+									with open(os.path.join(dest_dir_ros, file_name), 'wb') as out_f:
+										out_f.write(data)
 
-						# Run image converter on the desstination directory.
-						self.image_extractor.convert_inline(os.listdir(dest_dir_ros), dest_dir_ros)
+							# Run image converter on the destination directory.
+							self.image_extractor.convert_inline(os.listdir(dest_dir_ros), dest_dir_ros)
 
-						# Don't remove ROS as the analyzer uses it for PhoenixNet detection.
-						# Just remove the destination directory if it's empty.
-						util.rmdirs(dest_dir_ros)
-
-				in_f.close()
+							# Don't remove ROS as the analyzer uses it for PhoenixNet detection.
+							# Just remove the destination directory if it's empty.
+							util.rmdirs(dest_dir_ros)
 
 		# Convert any BIOS logo images in-line (to the same destination directory).
 		self.image_extractor.convert_inline(dest_dir_files, dest_dir_0)
