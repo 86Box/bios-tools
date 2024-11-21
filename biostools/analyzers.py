@@ -324,7 +324,7 @@ class AMIAnalyzer(Analyzer):
 			b'''(?:AMIBIOS (?:(0[1-9][0-9]{2}[\\x00-\\xFF]{2})[\\x00-\\xFF]{2}|W ([0-9]{2}) ([0-9]{2})[\\x00-\\xFF]|[0-9]\\.[0-9]\\x00[A-Z]\\x00{3})|0123AAAAMMMMIIII|\\(AAMMIIBBIIOOSS\\))'''
 			b'''(?:([\\x00-\\xFF]{2}/[0-9]{2}/[0-9]{2})\\(C\\)[0-9]{4} American Megatrends,? Inc(?:\\.,?.All.Rights.Reserved|/Hewlett-Packard Company)|[0-9]\\$RAIDUAC[0-9])'''
 		)
-		self._regtable_pattern = re.compile(b'''\\$\\$CT\\x01([\\x20-\\x7E]+)''')
+		self._regtable_pattern = re.compile(b'''\\$\\$CT[\\x01\\x02]([\\x20-\\x7E]+)''')
 		# Dash separator possible (TritonIDETimings on AMI Apollo and potentially others)
 		self._regtable_split_pattern = re.compile('''[- ]''')
 		# "Cfg" and "Config" (Acrosser AR-B1479 STPC Elite)
