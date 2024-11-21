@@ -783,6 +783,7 @@ class AwardAnalyzer(Analyzer):
 			b'''IBM COMPATIBLE (?:[0-9]+ )?BIOS COPYRIGHT Award Software Inc\\.''' # (Samsung Samtron 88S)
 		)
 		self._ignore_pattern = re.compile(b'search=f000,0,ffff,S,"|VGA BIOS Version (?:[^\r]+)\r\n(?:Copyright \\(c\\) (?:[^\r]+)\r\n)?Copyright \\(c\\) (?:NCR \\& )?Award', re.M)
+		self._medallion_pattern = re.compile(b'''Award [\\x20-\\x7E]+\\x00Copyright \\(C\\) 1984-[0-9]{2,4}, Award Software, Inc\\.\\x00''') # older ones are preceded by HP(?!) copyright, but newer ones can be preceded by garbage, or not be the first string
 		self._romby_date_pattern = re.compile(b'''N((?:[0-9]{2})/(?:[0-9]{2})/)([0-9]{2})([0-9]{2})(\\1\\3)''')
 		self._string_date_pattern = re.compile('''(?:[0-9]{2})/(?:[0-9]{2})/([0-9]{2,4})-''')
 		# "V" instead of "v" (286 Modular BIOS V3.03 NFS 11/10/87)
@@ -813,10 +814,16 @@ class AwardAnalyzer(Analyzer):
 			self.debug_print('ID block starts at', hex(id_block_index), match.group(0))
 
 			# Extract full version string as metadata.
-			version_string = util.read_string(file_data[id_block_index + 0x61:id_block_index + 0xc1])
-			linebreak_index = version_string.find('\r')
-			if linebreak_index > -1: # trim to linebreak (Samsung Samtron 88S)
-				version_string = version_string[:linebreak_index]
+			version_match = self._medallion_pattern.search(file_data)
+			if version_match:
+				# Handle Medallion version string.
+				self.debug_print('Raw Medallion string table entries:', version_match.group(0))
+				version_string = util.read_string(version_match.group(0))
+			else:
+				version_string = util.read_string(file_data[id_block_index + 0x61:id_block_index + 0xc1])
+				linebreak_index = version_string.find('\r')
+				if linebreak_index > -1: # trim to linebreak (Samsung Samtron 88S)
+					version_string = version_string[:linebreak_index]
 			self.metadata.append(('ID', version_string))
 			self.debug_print('Raw version string:', repr(version_string))
 
