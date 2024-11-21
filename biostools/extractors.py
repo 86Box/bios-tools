@@ -2901,6 +2901,7 @@ class VMExtractor(PEExtractor):
 
 		# Run QEMU.
 		self.debug_print('Running QEMU with args:', args)
+		proc = None
 		try:
 			if monitor_cmd and monitor_flag_file:
 				proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=self._devnull, stderr=subprocess.STDOUT)
@@ -2922,6 +2923,10 @@ class VMExtractor(PEExtractor):
 				subprocess.run(args, input=monitor_cmd, timeout=60, stdout=self._devnull, stderr=subprocess.STDOUT)
 		except:
 			self.debug_print('Running QEMU failed (timed out?)')
+			try:
+				proc.communicate()
+			except:
+				pass
 
 	def _extract_floppy(self, file_path, file_header, dest_dir, dest_dir_0, *, match):
 		"""Extract DOS-based floppy self-extractors."""
