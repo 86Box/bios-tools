@@ -3635,10 +3635,14 @@ class ToshibaAnalyzer(Analyzer):
 		super().__init__('Toshiba', *args, **kwargs)
 		self.vendor = 'Award'
 
-		self._string_pattern = re.compile(b'''(?:([\\x21-\\x7F]+\s*V[\\x21-\\x7F]{1,16}\s*)TOSHIBA |\\x00{3}BIOS[\\x00-\\xFF]{4}([\\x20-\\x7E]{16}))''')
+		self._check_pattern = re.compile(
+			b'''This BASIC was aborted,\\x0Dbecause this machine has\\x0Dno ROM BASIC\\.\\x0D\\x0D Use Toshiba's BASIC\\.\\x0D|''' # (T1000/T1200/T3100e)
+			b'''Toshiba Corporation\\.( & Award Software Inc|ALL RIGHTS RESERVED)\\.''' # with Award = lost to time; without Award = newer ones (320CDS V8.00)
+		)
+		self._string_pattern = re.compile(b'''(?:([\\x21-\\x7F]+\\s*V[\\x21-\\x7F]{1,16}\\s*)TOSHIBA |\\x00{3}BIOS[\\x00-\\xFF]{4}([\\x20-\\x7E]{16}))''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		if not (b' TOSHIBA ' in file_data and b'Use Toshiba\'s BASIC.' in file_data) and b'Toshiba Corporation. & Award Software Inc.' not in file_data:
+		if not self._check_pattern.search(file_data):
 			return False
 
 		# Identify as Toshiba-customized Award.
