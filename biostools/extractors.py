@@ -1318,7 +1318,7 @@ class FATExtractor(ArchiveExtractor):
 		if not self._is_fat(file_header):
 			# Check for 20-byte Unisys header followed by FAT filesystem.
 			# Only 4 samples (from the Aquanta line) were found, the header is identical across all of them.
-			if file_header[:20] == b'\x1a\x12\x34\x1a\x0e\x00\x00\x01\x01\x00\x04\x00\x02\x00\x12\x00\x02\x00\x50\x00' and self._is_fat(file_header[20:]):
+			if file_header[:20] == b'\x1A\x12\x34\x1A\x0E\x00\x00\x01\x01\x00\x04\x00\x02\x00\x12\x00\x02\x00\x50\x00' and self._is_fat(file_header[20:]):
 				self.debug_print('Unisys header found')
 				return self._extract_payload(file_path, dest_dir, 20, 'unisys.bin')
 
@@ -1335,11 +1335,11 @@ class FATExtractor(ArchiveExtractor):
 			return False
 
 		# Inject the 55 AA signature (expected by 7-Zip) on images that don't have it.
-		if file_header[0x1fe:0x200] != b'\x55\xaa':
+		if file_header[510:512] != b'\x55\xAA':
 			try:
 				with open(file_path, 'r+b') as f:
-					f.seek(0x1fe)
-					f.write(b'\x55\xaa')
+					f.seek(510)
+					f.write(b'\x55\xAA')
 			except:
 				pass
 
