@@ -1369,6 +1369,15 @@ class FATExtractor(ArchiveExtractor):
 
 			return False
 
+		# Inject the 55 AA signature (expected by 7-Zip) on images that don't have it.
+		if file_header[0x1fe:0x200] != b'\x55\xaa':
+			try:
+				with open(file_path, 'r+b') as f:
+					f.seek(0x1fe)
+					f.write(b'\x55\xaa')
+			except:
+				pass
+
 		# Extract this as an archive.
 		return self._extract_archive(file_path, dest_dir)
 
