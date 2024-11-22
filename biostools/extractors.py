@@ -2036,6 +2036,7 @@ class InterleaveExtractor(Extractor):
 			counterpart_candidate = util.closest_prefix(file_name, counterpart_candidates, lambda x: util.remove_extension(x).lower())
 			if not counterpart_candidate:
 				return False
+			self.debug_print('Pairing', file_path, 'with', counterpart_candidate)
 			counterpart_path = os.path.join(dir_path, counterpart_candidate)
 			counterpart_paths.append(counterpart_path)
 
