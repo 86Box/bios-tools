@@ -1316,7 +1316,13 @@ class FATExtractor(ArchiveExtractor):
 
 		# Stop if this doesn't appear to be a FAT filesystem.
 		if not self._is_fat(file_header):
-			# Check for 4-byte AST filesystem followed by FAT filesystem.
+			# Check for 20-byte Unisys header followed by FAT filesystem.
+			# Only 4 samples (from the Aquanta line) were found, the header is identical across all of them.
+			if file_header[:20] == b'\x1a\x12\x34\x1a\x0e\x00\x00\x01\x01\x00\x04\x00\x02\x00\x12\x00\x02\x00\x50\x00' and self._is_fat(file_header[20:]):
+				self.debug_print('Unisys header found')
+				return self._extract_payload(file_path, dest_dir, 20, 'unisys.bin')
+
+			# Check for 4-byte AST header followed by FAT filesystem.
 			ast_size, unknown = struct.unpack('<HH', file_header[:4])
 			try:
 				file_size = os.path.getsize(file_path)
@@ -1324,48 +1330,7 @@ class FATExtractor(ArchiveExtractor):
 				file_size = 2 ** 32
 			if (ast_size * 512) <= (file_size - 4) and self._is_fat(file_header[4:]):
 				self.debug_print('AST size', hex(ast_size), 'sectors, unknown field', hex(unknown))
-
-				# Create destination directory and stop if it couldn't be created.
-				if not util.try_makedirs(dest_dir):
-					return True
-
-				# Separate payload and header.
-				try:
-					# Open AST file.
-					in_f = open(file_path, 'rb')
-
-					# Read header.
-					header = in_f.read(4)
-
-					# Copy payload.
-					try:
-						out_f = open(os.path.join(dest_dir, 'ast.bin'), 'wb')
-						data = b' '
-						while data:
-							data = in_f.read(1048576)
-							out_f.write(data)
-
-						out_f.close()
-					except:
-						in_f.close()
-						return True
-
-					# Write header.
-					try:
-						out_f = open(os.path.join(dest_dir, ':header:'), 'wb')
-						out_f.write(header)
-						out_f.close()
-					except:
-						pass
-
-					# Remove AST file.
-					in_f.close()
-					os.remove(file_path)
-				except:
-					pass
-
-				# Return destination directory.
-				return dest_dir
+				return self._extract_payload(file_path, dest_dir, 4, 'ast.bin')
 
 			return False
 
@@ -1391,6 +1356,43 @@ class FATExtractor(ArchiveExtractor):
 			return False
 
 		return True
+
+	def _extract_payload(self, file_path, dest_dir, header_size, dest_file_name):
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Separate payload and header.
+		try:
+			# Open file.
+			with open(file_path, 'rb') as in_f:
+				# Read header.
+				header = in_f.read(header_size)
+
+				# Copy payload.
+				try:
+					with open(os.path.join(dest_dir, dest_file_name), 'wb') as out_f:
+						data = b' '
+						while data:
+							data = in_f.read(1048576)
+							out_f.write(data)
+				except:
+					return True
+
+				# Write header.
+				try:
+					with open(os.path.join(dest_dir, ':header:'), 'wb') as out_f:
+						out_f.write(header)
+				except:
+					pass
+
+			# Remove file.
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory.
+		return dest_dir
 
 
 class HexExtractor(Extractor):
