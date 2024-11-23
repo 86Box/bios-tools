@@ -891,9 +891,9 @@ class ImageExtractor(Extractor):
 		# Header pattern for common format images.
 		self._pil_pattern = re.compile(
 			b'''\\x0A[\\x00-\\x05][\\x00-\\x01][\\x01\\x02\\x04\\x08]|''' # PCX
-			b'''BM|''' # BMP
+			b'''BM[\\x00-\\xFF]{3}\\x00[\\x00-\\xFF]{7}\\x00|''' # BMP (limited to 16 MB size and start offset)
 			b'''\\xFF\\xD8\\xFF|''' # JPEG
-			b'''GIF8|''' # GIF
+			b'''GIF8[79]a|''' # GIF
 			b'''\\x89PNG''' # PNG
 		)
 
