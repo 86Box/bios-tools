@@ -933,87 +933,93 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		InitRemainder(BIOSImage, BIOSLength);
 	}
 
-	for (ID = (struct PhoenixID *)(BIOSImage + BCPSegmentOffset + 10);
-	     ((void *)ID < (void *)(BIOSImage + BIOSLength)) && ID->Name[0];
-	     ID =
-	     (struct PhoenixID *)(((unsigned char *)ID) +
-				  le16toh(ID->Length))) {
+	struct bcpCompress *bcpComp = NULL;
+	if (!memcmp(BIOSImage + BCPSegmentOffset, "BCPSEGMENT", 10)) {
+		for (ID = (struct PhoenixID *)(BIOSImage + BCPSegmentOffset + 10);
+		     ((void *)ID < (void *)(BIOSImage + BIOSLength)) && ID->Name[0];
+		     ID =
+		     (struct PhoenixID *)(((unsigned char *)ID) +
+					  le16toh(ID->Length))) {
 #if 0
-		printf
-		    ("PhoenixID: Name %c%c%c%c%c%c, Flags 0x%04X, Length %d, Position %05X\n",
-		     ID->Name[0], ID->Name[1], ID->Name[2], ID->Name[3],
-		     ID->Name[4], ID->Name[5], le16toh(ID->Flags),
-		     le16toh(ID->Length), (unsigned int) (((unsigned char *) ID) - BIOSImage));
+			printf
+			    ("PhoenixID: Name %c%c%c%c%c%c, Flags 0x%04X, Length %d, Position %05X\n",
+			     ID->Name[0], ID->Name[1], ID->Name[2], ID->Name[3],
+			     ID->Name[4], ID->Name[5], le16toh(ID->Flags),
+			     le16toh(ID->Length), (unsigned int) (((unsigned char *) ID) - BIOSImage));
 #endif
-		if (!le16toh(ID->Length))
-			break;
+			if (!le16toh(ID->Length))
+				break;
 
-		if (!strncmp(ID->Name, "BCPSYS", 6)) {
-			SYS = ID;
-			if (FFV)
-				break;
-		} else if (!strncmp(ID->Name, "BCPFFV", 6)) {
-			FFV = ID;
-			if (SYS)
-				break;
+			if (!strncmp(ID->Name, "BCPSYS", 6)) {
+				SYS = ID;
+				if (FFV)
+					break;
+			} else if (!strncmp(ID->Name, "BCPFFV", 6)) {
+				FFV = ID;
+				if (SYS)
+					break;
+			}
 		}
-	}
-
-	if (!SYS) {
-		SYS = (struct PhoenixID *) memmem(BIOSImage, BIOSLength - 6, "BCPSYS", 6);
 
 		if (!SYS) {
-			fprintf(stderr, "Error: Failed to locate BCPSYS offset.\n");
-			return FALSE;
+			SYS = (struct PhoenixID *) memmem(BIOSImage, BIOSLength - 6, "BCPSYS", 6);
+
+			if (!SYS) {
+				fprintf(stderr, "Error: Failed to locate BCPSYS offset.\n");
+				return FALSE;
+			}
 		}
-	}
 
-	/* Get some info */
-	char Date[9], Time[9], Version[9];
+		/* Get some info */
+		char Date[9], Time[9], Version[9];
 
-	strncpy(Date, ((char *)SYS) + 0x0F, 8);
-	Date[8] = 0;
-	strncpy(Time, ((char *)SYS) + 0x18, 8);
-	Time[8] = 0;
-	strncpy(Version, ((char *)SYS) + 0x37, 8);
-	Version[8] = 0;
+		strncpy(Date, ((char *)SYS) + 0x0F, 8);
+		Date[8] = 0;
+		strncpy(Time, ((char *)SYS) + 0x18, 8);
+		Time[8] = 0;
+		strncpy(Version, ((char *)SYS) + 0x37, 8);
+		Version[8] = 0;
 
-	printf("Version \"%s\", created on %s at %s.\n", Version, Date, Time);
+		printf("Version \"%s\", created on %s at %s.\n", Version, Date, Time);
 
-	if (!FFV)
-		FFV = (struct PhoenixID *) memmem(BIOSImage, BIOSLength - 6, "BCPFFV", 6);
+		if (!FFV)
+			FFV = (struct PhoenixID *) memmem(BIOSImage, BIOSLength - 6, "BCPFFV", 6);
 
-	/* BCPCMP parsing */
+		/* BCPCMP parsing */
 
-	unsigned char *bcpcmp = memmem(BIOSImage, BIOSLength - 6, "BCPCMP", 6);
-	struct bcpCompress *bcpComp = NULL;
-	if (bcpcmp) {
-		uint32_t bcpoff = bcpcmp - BIOSImage;
-		bcpComp = (struct bcpCompress *)(BIOSImage + bcpoff);
-		phx.compression = bcpComp->alg;
-		if ((bcpComp->head.major_revision == 0) && (bcpComp->head.minor_revision == 0))
-			phx.commonCharacterLZSS = bcpComp->alt.commonCharacterLZSS;
-		else
-			phx.commonCharacterLZSS = bcpComp->main.commonCharacterLZSS;
+		unsigned char *bcpcmp = memmem(BIOSImage, BIOSLength - 6, "BCPCMP", 6);
+		if (bcpcmp) {
+			uint32_t bcpoff = bcpcmp - BIOSImage;
+			bcpComp = (struct bcpCompress *)(BIOSImage + bcpoff);
+			phx.compression = bcpComp->alg;
+			if ((bcpComp->head.major_revision == 0) && (bcpComp->head.minor_revision == 0))
+				phx.commonCharacterLZSS = bcpComp->alt.commonCharacterLZSS;
+			else
+				phx.commonCharacterLZSS = bcpComp->main.commonCharacterLZSS;
+		} else {
+			/* BCPCMP can be missing (Hitachi Flora 3100 - 4.04 for Corollary C-bus) */
+			phx.compression = 0;
+			phx.commonCharacterLZSS = ' ';
+		}
+
+		if (SYS->Length >= 0x7b) {
+			Offset = le32toh(*((uint32_t *) (((char *)SYS) + 0x77)));
+			Offset &= (BIOSLength - 1);
+			if (!Offset) {
+				fprintf(stderr, "BCPSYS module offset is NULL.\n");
+				if (FFV)
+					PhoenixFFV(BIOSImage, BIOSLength, FFV);
+			}
+
+			while (Offset) {
+				Offset = PhoenixModule(BIOSImage, BIOSLength, Offset);
+				Offset &= BIOSLength - 1;
+			}
+		}
 	} else {
-		/* BCPCMP can be missing (Hitachi Flora 3100 - 4.04 for Corollary C-bus) */
-		phx.compression = 0;
+		printf("Phoenix-compressed Compaq BIOS.\n");
+		phx.compression = 2;
 		phx.commonCharacterLZSS = ' ';
-	}
-
-	if (SYS->Length >= 0x7b) {
-		Offset = le32toh(*((uint32_t *) (((char *)SYS) + 0x77)));
-		Offset &= (BIOSLength - 1);
-		if (!Offset) {
-			fprintf(stderr, "BCPSYS module offset is NULL.\n");
-			if (FFV)
-				PhoenixFFV(BIOSImage, BIOSLength, FFV);
-		}
-
-		while (Offset) {
-			Offset = PhoenixModule(BIOSImage, BIOSLength, Offset);
-			Offset &= BIOSLength - 1;
-		}
 	}
 
 	/* All scans below based on phoedeco */

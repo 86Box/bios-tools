@@ -198,6 +198,7 @@ static struct {
 	"PowerBIOS Setup\x00", NULL, AwardExtract}, { /* Siemens PowerBIOS */
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
 	"\x00IBM AT Compatible Phoenix NuBIOS", "BCPSEGMENT", PhoenixExtract}, { /* Phoenix copyrights scrubbed (Gateway Solo 2500) */
+	" 102-System Board Failure", "BCPCMP", PhoenixExtract}, { /* Phoenix-compressed Compaq BIOS (Presario 4800) */
 	"\xEE\x88SYSBIOS", "\xEE\x88", SystemSoftExtract}, {
 	"\xEE\x88\x42IOS SCU", "\xEE\x88", SystemSoftExtract}, {
 	"\xFF\x88SYSBIOS", "\xFF\x88", SystemSoftExtract}, { /* Insyde */
