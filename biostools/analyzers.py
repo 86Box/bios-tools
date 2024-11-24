@@ -2976,12 +2976,12 @@ class PhoenixAnalyzer(Analyzer):
 						bcpost = bcp.get('BCPOST', [None])[0]
 						dmi_segment = regtable_segment
 						if bcpost and len(bcpost.data) >= 0x1d:
-							version_offset, = struct.unpack('<H', bcpost.data[0x1b:0x1d])
-							version_offset += regtable_segment << 4
+							prev_version_offset, = struct.unpack('<H', bcpost.data[0x1b:0x1d])
+							version_offset = prev_version_offset + (regtable_segment << 4)
 							version_string = virtual_mem[version_offset:version_offset + 4096]
 							if not self._valid_id_pattern.match(version_string):
 								prev_regtable_segment = regtable_segment
-								if regtable_segment < 0x8000:
+								if regtable_segment > 0x0000 and regtable_segment < 0x8000:
 									# Some images report a bogus table segment such as
 									# 0x5000 (DEC 440LX DEVEL61F). This can probably be
 									# made to check for segments beyond the image size.
@@ -2993,7 +2993,7 @@ class PhoenixAnalyzer(Analyzer):
 									else:
 										dmi_segment = 0xf000
 									regtable_segment = 0xf000
-								self.debug_print('Potentially bogus ID string, changing register table segment from', hex(prev_regtable_segment), 'to', hex(regtable_segment))
+								self.debug_print('Potentially bogus ID string at', hex(prev_regtable_segment), ':', hex(prev_version_offset), ', changing register table segment to', hex(regtable_segment))
 							else:
 								version_string = util.read_string(version_string)
 						elif regtable_segment <= 0xe31f:
@@ -3113,13 +3113,17 @@ class PhoenixAnalyzer(Analyzer):
 					dmi_tables = []
 
 					if len(bcpdmi.data) >= 0x1c:
-						system_mfg, system_product, system_version = (_read_dmi_string(offset) for offset in struct.unpack('<HHH', bcpdmi.data[0x16:0x1c]))
+						offsets = struct.unpack('<HHH', bcpdmi.data[0x16:0x1c])
+						self.debug_print('DMI System offsets:', *(hex(x) for x in offsets))
+						system_mfg, system_product, system_version = (_read_dmi_string(offset) for offset in offsets)
 
 						if system_mfg or system_product or system_version:
 							dmi_tables.append('[System] {0} {1} {2}'.format(system_mfg, system_product, system_version))
 
 					if len(bcpdmi.data) >= 0x10:
-						board_mfg, board_product, board_version = (_read_dmi_string(offset) for offset in struct.unpack('<HHH', bcpdmi.data[0x0a:0x10]))
+						offsets = struct.unpack('<HHH', bcpdmi.data[0x0a:0x10])
+						self.debug_print('DMI Board offsets:', *(hex(x) for x in offsets))
+						board_mfg, board_product, board_version = (_read_dmi_string(offset) for offset in offsets)
 
 						if board_mfg or board_product or board_version:
 							# Check for duplicate system and baseboard information.
