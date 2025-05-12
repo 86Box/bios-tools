@@ -1355,6 +1355,8 @@ class BonusAnalyzer(Analyzer):
 					orom_marker = util.read_string(string_match.group(0)).strip()
 					if len(orom_marker) > 256: # ignore Adaptec's essay about 1 GB drives
 						orom_marker = None
+					elif orom_marker == 'Invalid Partition Table': # ignore Trend ChipAwayVirus MBR signatures(?)
+						orom_marker = None
 
 			# Extract PCI and PnP data structure pointers.
 			pci_header_ptr, pnp_header_ptr = struct.unpack('<HH', match.group(3))
