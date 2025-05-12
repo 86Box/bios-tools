@@ -2936,7 +2936,7 @@ class VMExtractor(PEExtractor):
 		except:
 			self.debug_print('Running QEMU failed (timed out?)')
 			try:
-				proc.communicate()
+				proc.terminate()
 			except:
 				pass
 
