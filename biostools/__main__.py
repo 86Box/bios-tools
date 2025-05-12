@@ -274,6 +274,7 @@ def extract(dir_path, _, options):
 		os.makedirs(merge_dest_path)
 
 	# Merge all directories into the 0 directory.
+	removals = []
 	for merge_dir_name in range(1, dir_number + 1):
 		merge_dir_path = os.path.join(dir_path, str(merge_dir_name))
 		if not os.path.isdir(merge_dir_path):
@@ -281,7 +282,10 @@ def extract(dir_path, _, options):
 		print(merge_dir_name, end=' ')
 
 		subprocess.run(['cp', '-rlaT', merge_dir_path, merge_dest_path], stdout=devnull, stderr=subprocess.STDOUT)
-		subprocess.Popen(['rm', '-rf', merge_dir_path], stdout=devnull, stderr=subprocess.STDOUT)
+		removals.append(subprocess.Popen(['rm', '-rf', merge_dir_path], stdout=devnull, stderr=subprocess.STDOUT))
+
+	for removal in removals:
+		removal.wait()
 
 	# Clean up.
 	devnull.close()
