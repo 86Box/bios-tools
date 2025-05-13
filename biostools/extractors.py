@@ -2935,10 +2935,10 @@ class VMExtractor(PEExtractor):
 				subprocess.run(args, input=monitor_cmd, timeout=60, stdout=self._devnull, stderr=subprocess.STDOUT)
 		except:
 			self.debug_print('Running QEMU failed (timed out?)')
-			try:
-				proc.terminate()
-			except:
-				pass
+		try:
+			proc.terminate()
+		except:
+			pass
 
 	def _extract_floppy(self, file_path, file_header, dest_dir, dest_dir_0, *, match):
 		"""Extract DOS-based floppy self-extractors."""
