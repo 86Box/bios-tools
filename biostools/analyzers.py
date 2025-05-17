@@ -776,6 +776,7 @@ class AwardAnalyzer(Analyzer):
 		self._early_pattern = re.compile(b'''([0-9A-Z][\\x21-\\x7E]+) BIOS V([0-9.]+)[\\x21-\\x7E]* COPYRIGHT''')
 		self._gigabyte_bif_pattern = re.compile(b'''\\$BIF[\\x00-\\xFF]{5}([\\x20-\\x7E]+)\\x00.([\\x20-\\x7E]+)\\x00''')
 		self._gigabyte_eval_pattern = re.compile('''\\([a-zA-Z0-9]{1,8}\\) EVALUATION ROM - NOT FOR SALE$''')
+		self._gigabyte_flag_pattern = re.compile(b'''GIGABYTEFLAG\\x00''')
 		self._gigabyte_hefi_pattern = re.compile(b'''EFI CD/DVD Boot Option''')
 		self._id_block_pattern = re.compile(
 			b'''(?:''' + util.rotate_pattern(b'Award Software Inc. ', 6) + b'''|''' + util.rotate_pattern(b'Phoenix Technologies, Ltd ', 6) + b''')[\\x00-\\xFF]{8}IBM COMPATIBLE|''' # whatever has "Phoenix" instead of "Award" was lost to time
@@ -829,14 +830,19 @@ class AwardAnalyzer(Analyzer):
 
 			# Extract version.
 			self.signon = ''
+			is_gigabyte = False
 			version_match = self._version_pattern.search(version_string)
 			if version_match:
 				self.version = 'v' + (version_match.group(1) or version_match.group(2))
+				is_gigabyte = self.version == 'v6.00PG'
 			elif version_string == 'Award Modular BIOS Version ': # Award version removed (Intel YM430TX)
 				self.version = 'Intel'
 			elif version_string[:19] == 'Award Modular BIOS/': # Award version removed (Packard Bell PB810)
 				self.version = 'Packard Bell'
 				self.signon = version_string[19:] + '\n'
+			elif self._gigabyte_flag_pattern.search(file_data): # Award version removed (Itautec ST 4271)
+				self.version = '?'
+				is_gigabyte = True
 
 			# Extract sign-on.
 			signon = util.read_string(file_data[id_block_index + 0xc1:id_block_index + 0x10f])
@@ -918,13 +924,13 @@ class AwardAnalyzer(Analyzer):
 					# TODO: PhoenixNet-specific sign-ons
 					self.metadata.append(('PhoenixNet', phoenixnet_signon))
 
-			if self.version == 'v6.00PG' and self._gigabyte_eval_pattern.match(self.signon):
+			if is_gigabyte and self._gigabyte_eval_pattern.match(self.signon):
 				# Reconstruct actual sign-on of a Gigabyte fork BIOS through
 				# the data in the $BIF area (presumably BIOS update data).
 				match = self._gigabyte_bif_pattern.search(file_data)
 				if match:
 					self.debug_print('Sign-on reconstructed from Gigabyte data')
-					self.signon = (match.group(1) + b' ' + match.group(2)).decode('cp437', 'ignore')
+					self.signon = (match.group(1) + b' ' + match.group(2)).decode('cp437', 'ignore') # actual sign-on may be a longer one located in a hard spot (Itautec ST 4271)
 
 			found = True
 			break
