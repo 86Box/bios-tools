@@ -188,32 +188,32 @@ def main():
 	for opt, arg in args:
 		if opt in ('-b', '--byte-search'):
 			try:
-				options['byte_search'] = eval('b\'' + arg + '\'')
+				options['byte_search'] = eval('b\'' + arg.replace('\'', '\\\'') + '\'')
 			except:
 				pass
 		elif opt in ('-l', '--check-length'):
 			try:
-				options['check_length'] = int(arg)
+				options['check_length'] = int(arg, 0)
 			except:
 				pass
 		elif opt in ('-d', '--decomp-size'):
 			try:
-				options['decomp_size'] = int(arg)
+				options['decomp_size'] = int(arg, 0)
 			except:
 				pass
 		elif opt in ('-s', '--decomp-buf-size'):
 			try:
-				options['decomp_buf_size'] = int(arg)
+				options['decomp_buf_size'] = int(arg, 0)
 			except:
 				pass
 		elif opt in ('-o', '--offset'):
 			try:
-				options['offset'] = int(arg)
+				options['offset'] = int(arg, 0)
 			except:
 				pass
 		elif opt in ('-t', '--threads'):
 			try:
-				options['threads'] = int(arg)
+				options['threads'] = int(arg, 0)
 			except:
 				pass
 
