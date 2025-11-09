@@ -179,11 +179,12 @@ def main():
 		'check_length': 0,
 		'decomp_size': 0,
 		'decomp_buf_size': 0,
+		'offset': 0,
 		'threads': 0
 	}
 
 	# Parse arguments.
-	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'b:l:d:s:t:', ['byte-search', 'byte-search-length', 'decomp-size', 'decomp-buf-size', 'threads'])
+	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'b:l:d:s:o:t:', ['byte-search', 'byte-search-length', 'decomp-size', 'decomp-buf-size', 'offset', 'threads'])
 	for opt, arg in args:
 		if opt in ('-b', '--byte-search'):
 			try:
@@ -205,6 +206,11 @@ def main():
 				options['decomp_buf_size'] = int(arg)
 			except:
 				pass
+		elif opt in ('-o', '--offset'):
+			try:
+				options['offset'] = int(arg)
+			except:
+				pass
 		elif opt in ('-t', '--threads'):
 			try:
 				options['threads'] = int(arg)
@@ -212,7 +218,7 @@ def main():
 				pass
 
 	if len(remainder) < 1:
-		print('Usage: python3 bruteforce.py [-b byte_search_escaped] [-l check_length] [-d decomp_size] [-s decomp_buf_size] [-t threads] file_path')
+		print('Usage: python3 bruteforce.py [-b byte_search_escaped] [-l check_length] [-d decomp_size] [-s decomp_buf_size] [-o start_offset] [-t threads] file_path')
 		return 1
 	options['file_path'] = remainder[0]
 
@@ -223,6 +229,8 @@ def main():
 		options['decomp_size'] = options['decomp_buf_size']
 	if options['check_length'] <= 0:
 		options['check_length'] = options['decomp_size']
+	if options['offset'] <= 0:
+		options['offset'] = 0
 	if options['threads'] <= 0:
 		options['threads'] = os.cpu_count() or 4
 
@@ -262,7 +270,7 @@ def main():
 	try:
 		# Add every offset-algorithm combination.
 		file_size = os.path.getsize(options['file_path'])
-		for offset in range(file_size):
+		for offset in range(options['offset'], file_size):
 			for algo in range(len(algos)):
 				if algos[algo]:
 					q.put((offset, algo))
