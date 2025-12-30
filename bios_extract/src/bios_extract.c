@@ -178,7 +178,7 @@ static struct {
 	 Bool(*Handler) (unsigned char *Image, int ImageLength, int ImageOffset,
 			 uint32_t Offset1, uint32_t Offset2);
 } BIOSIdentification[] = {
-	{
+	{ /* TODO FIXME: NULs get discarded because of strlen */
 	"AMI Flash Utility for ", "@ROM", AFUDOSExtract}, {
 	"AMIBIOS W 04 ", "AMIBIOSC", AMI940725Extract}, {
 	"AMIBIOS W 05 ", "AMIBIOSC", AMI941010Extract}, {
@@ -199,6 +199,7 @@ static struct {
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
 	"\x00IBM AT Compatible Phoenix NuBIOS", "BCPSEGMENT", PhoenixExtract}, { /* Phoenix copyrights scrubbed (Gateway Solo 2500) */
 	" 102-System Board Failure", "BCPCMP", PhoenixExtract}, { /* Phoenix-compressed Compaq BIOS (Presario 4800) */
+	"You must load COMPAQ BASIC\r\n", "BC\xD6\xF1\x00\x00\x12", CompaqExtract}, { /* BCD6F1-compressed Compaq BIOS */
 	"\xEE\x88SYSBIOS", "\xEE\x88", SystemSoftExtract}, {
 	"\xEE\x88\x42IOS SCU", "\xEE\x88", SystemSoftExtract}, {
 	"\xFF\x88SYSBIOS", "\xFF\x88", SystemSoftExtract}, { /* Insyde */

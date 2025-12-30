@@ -1235,3 +1235,41 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 
 	return TRUE;
 }
+
+Bool
+CompaqExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
+	      uint32_t Offset1, uint32_t BCPSegmentOffset)
+{
+	struct PhoenixBCD6F1 *BCD6F1;
+	unsigned char *p, *Buffer,
+		      bcd6f1_signature[] = {'B', 'C', 0xd6, 0xf1, 0x00, 0x00, 0x12};
+	char filename[256];
+
+	fprintf(stderr, "Now scanning for BC D6 F1.\n");
+	p = BIOSImage;
+	while (p && (p < (BIOSImage + BIOSLength))) {
+		p = memmem(p, BIOSLength - sizeof(bcd6f1_signature) - (p - BIOSImage), bcd6f1_signature, sizeof(bcd6f1_signature));
+		if (!p)
+			break;
+
+		BCD6F1 = (struct PhoenixBCD6F1 *)p;
+
+		sprintf(filename, "compaq_%05lX.rom", p - BIOSImage);
+		printf("0x%05lX (%6d bytes)   ->   %s\t(%d bytes)\n",
+		       p - BIOSImage, le32toh(BCD6F1->FragLength), filename,
+		       le32toh(BCD6F1->ExpLen));
+		Buffer = MMapOutputFile(filename, le32toh(BCD6F1->ExpLen));
+		if (!Buffer)
+			break;
+
+		SetRemainder(p - BIOSImage, sizeof(struct PhoenixBCD6F1) + le32toh(BCD6F1->FragLength), FALSE);
+
+		p += sizeof(struct PhoenixBCD6F1);
+		unnotlzari(p, le32toh(BCD6F1->FragLength), Buffer,
+				   le32toh(BCD6F1->ExpLen), phx.commonCharacterLZSS);
+
+		munmap(Buffer, le32toh(BCD6F1->ExpLen));
+	}
+
+	return TRUE;
+}
