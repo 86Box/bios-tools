@@ -195,7 +195,7 @@ static struct {
 	"(AAMMIIBBIIOOSS)", "AMIBIOSC", AMI940725Extract}, { /* 12/15/93 */
 	"= Award Decompression Bios =", NULL, AwardExtract}, {
 	"awardext.rom", NULL, AwardExtract}, {
-	"PowerBIOS Setup\x00", NULL, AwardExtract}, { /* Siemens PowerBIOS */
+	"Award Software International, Inc.\x10", "\x01PowerBIOS ", AwardExtract}, { /* PowerBIOS */
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
 	"\x00IBM AT Compatible Phoenix NuBIOS", "BCPSEGMENT", PhoenixExtract}, { /* Phoenix copyrights scrubbed (Gateway Solo 2500) */
 	" 102-System Board Failure", "BCPCMP", PhoenixExtract}, { /* Phoenix-compressed Compaq BIOS (Presario 4800) */

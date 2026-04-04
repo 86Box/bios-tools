@@ -987,7 +987,7 @@ class AwardPowerAnalyzer(Analyzer):
 		super().__init__('AwardPower', *args, **kwargs)
 		self.vendor = 'Award'
 
-		self._check_pattern = re.compile(b'''PowerBIOS Setup''')
+		self._check_pattern = re.compile(b'''Award Software International, Inc\\.\\x10[\\x00-\\xFF]\\x01PowerBIOS ''')
 		self._id_block_pattern = re.compile(b'''IBM COMPATIBLE BIOS COPYRIGHT AWARD SOFTWARE INC\\.''')
 		self._strings_pattern = re.compile(b'''[\\x01-\\xFF]+\\x00''')
 		self._version_pattern = re.compile('''Version ([\\x21-\\x7E]+)''')
@@ -1025,16 +1025,21 @@ class AwardPowerAnalyzer(Analyzer):
 					self.string = self.string[1:]
 
 				# Modified string display routine (Siemens FM456-2)
-				if self.string.strip() == 'Serial No.':
-					# This modified string begins with the entry point date.
-					match = NoInfoAnalyzer._entrypoint_date_pattern.search(file_data)
-					if match:
-						self.string = util.read_string(match.group(1))
+				is_siemens = self.string.strip() == 'Serial No.'
+			else:
+				is_siemens = True
 
-					# It continues on at a different point in the image.
-					match = self._siemens_string_pattern.search(file_data)
-					if match:
-						self.string += ' ' + util.read_string(match.group(0)).strip()
+			# Serial No. sequence might not be present (Siemens OP47)
+			if is_siemens:
+				# This modified string begins with the entry point date.
+				match = NoInfoAnalyzer._entrypoint_date_pattern.search(file_data)
+				if match:
+					self.string = util.read_string(match.group(1))
+
+				# It continues on at a different point in the image.
+				match = self._siemens_string_pattern.search(file_data)
+				if match:
+					self.string += ' ' + util.read_string(match.group(0)).strip()
 
 			# Extract full version string as metadata.
 			# Copyright line not always present (Siemens FM456-2)
