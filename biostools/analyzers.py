@@ -2101,6 +2101,8 @@ class PhoenixAnalyzer(Analyzer):
 			b'''[\\x00-\\xFF]+''' # metric ton of code inbetween
 			b'''(PhoenixBIOS\\(TM\\) )\\x00''' # Phoenix brand
 		)
+		# Customized 4.05 from Micro Firmware.
+		self._mfi_version_pattern = re.compile(b'''\\x00(PhoenixBIOS [\\x0D\\x0A\\x20-\\x7E]+?Micro Firmware Inc[\\x0D\\x0A\\x20-\\x7E]+)''')
 		# Not all SecureCore Tiano have this version string...
 		self._sct_version_pattern = re.compile(b'''Phoenix BIOS SC-T (v[0-9\\.]+)[\\x20-\\x7E]*''')
 		# ...in which case we use this.
@@ -3273,10 +3275,21 @@ class PhoenixAnalyzer(Analyzer):
 			self.debug_print('BCPOST version:', bcpost.version_maj, bcpost.version_min)
 
 			# Read version string pointer.
-			version_offset, = struct.unpack('<H', bcpost.data[0x1b:0x1d])
+			# BCPOST 0.3 can have different offsets (Siemens PG740DX) - detecting by length seems OK?
+			version_offset, = struct.unpack('<H', bcpost.data[0x19:0x1b] if (bcpost.version_maj, bcpost.version_min) == (0, 3) and len(bcpost.data) <= 0x30 else bcpost.data[0x1b:0x1d])
 
 			# Extract full version string as metadata.
-			if regtable_segment:
+			is_mfi = 'BCPMFI' in bcp
+			if is_mfi:
+				# Micro Firmware 4.05 uses a raw string with no obvious pointer.
+				match = self._mfi_version_pattern.search(virtual_mem[0xf0000:])
+				if match:
+					self.debug_print('Micro Firmware version string:', match.group(1))
+					self.metadata.append(('ID', util.read_string(match.group(1))))
+				else:
+					self.debug_print('Micro Firmware version string not found')
+					is_mfi = False
+			if not is_mfi and regtable_segment:
 				self.debug_print('Version string pointer:', hex(regtable_segment), ':', hex(version_offset))
 				version_offset += regtable_segment << 4
 				if virtual_mem[version_offset:version_offset + 1] == b'\x00': # pointer may be off by one (Gateway Solo 2500)
@@ -3287,7 +3300,7 @@ class PhoenixAnalyzer(Analyzer):
 
 			# Read sign-on string pointer.
 			signon_segment = code_segment
-			signon_offset, = struct.unpack('<H', bcpost.data[0x23:0x25])
+			signon_offset, = struct.unpack('<H', bcpost.data[0x21:0x23] if (bcpost.version_maj, bcpost.version_min) == (0, 3) and len(bcpost.data) <= 0x30 else bcpost.data[0x23:0x25])
 
 			# Handle 4.04+ where the string pointer points to a string table pointer instead of a string.
 			signon = None
