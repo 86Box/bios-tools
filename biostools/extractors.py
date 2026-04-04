@@ -2791,6 +2791,7 @@ class VMExtractor(PEExtractor):
 			b'''Disk eXPress Self-Extracting Diskette Image|''' # HP DXP
 			b'''(?P<nec>\\x00Diskette Image Decompression Utility(?: +v%s|\\.)\\x00)|''' # NEC in-house
 			b'''(?P<ardi>Copyright Daniel Valot |\\x00ARDI -  \\x00)|''' # IBM ARDI
+			b'''(?P<ibmjp>\\x0A\\!\\!\\! Cannot open the file\\[%s\\] to calculate CRC\\.\\x00)|''' # IBM Japan
 			b'''(?P<zenith>Ready to build distribution image with the following attributes:)|''' # Zenith in-house
 			b'''(?P<softpaq>Error reading the Softpaq File information)|''' # Compaq Softpaq
 			b'''(?P<dell>Intel Flash Memory Update Utility|DELLXBIOS[\\x00-\\xFF]+;C_FILE_INFO)[\\x00-\\xFF]+<<NMSG>>''' # Dell in-house
@@ -2949,12 +2950,22 @@ class VMExtractor(PEExtractor):
 		# Copy original file and blank floppy image to the destination directory.
 		if match.group('dell'): # Dell in-house names the extracted file after the executable
 			exe_name = 'dell.exe'
+		elif match.group('ibmjp'): # IBM Japan decompresses files named after the executable
+			exe_name = os.path.basename(file_path)
 		else:
 			exe_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.exe'
 		exe_path = os.path.join(dest_dir, exe_name)
 		image_path = os.path.join(dest_dir, util.random_name(8) + '.img')
 		shutil.copy2(file_path, exe_path)
 		shutil.copy2(os.path.join(self._dep_dir, floppy_media), image_path)
+		temp_files = [exe_path, exe_path[:-3] + 'tmp', os.path.join(dest_dir, exe_name[:-3].upper() + 'TMP')] # exe_path.tmp = FastPacket
+		if match.group('ibmjp'): # copy IBM Japan files
+			dir_path = os.path.dirname(file_path)
+			for fn in os.listdir(dir_path):
+				if fn[-4:].lower() == '.dat':
+					dest_file_path = os.path.join(dest_dir, fn)
+					shutil.copy2(os.path.join(dir_path, fn), dest_file_path)
+					temp_files.append(dest_file_path)
 		flag_name = flag_path = None
 
 		# Create batch file for calling the executable.
@@ -2993,6 +3004,9 @@ class VMExtractor(PEExtractor):
 		else:
 			f.write(b' a: <c:\\y.txt\r\n')
 		f.close()
+		temp_files.append(bat_path)
+		if flag_path:
+			temp_files.append(flag_path)
 
 		# Assemble QEMU monitor commands for Compaq Softpaq.
 		monitor_cmd = None
@@ -3026,8 +3040,8 @@ class VMExtractor(PEExtractor):
 					pass
 				image_path = temp_image_path
 
-		# Remove temporary files. (exename.tmp = FastPacket)
-		util.remove_all((bat_path, exe_path, exe_path[:-3] + 'tmp', os.path.join(dest_dir, exe_name[:-3].upper() + 'TMP'), flag_path))
+		# Remove temporary files.
+		util.remove_all(temp_files)
 
 		# Extract image as an archive.
 		ret = self._extract_archive(image_path, dest_dir, remove=False)
