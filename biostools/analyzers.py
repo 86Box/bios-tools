@@ -288,7 +288,7 @@ class AcerMultitechAnalyzer(Analyzer):
 		super().__init__('AcerMultitech', *args, **kwargs)
 		self.vendor = 'Acer'
 
-		self._version_pattern = re.compile(b'''Multitech Industrial Corp\..BIOS ([^\s]+ [^\s\\x00]+)''')
+		self._version_pattern = re.compile(b'''Multitech Industrial Corp\\..BIOS ([^\\s]+ [^\\s\\x00]+)''')
 
 	def can_handle(self, file_path, file_data, header_data):
 		# Look for version and date.
@@ -1820,7 +1820,7 @@ class ICLAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('ICL', *args, **kwargs)
 
-		self._version_pattern = re.compile(b'''(?:ROM|System) BIOS (#[\\x20-\\x7E]+) Version ([\\x20-\\x7E]+)\\x0D\\x0A\\(c\\) Copyright [\\x20-\\x7E]+(?:\\x0D\\x0A\\x0A\\x00([\\x20-\\x7E]+))?''')
+		self._version_pattern = re.compile(b'''([\\x20-\\x7E]*(?:ROM|System) BIOS #[\\x20-\\x7E]+ Version ([\\x20-\\x7E]+)\\x0D\\x0A\\(c\\) Copyright [\\x20-\\x7E]+)(?:\\x0D\\x0A\\x0A\\x00([\\x20-\\x7E]+))?''')
 
 	def can_handle(self, file_path, file_data, header_data):
 		# Update files use unknown compression.
@@ -1836,11 +1836,11 @@ class ICLAnalyzer(Analyzer):
 		# Extract version.
 		self.version = match.group(2).decode('cp437', 'ignore')
 
-		# Extract identifier as a string.
-		self.string = match.group(1).decode('cp437', 'ignore')
-
 		# Extract sign-on if present.
 		self.signon = (match.group(3) or b'').decode('cp437', 'ignore')
+
+		# Extract full version string as metadata.
+		self.metadata.append(('ID', match.group(1).decode('cp437', 'ignore')))
 
 		return True
 
