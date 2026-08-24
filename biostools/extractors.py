@@ -22,6 +22,7 @@ except ImportError:
 	PIL = lambda x: x
 	PIL.Image = None
 from . import util
+from tools import eti_extract
 
 
 class MultifileStaleException(Exception):
@@ -861,6 +862,72 @@ class DiscardExtractor(Extractor):
 
 		# Not a known file type, cleared to go.
 		return False
+
+
+class ETIExtractor(Extractor):
+	"""Extract Evergreen ETI files."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		self._header_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if this is not an ETI file.
+		match = self._header_pattern.match(file_header)
+		if not match:
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Read ETI header.
+		with open(file_path, 'rb') as in_f:
+			# Read up to 16 MB as a safety net.
+			file_header += util.read_complement(file_path, file_header)
+
+			# Parse creation date and time.
+			try:
+				date = file_header[10:18].decode('cp437', 'ignore')
+				time = file_header[20:28].decode('cp437', 'ignore')
+				dt = datetime.datetime.strptime(date + ' ' + time, '%m/%d/%y %H:%M:%S')
+				ctime = (dt - datetime.datetime(1970, 1, 1)).total_seconds()
+			except:
+				ctime = 0
+
+			for i, m in enumerate(eti_extract.read_members(file_header, True)):
+				filename = eti_extract.member_name(m, i, 'eti')
+				with open(os.path.join(dest_dir, filename), 'wb') as out_f:
+					out_f.write(m['data'])
+
+		# Check if anything was extracted.
+		dest_dir_files = os.listdir(dest_dir)
+		if len(dest_dir_files) > 0:
+			# Create header file with the ETI header.
+			try:
+				with open(os.path.join(dest_dir, ':header:'), 'wb') as f:
+					f.write(file_header[0x1f])
+			except:
+				pass
+
+			# Remove original file.
+			try:
+				os.remove(file_path)
+			except:
+				pass
+
+			# Set timestamps if applicable.
+			if ctime > 0:
+				for fn in dest_dir_files:
+					try:
+						os.utime(os.path.join(dest_dir, fn), (ctime, ctime))
+					except:
+						pass
+
+			return dest_dir
+		else:
+			return True
 
 
 class ImageExtractor(Extractor):
@@ -2797,7 +2864,6 @@ class VMExtractor(PEExtractor):
 			b'''(?P<softpaq>Error reading the Softpaq File information)|''' # Compaq Softpaq
 			b'''(?P<dell>Intel Flash Memory Update Utility|DELLXBIOS[\\x00-\\xFF]+;C_FILE_INFO)[\\x00-\\xFF]+<<NMSG>>''' # Dell in-house
 		)
-		self._eti_pattern = re.compile(b'''[0-9\\.\\x00]{10}[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00{2}[0-9]{2}:[0-9]{2}:[0-9]{2}\\x00{3}''')
 		self._rompaq_pattern = re.compile(b'''[\\x00-\\xFF]{12}[A-Z0-9]{7}\\x00[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00''')
 
 		# Filename sanitization pattern.
@@ -2847,8 +2913,6 @@ class VMExtractor(PEExtractor):
 					self.multifile_lock_acquire(file_path)
 
 				extractor = self._extract_deark
-		elif self._eti_pattern.match(file_header):
-			extractor = self._extract_eti
 		elif self._rompaq_pattern.match(file_header):
 			# Acquire the multi-file lock.
 			self.multifile_lock_acquire(file_path)
@@ -3065,101 +3129,6 @@ class VMExtractor(PEExtractor):
 			pass
 
 		return ret
-
-	def _extract_eti(self, file_path, file_header, dest_dir, dest_dir_0):
-		"""Extract Evergreen ETI files."""
-
-		# Read ETI header.
-		in_f = open(file_path, 'rb')
-		header = in_f.read(0x1f)
-
-		# Parse creation date and time.
-		try:
-			date = header[10:18].decode('cp437', 'ignore')
-			time = header[20:28].decode('cp437', 'ignore')
-			dt = datetime.datetime.strptime(date + ' ' + time, '%m/%d/%y %H:%M:%S')
-			ctime = (dt - datetime.datetime(1970, 1, 1)).total_seconds()
-		except:
-			ctime = 0
-
-		# Start the extraction batch file.
-		bat_f = open(os.path.join(dest_dir, 'autoexec.bat'), 'wb')
-		bat_f.write(b'd:\r\n')
-
-		# Extract files into individual ETIs.
-		temp_files = ['autoexec.bat', 'contact.eti', 'contact.txt', 'prevlang.dat']
-		while True:
-				# Parse file header.
-				fn = in_f.read(12) # filename
-				if fn == None:
-					break
-				nul_index = fn.find(b'\x00')
-				if nul_index > -1:
-					fn = fn[:nul_index]
-				if len(fn) == 0:
-					break
-				fn = fn.decode('cp437', 'ignore')
-				self.debug_print('ETI file:', fn)
-				in_f.read(5) # rest of header
-				size = struct.unpack('<I', in_f.read(4))[0] # size
-
-				# Create filename for the individual ETI.
-				eti_name = temp_files[0] # dummy
-				while eti_name in temp_files:
-					eti_name = util.random_name(8, charset=util.random_name_nosymbols).lower() + '.eti'
-				temp_files.append(eti_name)
-
-				# Sanitize extracted filename to not overwrite ourselves.
-				if fn.lower() in temp_files:
-					fn = fn[:-1] + '_'
-				fn = self._dos_fn_pattern.sub('_', fn)
-
-				# Add individual ETI to the batch file.
-				bat_f.write(b'del CONTACT.ETI CONTACT.TXT PREVLANG.DAT\r\n') # remove old files
-				bat_f.write(b'c:move /y ' + eti_name.encode('cp437', 'ignore') + b' CONTACT.ETI\r\n') # insert ourselves
-				bat_f.write(b'c:instl2o\r\n') # run hacked executable
-				bat_f.write(b'c:move /y CONTACT.TXT ' + fn.encode('cp437', 'ignore') + b'\r\n') # rename decompressed file
-
-				# Write individual ETI.
-				out_f = open(os.path.join(dest_dir, eti_name), 'wb')
-				out_f.write(header) # file header
-				out_f.write(b'\x00\x00\x00\xB3\xD2\x40\xC6') # single-file header
-				out_f.write(b'\xFF\xFF\xFF\x00') # unpacked size (unknown, assume 16 MB at most)
-				while size > 0:
-					data = in_f.read(min(size, 1048576))
-					out_f.write(data) # data
-					size -= len(data)
-				out_f.close()
-
-		# Finish the batch file.
-		bat_f.close()
-
-		# Run QEMU.
-		self._run_qemu(hdd=os.path.join(self._dep_dir, 'freedos.img'), vvfat=dest_dir)
-
-		# Remove temporary files.
-		util.remove_all(temp_files, lambda x: (os.path.join(dest_dir, x), os.path.join(dest_dir, x.upper())))
-
-		# Check if anything was extracted.
-		dest_dir_files = os.listdir(dest_dir)
-		if len(dest_dir_files) > 0:
-			# Remove original file.
-			try:
-				os.remove(file_path)
-			except:
-				pass
-
-			# Set timestamps if applicable.
-			if ctime > 0:
-				for fn in dest_dir_files:
-					try:
-						os.utime(os.path.join(dest_dir, fn), (ctime, ctime))
-					except:
-						pass
-
-			return dest_dir
-		else:
-			return True
 
 	def _extract_deark(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract compressed executables with deark and run them through the same pipeline.
