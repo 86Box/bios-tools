@@ -10,7 +10,7 @@ BIOS_EXTRACT_OBJS = $(SRCDIR)/lh5_extract.o $(SRCDIR)/lzari_extract.o \
 		    $(SRCDIR)/lzhuf_extract.o $(SRCDIR)/lzss_extract.o \
 		    $(SRCDIR)/phoenix_extract.o \
 		    $(SRCDIR)/ami.o $(SRCDIR)/award.o \
-		    $(SRCDIR)/phoenix.o $(SRCDIR)/systemsoft.o \
+		    $(SRCDIR)/phoenix.o $(SRCDIR)/systemsoft.o $(SRCDIR)/ldb.o \
 		    $(SRCDIR)/bios_extract.o $(SRCDIR)/compat.o
 bios_extract: $(BIOS_EXTRACT_OBJS)
 	$(CC) $(CFLAGS) $(BIOS_EXTRACT_OBJS) -o bios_extract

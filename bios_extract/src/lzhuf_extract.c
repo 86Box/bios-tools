@@ -254,10 +254,10 @@ static void reconst(void)
         f = freq[j] = freq[i] + freq[k];
         for (k = j - 1; f < freq[k]; k--);
         k++;
-        l = (j - k) * 2;
+        l = (j - k) * sizeof(freq[0]);
         memmove(&freq[k + 1], &freq[k], l);
         freq[k] = f;
-        memmove(&son[k + 1], &son[k], l);
+        memmove(&son[k + 1], &son[k], (j - k) * sizeof(son[0]));
         son[k] = i;
     }
     /* connect prnt */
