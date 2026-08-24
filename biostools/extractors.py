@@ -2843,7 +2843,7 @@ class UnshieldExtractor(Extractor):
 			pass
 
 		# Return destination directory path.
-		return dest_dir_0
+		return dest_dir
 
 
 class VMExtractor(PEExtractor):
