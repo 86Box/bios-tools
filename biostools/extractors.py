@@ -385,7 +385,8 @@ class BIOSExtractor(Extractor):
 			b'''Phoenix Technologies|'''
 			b'''IBM AT Compatible Phoenix NuBIOS|'''
 			b'''[\\xEE\\xFF]\\x88SYSBIOS|'''
-			b'''\\xEE\\x88\\x42IOS SCU'''
+			b'''\\xEE\\x88\\x42IOS SCU|'''
+			b'''OKICL1'''
 		)
 
 		# Workaround for an annoying PhoenixNet entry type where the size field is wrong (compressed?)
