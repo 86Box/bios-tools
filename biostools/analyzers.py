@@ -1823,7 +1823,7 @@ class ICLAnalyzer(Analyzer):
 		self._version_pattern = re.compile(b'''([\\x20-\\x7E]*(?:ROM|System) BIOS #[\\x20-\\x7E]+ Version ([\\x20-\\x7E]+)\\x0D\\x0A\\(c\\) Copyright [\\x20-\\x7E]+)(?:\\x0D\\x0A\\x0A\\x00([\\x20-\\x7E]+))?''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		# Update files use unknown compression.
+		# Skip compressed images.
 		if file_data[:8] == b'OKICL1\x01\x00':
 			self.version = '?'
 			return True
