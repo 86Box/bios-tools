@@ -19,16 +19,16 @@ import io, re, urllib.request
 
 clean_device_abbr = [
 	# Generic patterns to catch extended abbreviations: "Abbreviated Terms (AT)"
-	(r'([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\(|\[|\{|/)\\2\\3(?:$|\)|\]|\})', '\\2\\3'),
-	(r'([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\(|\[|\{|/)\\2\\3\\4(?:$|\)|\]|\})', '\\2\\3\\4'),
-	(r'([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\(|\[|\{|/)\\2\\3\\4\\5(?:$|\)|\]|\})', '\\2\\3\\4\\5'),
+	('([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\\(|\\[|\\{|/)\\2\\3(?:$|\\)|\\]|\\})', '\\2\\3'),
+	('([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\\(|\\[|\\{|/)\\2\\3\\4(?:$|\\)|\\]|\\})', '\\2\\3\\4'),
+	('([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^- ]+[- ]([A-Z])[^ ]+ (?:\\(|\\[|\\{|/)\\2\\3\\4\\5(?:$|\\)|\\]|\\})', '\\2\\3\\4\\5'),
 
 	# Manual patterns
 	('100Base-TX?', 'FE'),
 	('1000Base-T', 'GbE'),
 	('Accelerat(?:ion|or)', 'Accel.'),
 	('Alert on LAN', 'AoL'),
-	(r'\((.+) applications?\)', '(\\2)'), # 8086:105e
+	('\\((.+) applications?\\)', '(\\2)'), # 8086:105e
 	('Chipset Family', 'Chipset'),
 	('Chipset Graphics', 'iGPU'),
 	('Connection', 'Conn.'),
@@ -45,7 +45,7 @@ clean_device_abbr = [
 	('Host Bus Adapter', 'HBA'),
 	('Host[- ]Controller', 'HC'), # dash = 1106:3104
 	('Input/Output', 'I/O'),
-	(r'Integrated ([^\s]+) (?:Graphics|GPU)', '\\2 iGPU'), # VIA CLE266
+	('Integrated ([^\\s]+) (?:Graphics|GPU)', '\\2 iGPU'), # VIA CLE266
 	('Integrated (?:Graphics|GPU)', 'iGPU'),
 	('([0-9]) (lane|port)', '\\2-\\3'),
 	('Local Area Network', 'LAN'),
@@ -70,12 +70,12 @@ clean_device_abbr = [
 	('Wireless LAN', 'WLAN'),
 
 	# Generic pattern to remove duplicate abbreviations: "AT (AT)"
-	(r'([^ \(\[\{/]+) (?: |\(|\[|\{|/)\\2(?: |\)|\]|\})', '\\2'),
+	('([^ \\(\\[\\{/]+) (?: |\\(|\\[|\\{|/)\\2(?: |\\)|\\]|\\})', '\\2'),
 ]
-clean_device_bit_pattern = re.compile(r'''( |^|\(|\[|\{|/)(?:([0-9]{1,4}) )?(?:(K)(?:ilo)?|(M)(?:ega)?|(G)(?:iga)?)bit( |$|\)|\]|\})''', re.I)
-clean_device_suffix_pattern = re.compile(r''' (?:Adapter|Card|Device|(?:Host )?Controller)( (?: [0-9#]+)?|$|\)|\]|\})''', re.I)
-clean_vendor_abbr_pattern = re.compile(r''' \[([^\]]+)\]''')
-clean_vendor_suffix_pattern = re.compile(r'''[ ,.](?:Semiconductors?|(?:Micro)?electronics?|Interactive|Technolog(?:y|ies)|(?:Micro)?systems|Computer(?: works)?|Products|Group|and subsidiaries|of(?: America)?|Co(?:rp(?:oration)?|mpany)?|Inc|LLC|Ltd|GmbH(?: & .+)?|AB|AG|SA|(?:\(|\[|\{).*)$''', re.I)
+clean_device_bit_pattern = re.compile('''( |^|\\(|\\[|\\{|/)(?:([0-9]{1,4}) )?(?:(K)(?:ilo)?|(M)(?:ega)?|(G)(?:iga)?)bit( |$|\\)|\\]|\\})''', re.I)
+clean_device_suffix_pattern = re.compile(''' (?:Adapter|Card|Device|(?:Host )?Controller)( (?: [0-9#]+)?|$|\\)|\\]|\\})''', re.I)
+clean_vendor_abbr_pattern = re.compile(''' \\[([^\\]]+)\\]''')
+clean_vendor_suffix_pattern = re.compile('''[ ,.](?:Semiconductors?|(?:Micro)?electronics?|Interactive|Technolog(?:y|ies)|(?:Micro)?systems|Computer(?: works)?|Products|Group|and subsidiaries|of(?: America)?|Co(?:rp(?:oration)?|mpany)?|Inc|LLC|Ltd|GmbH(?: & .+)?|AB|AG|SA|(?:\\(|\\[|\\{).*)$''', re.I)
 clean_vendor_force = {
 	'National Semiconductor Corporation': 'NSC',
 }
@@ -108,7 +108,7 @@ def clean_device(device, vendor=None):
 	if not _clean_device_abbr_cache:
 		for pattern, replace in clean_device_abbr:
 			_clean_device_abbr_cache.append((
-				re.compile(r'''(?P<prefix> |^|\(|\[|\{|/)''' + pattern + r'''(?P<suffix> |$|\)|\]|\})''', re.I),
+				re.compile('''(?P<prefix> |^|\\(|\\[|\\{|/)''' + pattern + '''(?P<suffix> |$|\\)|\\]|\\})''', re.I),
 				'\\g<prefix>' + replace + '\\g<suffix>',
 			))
 

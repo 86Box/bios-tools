@@ -1676,8 +1676,8 @@ class GeneralSoftwareAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('General', *args, **kwargs)
 
-		self._string_pattern = re.compile(br'''([0-9]{2}/[0-9]{2}/[0-9]{2})\(C\) [0-9]+ General Software, Inc\. ''')
-		self._version_pattern = re.compile(br'''General Software (?:\\x00 )?([^\\\\\\x0D\\x0A]+)(?:rel\.|Revision)''')
+		self._string_pattern = re.compile(b'''([0-9]{2}/[0-9]{2}/[0-9]{2})\\(C\\) [0-9]+ General Software, Inc\\. ''')
+		self._version_pattern = re.compile(b'''General Software (?:\\x00 )?([^\\\\\\x0D\\x0A]+)(?:rel\\.|Revision)''')
 
 	def can_handle(self, file_path, file_data, header_data):
 		# Extract version.
@@ -1999,7 +1999,7 @@ class OlivettiAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('Olivetti', *args, **kwargs)
 
-		self._version_pattern = re.compile(r'''Version ([^\s]+)''')
+		self._version_pattern = re.compile('''Version ([^\\s]+)''')
 
 		self.register_check_list([
 			((self._version_precheck, self._version),		AlwaysRunChecker),
@@ -2034,7 +2034,7 @@ class OlivettiAnalyzer(Analyzer):
 		return True
 
 	def _string_date(self, line, match):
-		r'''^(?:COPYRIGHT \(C\) OLIVETTI )?([0-9]{2}/[0-9]{2}/[0-9]{2})$'''
+		'''^(?:COPYRIGHT \\(C\\) OLIVETTI )?([0-9]{2}/[0-9]{2}/[0-9]{2})$'''
 
 		# Extract the date as a string if newer than any previously-found date.
 		date = match.group(1)
