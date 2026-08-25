@@ -75,8 +75,6 @@ python3 -m biostools -a roms/0 | tee bioslist.csv
 * Interleaved ROMs are merged through a heuristic filename and string detection, which may lead to incorrect merging if the chunks to different interleaved ROMs are present in the same directory.
 * The FAT filesystem extractor relies on assumptions which may not hold true for all disk images.
 * EPA (Award), PCX (AMI), PGX (Phoenix) and other image formats are automatically converted to PNG if the aforementioned optional dependency is installed.
-* Extraction of the following BIOS distribution formats is **not implemented** due to the use of unknown compression methods:
-  * ICL `.LDB`
 
 ## Analysis notes
 

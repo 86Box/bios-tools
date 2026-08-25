@@ -288,7 +288,7 @@ class AcerMultitechAnalyzer(Analyzer):
 		super().__init__('AcerMultitech', *args, **kwargs)
 		self.vendor = 'Acer'
 
-		self._version_pattern = re.compile(br'''Multitech Industrial Corp\..BIOS ([^\s]+ [^\s\\x00]+)''')
+		self._version_pattern = re.compile(b'''Multitech Industrial Corp\\..BIOS ([^\\s]+ [^\\s\\x00]+)''')
 
 	def can_handle(self, file_path, file_data, header_data):
 		# Look for version and date.
@@ -987,7 +987,7 @@ class AwardPowerAnalyzer(Analyzer):
 		super().__init__('AwardPower', *args, **kwargs)
 		self.vendor = 'Award'
 
-		self._check_pattern = re.compile(b'''PowerBIOS Setup''')
+		self._check_pattern = re.compile(b'''Award Software International, Inc\\.\\x10[\\x00-\\xFF]\\x01PowerBIOS ''')
 		self._id_block_pattern = re.compile(b'''IBM COMPATIBLE BIOS COPYRIGHT AWARD SOFTWARE INC\\.''')
 		self._strings_pattern = re.compile(b'''[\\x01-\\xFF]+\\x00''')
 		self._version_pattern = re.compile('''Version ([\\x21-\\x7E]+)''')
@@ -1025,16 +1025,21 @@ class AwardPowerAnalyzer(Analyzer):
 					self.string = self.string[1:]
 
 				# Modified string display routine (Siemens FM456-2)
-				if self.string.strip() == 'Serial No.':
-					# This modified string begins with the entry point date.
-					match = NoInfoAnalyzer._entrypoint_date_pattern.search(file_data)
-					if match:
-						self.string = util.read_string(match.group(1))
+				is_siemens = self.string.strip() == 'Serial No.'
+			else:
+				is_siemens = True
 
-					# It continues on at a different point in the image.
-					match = self._siemens_string_pattern.search(file_data)
-					if match:
-						self.string += ' ' + util.read_string(match.group(0)).strip()
+			# Serial No. sequence might not be present (Siemens OP47)
+			if is_siemens:
+				# This modified string begins with the entry point date.
+				match = NoInfoAnalyzer._entrypoint_date_pattern.search(file_data)
+				if match:
+					self.string = util.read_string(match.group(1))
+
+				# It continues on at a different point in the image.
+				match = self._siemens_string_pattern.search(file_data)
+				if match:
+					self.string += ' ' + util.read_string(match.group(0)).strip()
 
 			# Extract full version string as metadata.
 			# Copyright line not always present (Siemens FM456-2)
@@ -1815,10 +1820,10 @@ class ICLAnalyzer(Analyzer):
 	def __init__(self, *args, **kwargs):
 		super().__init__('ICL', *args, **kwargs)
 
-		self._version_pattern = re.compile(b'''(?:ROM|System) BIOS (#[\\x20-\\x7E]+) Version ([\\x20-\\x7E]+)\\x0D\\x0A\\(c\\) Copyright [\\x20-\\x7E]+(?:\\x0D\\x0A\\x0A\\x00([\\x20-\\x7E]+))?''')
+		self._version_pattern = re.compile(b'''([\\x20-\\x7E]*(?:ROM|System) BIOS #[\\x20-\\x7E]+ Version ([\\x20-\\x7E]+)\\x0D\\x0A\\(c\\) Copyright [\\x20-\\x7E]+)(?:\\x0D\\x0A\\x0A\\x00([\\x20-\\x7E]+))?''')
 
 	def can_handle(self, file_path, file_data, header_data):
-		# Update files use unknown compression.
+		# Skip compressed images.
 		if file_data[:8] == b'OKICL1\x01\x00':
 			self.version = '?'
 			return True
@@ -1831,11 +1836,11 @@ class ICLAnalyzer(Analyzer):
 		# Extract version.
 		self.version = match.group(2).decode('cp437', 'ignore')
 
-		# Extract identifier as a string.
-		self.string = match.group(1).decode('cp437', 'ignore')
-
 		# Extract sign-on if present.
 		self.signon = (match.group(3) or b'').decode('cp437', 'ignore')
+
+		# Extract full version string as metadata.
+		self.metadata.append(('ID', match.group(1).decode('cp437', 'ignore')))
 
 		return True
 
@@ -2096,6 +2101,8 @@ class PhoenixAnalyzer(Analyzer):
 			b'''[\\x00-\\xFF]+''' # metric ton of code inbetween
 			b'''(PhoenixBIOS\\(TM\\) )\\x00''' # Phoenix brand
 		)
+		# Customized 4.05 from Micro Firmware.
+		self._mfi_version_pattern = re.compile(b'''\\x00(PhoenixBIOS [\\x0D\\x0A\\x20-\\x7E]+?Micro Firmware Inc[\\x0D\\x0A\\x20-\\x7E]+)''')
 		# Not all SecureCore Tiano have this version string...
 		self._sct_version_pattern = re.compile(b'''Phoenix BIOS SC-T (v[0-9\\.]+)[\\x20-\\x7E]*''')
 		# ...in which case we use this.
@@ -3268,10 +3275,21 @@ class PhoenixAnalyzer(Analyzer):
 			self.debug_print('BCPOST version:', bcpost.version_maj, bcpost.version_min)
 
 			# Read version string pointer.
-			version_offset, = struct.unpack('<H', bcpost.data[0x1b:0x1d])
+			# BCPOST 0.3 can have different offsets (Siemens PG740DX) - detecting by length seems OK?
+			version_offset, = struct.unpack('<H', bcpost.data[0x19:0x1b] if (bcpost.version_maj, bcpost.version_min) == (0, 3) and len(bcpost.data) <= 0x30 else bcpost.data[0x1b:0x1d])
 
 			# Extract full version string as metadata.
-			if regtable_segment:
+			is_mfi = 'BCPMFI' in bcp
+			if is_mfi:
+				# Micro Firmware 4.05 uses a raw string with no obvious pointer.
+				match = self._mfi_version_pattern.search(virtual_mem[0xf0000:])
+				if match:
+					self.debug_print('Micro Firmware version string:', match.group(1))
+					self.metadata.append(('ID', util.read_string(match.group(1))))
+				else:
+					self.debug_print('Micro Firmware version string not found')
+					is_mfi = False
+			if not is_mfi and regtable_segment:
 				self.debug_print('Version string pointer:', hex(regtable_segment), ':', hex(version_offset))
 				version_offset += regtable_segment << 4
 				if virtual_mem[version_offset:version_offset + 1] == b'\x00': # pointer may be off by one (Gateway Solo 2500)
@@ -3282,7 +3300,7 @@ class PhoenixAnalyzer(Analyzer):
 
 			# Read sign-on string pointer.
 			signon_segment = code_segment
-			signon_offset, = struct.unpack('<H', bcpost.data[0x23:0x25])
+			signon_offset, = struct.unpack('<H', bcpost.data[0x21:0x23] if (bcpost.version_maj, bcpost.version_min) == (0, 3) and len(bcpost.data) <= 0x30 else bcpost.data[0x23:0x25])
 
 			# Handle 4.04+ where the string pointer points to a string table pointer instead of a string.
 			signon = None

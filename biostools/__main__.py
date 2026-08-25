@@ -116,6 +116,7 @@ def extract_process(queue, abort_flag, multifile_lock, dir_number_path, next_dir
 		extractors.MBRSafeExtractor(),
 		extractors.TarExtractor(),
 		extractors.ArchiveExtractor(),
+		extractors.ETIExtractor(),
 		extractors.CPUZExtractor(),
 		extractors.HexExtractor(),
 		image_extractor,

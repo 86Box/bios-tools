@@ -35,7 +35,7 @@ static void HelpPrint(char *name)
 {
 	printf("\n");
 	printf("Program to extract compressed modules from BIOS images.\n");
-	printf("Supports AMI, Award, Phoenix and SystemSoft BIOSes.\n");
+	printf("Supports AMI, Award, Phoenix, SystemSoft and ICL BIOSes.\n");
 	printf("\n");
 	printf("Usage:\n\t%s <filename>\n", name);
 }
@@ -195,7 +195,7 @@ static struct {
 	"(AAMMIIBBIIOOSS)", "AMIBIOSC", AMI940725Extract}, { /* 12/15/93 */
 	"= Award Decompression Bios =", NULL, AwardExtract}, {
 	"awardext.rom", NULL, AwardExtract}, {
-	"PowerBIOS Setup\x00", NULL, AwardExtract}, { /* Siemens PowerBIOS */
+	"Award Software International, Inc.\x10", "\x01PowerBIOS ", AwardExtract}, { /* PowerBIOS */
 	"Phoenix Technologies", "BCPSEGMENT", PhoenixExtract}, {
 	"\x00IBM AT Compatible Phoenix NuBIOS", "BCPSEGMENT", PhoenixExtract}, { /* Phoenix copyrights scrubbed (Gateway Solo 2500) */
 	" 102-System Board Failure", "BCPCMP", PhoenixExtract}, { /* Phoenix-compressed Compaq BIOS (Presario 4800) */
@@ -203,6 +203,7 @@ static struct {
 	"\xEE\x88SYSBIOS", "\xEE\x88", SystemSoftExtract}, {
 	"\xEE\x88\x42IOS SCU", "\xEE\x88", SystemSoftExtract}, {
 	"\xFF\x88SYSBIOS", "\xFF\x88", SystemSoftExtract}, { /* Insyde */
+	"OKICL1", "FL_PACK", LdbExtract}, {
 NULL, NULL, NULL},};
 
 int main(int argc, char *argv[])

@@ -1171,9 +1171,13 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		p = memmem(p, BIOSLength - 8 - (p - BIOSImage), "ACFG", 4);
 		if (!p)
 			break;
+		if ((p - BIOSImage) < 2) {
+			p += 4;
+			continue;
+		}
 		p -= 2;
 
-		Length = le16toh(*((uint16_t *) &p));
+		Length = le16toh(*((uint16_t *) p));
 		if ((Length < 8) || ((p[7] != 1) && (p[7] != 2)))  {
 			p += 4;
 			continue;

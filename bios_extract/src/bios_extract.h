@@ -23,14 +23,18 @@
 #define FALSE 0
 #define TRUE  1
 
-#if !defined(le32toh) || !defined(le16toh)
+#if !defined(le32toh) || !defined(le16toh) || !defined(be32toh) || !defined(le32toh)
 #if BYTE_ORDER == LITTLE_ENDIAN
 #define le32toh(x) (x)
 #define le16toh(x) (x)
+#define be32toh(x) bswap_32(x)
+#define be16toh(x) bswap_16(x)
 #else
 #include <byteswap.h>
 #define le32toh(x) bswap_32(x)
 #define le16toh(x) bswap_16(x)
+#define be32toh(x) (x)
+#define be16toh(x) (x)
 #endif
 #endif
 
@@ -68,5 +72,9 @@ Bool AwardExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 /* systemsoft.c */
 Bool SystemSoftExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		       uint32_t Offset1, uint32_t Offset2);
+
+/* ldb.c */
+Bool LdbExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
+		uint32_t Offset1, uint32_t Offset2);
 
 #endif				/* BIOS_EXTRACT_H */
