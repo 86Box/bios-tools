@@ -19,11 +19,11 @@
 # Skip extractor if the 0 directory exists and there's no 1 directory to append.
 if [ ! -d /bios/0 -o -d /bios/1 ]
 then
-	# Run extractor.
-	python3 -u -m biostools -x /bios $* >&2
-
 	# Print usage if there's no 1 directory (nothing bound to /bios).
 	[ ! -d /bios/1 ] && exec python3 -u -m biostools --docker-usage >&2
+
+	# Run extractor.
+	python3 -u -m biostools -x /bios $* >&2
 
 	# Fail if there's no 0 directory.
 	[ ! -d /bios/0 ] && exit 1

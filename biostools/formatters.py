@@ -56,7 +56,7 @@ class Formatter:
 
 		# Encode the URL.
 		link_url = link_url.replace('#', '%23')
-		link_url = re.sub('''\?(^[/]*)/''', '%3F\\1/', link_url)
+		link_url = re.sub(r'''\?(^[/]*)/''', '%3F\\1/', link_url)
 
 		# Stop if the URL is not valid.
 		slash_index = link_url.find('/')

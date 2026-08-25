@@ -16,7 +16,7 @@
 #
 
 # Create intermediary builder image.
-FROM debian:bullseye AS builder
+FROM debian:trixie AS builder
 
 # Install build dependencies.
 RUN apt-get update && \
@@ -35,19 +35,19 @@ COPY . /biostools
 
 # Compile bios_extract.
 RUN cd /biostools/bios_extract && \
-	make
+	make -j `nproc`
 
 # Compile deark.
 RUN cd /biostools/deark && \
-	make
+	make -j `nproc`
 
 # Create final image.
-FROM debian:bullseye
+FROM debian:trixie
 
 # Install runtime dependencies.
-RUN sed -i -e 's/main/main contrib non-free/' /etc/apt/sources.list && \
+RUN sed -i -e 's/Components: main/Components: main contrib non-free/' /etc/apt/sources.list.d/debian.sources &&\
 	apt-get update && \
-	DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip p7zip-full p7zip-rar innoextract unshield qemu-system-x86 && \
+	DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip pip p7zip-full p7zip-rar innoextract unshield qemu-system-i386 && \
 	apt-get clean && \
 	rm -rf /var/lib/apt/lists
 
@@ -55,7 +55,7 @@ RUN sed -i -e 's/main/main contrib non-free/' /etc/apt/sources.list && \
 COPY --from=builder /biostools /biostools
 
 # Install Python dependencies.
-RUN pip install -r /biostools/requirements.txt
+RUN	pip install --break-system-packages -r /biostools/requirements.txt 
 
 # Establish directories.
 VOLUME /bios
