@@ -145,7 +145,7 @@ class ArchiveExtractor(Extractor):
 			b'''\\x1F\\x8B|''' # gzip
 			b'''BZh|''' # bzip2
 			b'''\\xFD7zXZ\\x00|''' # xz
-			b'''[\\x00-\\xFF]{2}-l(?:h[0467]|z4)-|''' # lha (methods supported by 7-Zip - HACK: except lh5 due to Award)
+			b'''[\\x00-\\xFF]{2}-l(?:h[467]|z4)-|''' # lha (methods supported by 7-Zip - HACK: except lh[05] due to Award)
 			b'''ZOO''' # zoo
 		)
 
