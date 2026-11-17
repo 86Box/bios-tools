@@ -320,7 +320,7 @@ def analyze_files(formatter, scan_base, file_analyzers, scan_dir_path, scan_file
 		scan_file_names.sort(key=lambda fn: (fn == 'original.tm1') and 'original.tmq' or fn)
 
 	# Read files into the cache.
-	cache_quota = ANALYZER_MAX_CACHE_MB * 1073741824
+	cache_quota = ANALYZER_MAX_CACHE_MB * 1048576
 	for scan_file_name in scan_file_names:
 		# Read up to 16 MB as a safety net.
 		file_data = util.read_complement(os.path.join(scan_dir_path, scan_file_name))
@@ -586,7 +586,6 @@ def analyze_process(queue, formatter, scan_base, options):
 		analyzers.InsydeAnalyzer(),
 		analyzers.IntelUEFIAnalyzer(),
 		analyzers.JukoAnalyzer(),
-		analyzers.MRAnalyzer(),
 		analyzers.MylexAnalyzer(),
 		analyzers.OlivettiAnalyzer(),
 		analyzers.PhilipsAnalyzer(),
@@ -835,7 +834,7 @@ class RemoteServerClient:
 
 			if line[0:1] in b'xa':
 				# Start multiprocessing pool.
-				print(self.addr, 'Starting pool for', (line[0] == b'x') and 'extraction' or 'analysis')
+				print(self.addr, 'Starting pool for', (line[0:1] == b'x') and 'extraction' or 'analysis')
 				self.queue = multiprocessing.Queue(maxsize=self.options['threads'] * 8)
 				if line[0:1] == b'x':
 					func = extract_process
@@ -926,7 +925,7 @@ def main():
 	}
 
 	# Parse arguments.
-	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xadf:hnrtu', ['extract', 'analyze', 'debug', 'format=', 'hyperlink', 'no-headers', 'array', 'threads', 'unpack-only', 'remote=', 'remote-server', 'docker-usage'])
+	args, remainder = getopt.gnu_getopt(sys.argv[1:], 'xadf:hnrt:u', ['extract', 'analyze', 'debug', 'format=', 'hyperlink', 'no-headers', 'array', 'threads=', 'unpack-only', 'remote=', 'remote-server', 'docker-usage'])
 	for opt, arg in args:
 		if opt in ('-x', '--extract'):
 			mode = extract
