@@ -908,6 +908,10 @@ def remote_server(dir_path, formatter_args, options):
 
 
 def main():
+	# Force the fork start method, as worker pools receive unpicklable objects
+	# (output file, locks) which break the forkserver default of Python 3.14+.
+	multiprocessing.set_start_method('fork', force=True)
+
 	# Set default options.
 	mode = None
 	options = {
