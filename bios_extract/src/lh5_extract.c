@@ -339,8 +339,8 @@ make_table(short nchar, unsigned char bitlen[], short tablebits,
 			continue;
 		l = start[k] + weight[k];
 		if (k <= tablebits) {
-			/* code in table */
-			l = MIN(l, 4096);
+			/* code in table (table has 1 << tablebits entries) */
+			l = MIN(l, MIN(1U << tablebits, 4096));
 			for (i = start[k]; i < l; i++)
 				table[i] = j;
 		} else {
@@ -448,7 +448,7 @@ static int read_c_len(void)
 					c = getbits(4) + 3;
 				else
 					c = getbits(CBIT) + 20;
-				while (--c >= 0)
+				while ((--c >= 0) && (i < NC))
 					c_len[i++] = 0;
 			} else
 				c_len[i++] = c - 2;

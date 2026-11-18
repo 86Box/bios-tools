@@ -217,6 +217,7 @@ static struct PhoenixModuleName PhoenixModuleNames[] = {
 	{'?', "tcpa_?"},
 	{'$', "biosentry"},
 	{'J', "SmartCardPAS"},
+	{0, NULL}
 };
 
 struct PhoenixID {
@@ -356,8 +357,8 @@ static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	}
 
 valid_signature:
-	if ((Offset + Module->HeadLen + le32toh(Module->FragLength)) >
-	    BIOSLength) {
+	if (((uint64_t) Offset + Module->HeadLen + le32toh(Module->FragLength)) >
+	    (uint64_t) BIOSLength) { /* 64-bit to catch bogus lengths wrapping around (Samsung 08BV) */
 		fprintf(stderr, "Error: Module overruns buffer at 0x%05X\n",
 			Offset);
 		return le32toh(Module->Previous);
@@ -531,6 +532,8 @@ BadFragment:
 		   just use expanded length if packed length is invalid */
 		if ((Packed == 0) || (Packed & 0xFF000000))
 			Packed = le32toh(Module->ExpLen);
+		if (!IsFragment && (((uint64_t) Offset + Module->HeadLen + Packed) > (uint64_t) BIOSLength))
+			Packed = BIOSLength - Offset - Module->HeadLen;
 		printf("0x%05X (%6d bytes)   ->   %s", Offset + Module->HeadLen,
 		       Packed, filename);
 Uncompressed:
@@ -1228,14 +1231,20 @@ PhoenixExtract(unsigned char *BIOSImage, int BIOSLength, int BIOSOffset,
 		Offset = 0;
 		Length = BIOSLength;
 	}
-	if (!bcpComp) {
-		/* ignore */
-	} else if ((bcpComp->head.major_revision == 0) && (bcpComp->head.minor_revision == 0)) {
-		Offset += le16toh(bcpComp->alt.unc_start_offset);
-		Length -= le16toh(bcpComp->alt.unc_start_offset);
-	} else {
-		Offset += le16toh(bcpComp->main.unc_start_offset);
-		Length -= le16toh(bcpComp->main.unc_start_offset);
+	if (bcpComp) {
+		uint32_t UncStartOffset;
+		if ((bcpComp->head.major_revision == 0) && (bcpComp->head.minor_revision == 0))
+			UncStartOffset = le16toh(bcpComp->alt.unc_start_offset);
+		else
+			UncStartOffset = le16toh(bcpComp->main.unc_start_offset);
+
+		/* Don't underflow the unsigned length on bogus offsets (Intel MS440GX part file). */
+		if (UncStartOffset >= Length) {
+			Length = 0;
+		} else {
+			Offset += UncStartOffset;
+			Length -= UncStartOffset;
+		}
 	}
 	if (Length > 0) {
 		fd = open("uncompressed.rom", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
