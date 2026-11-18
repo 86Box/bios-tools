@@ -192,8 +192,8 @@ class LzhufDecoder:
 def unpack_ldb(image):
 	if image[:6] != b'OKICL1':
 		raise ValueError('not an ICL LDB image (missing "OKICL1" magic)')
-	if image[0x28:0x2F] != b'FL_PACK':
-		raise ValueError('missing "FL_PACK" tag at 0x28')
+	if image[0x28:0x2F] != b'FL_PACK' and image[0x28:0x30] != b'FLPACK32':
+		raise ValueError('missing "FL_PACK" or "FLPACK32" tag at 0x28')
 	return LzhufDecoder(image[0x40:]).decode()
 
 

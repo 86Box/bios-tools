@@ -204,6 +204,7 @@ static struct {
 	"\xEE\x88\x42IOS SCU", "\xEE\x88", SystemSoftExtract}, {
 	"\xFF\x88SYSBIOS", "\xFF\x88", SystemSoftExtract}, { /* Insyde */
 	"OKICL1", "FL_PACK", LdbExtract}, {
+	"OKICL1", "FLPACK32", LdbExtract}, { /* ICL E452 */
 NULL, NULL, NULL},};
 
 int main(int argc, char *argv[])
