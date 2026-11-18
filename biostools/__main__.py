@@ -136,6 +136,7 @@ def extract_process(queue, abort_flag, multifile_lock, dir_number_path, next_dir
 	]
 	if not options['unpack-only']:
 		file_extractors += [
+			extractors.IBMSurePathExtractor(),
 			extractors.BIOSExtractor(),
 			extractors.UEFIExtractor(),
 		]

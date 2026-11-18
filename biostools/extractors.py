@@ -149,8 +149,21 @@ class ArchiveExtractor(Extractor):
 			b'''ZOO''' # zoo
 		)
 
+		# Signatures for archive files extracted with deark instead of 7-Zip.
+		self._deark_signature_pattern = re.compile(
+			b'''\x1A[\x01-\x0B][\x21-\x7E][\x20-\x7E]{0,11}\x00''' # ARC/PAK: method 1-11 followed by NUL-terminated 8.3 name
+		)
+
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
+
+		# Path to the deark utility.
+		self._deark_path = os.path.abspath(os.path.join('deark', 'deark'))
+		if not os.path.exists(self._deark_path):
+			self._deark_path = None
+
+		# Filename sanitization pattern.
+		self._dos_fn_pattern = re.compile('''[\\x00-\\x1F\\x7F-\\xFF\\\\/:\\*\\?"<>\\|]''')
 
 		# 7-Zip has this annoying quirk where it scans the archive's parent
 		# directory structure before extracting the archive itself. This
@@ -210,6 +223,10 @@ class ArchiveExtractor(Extractor):
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		"""Extract an archive."""
 
+		# Extract archives handled by deark.
+		if self._deark_signature_pattern.match(file_header):
+			return self._extract_deark_archive(file_path, dest_dir)
+
 		# Stop if this is apparently not an archive.
 		match = self._signature_pattern.match(file_header)
 		if not match:
@@ -217,6 +234,45 @@ class ArchiveExtractor(Extractor):
 
 		# Do the actual extraction.
 		return self._extract_archive(file_path, dest_dir)
+
+	def _extract_deark_archive(self, file_path, dest_dir):
+		# Stop if deark is not available.
+		if not self._deark_path:
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Run deark to convert the archive into a tar file, as that preserves the original
+		# file names, then extract the tar file into the destination directory.
+		tar_path = os.path.join(dest_dir, util.random_name(8, charset=util.random_name_nosymbols) + '.tar')
+		try:
+			subprocess.run([self._deark_path, '-tar', '-arcfn', tar_path, '-opt', 'archive:repro', os.path.abspath(file_path)], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+			if os.path.exists(tar_path):
+				subprocess.run(['tar', '-xf', tar_path, '--no-same-owner', '--no-same-permissions'], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+		except:
+			pass
+
+		# Remove tar file.
+		try:
+			os.remove(tar_path)
+		except:
+			pass
+
+		# Assume failure if nothing was extracted.
+		if len(os.listdir(dest_dir)) < 1:
+			self.debug_print('deark produced no files:', file_path)
+			return False
+
+		# Remove archive file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory path.
+		return dest_dir
 
 	def _extract_archive(self, file_path, dest_dir, remove=True):
 		# Create destination directory and stop if it couldn't be created.
@@ -244,7 +300,14 @@ class ArchiveExtractor(Extractor):
 
 		# Run 7z command to extract the archive.
 		# The dummy password prevents any password prompts from stalling 7z.
+		files_before = len(os.listdir(dest_dir))
 		subprocess.run(['7z', 'x', '-y', '-aou', '-ppassword', '--', link_path], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
+
+		# 7-Zip refuses FAT images with orphaned long file name entries. Neutralize
+		# those and try again if nothing was extracted. (IBM Aptiva 2161 ARDI diskette)
+		if len(os.listdir(dest_dir)) == files_before and self._fix_fat_lfn(file_path_abs):
+			self.debug_print('Retrying with orphaned LFN entries removed:', file_path)
+			subprocess.run(['7z', 'x', '-y', '-aou', '-ppassword', '--', link_path], stdout=self._devnull, stderr=subprocess.STDOUT, cwd=dest_dir)
 
 		# Remove temporary symlink.
 		if link_path != file_path_abs:
@@ -278,6 +341,60 @@ class ArchiveExtractor(Extractor):
 
 		# Return destination directory path.
 		return dest_dir
+
+
+	def _fix_fat_lfn(self, file_path):
+		"""Mark orphaned long file name entries on the root directory of a FAT12/16
+		   image as deleted. Returns True if any entries were changed."""
+		try:
+			with open(file_path, 'r+b') as f:
+				# Parse BIOS parameter block.
+				bpb = f.read(512)
+				if len(bpb) < 512 or ((bpb[0] != 0xEB or bpb[2] != 0x90) and bpb[0] != 0xE9) or bpb[21] < 0xF0:
+					return False
+				bytes_per_sector, _, reserved_sectors, fat_count, root_entries, _, _, sectors_per_fat = struct.unpack('<HBHBHHBH', bpb[11:24])
+				if bytes_per_sector not in (512, 1024, 2048, 4096) or not fat_count or not root_entries or not sectors_per_fat:
+					return False
+
+				# Read root directory.
+				root_offset = (reserved_sectors + (fat_count * sectors_per_fat)) * bytes_per_sector
+				f.seek(root_offset)
+				root = bytearray(f.read(root_entries * 32))
+
+				# Go through entries.
+				changed = False
+				index = 0
+				while index < len(root) // 32:
+					entry = root[index * 32:(index + 1) * 32]
+					if entry[0] == 0x00:
+						break
+					elif entry[11] == 0x0F and entry[0] != 0xE5:
+						# Find the short name entry ending this LFN chain.
+						chain_end = index
+						while chain_end < len(root) // 32 and root[(chain_end * 32) + 11] == 0x0F:
+							chain_end += 1
+
+						# Calculate the short name checksum.
+						checksum = 0
+						for c in root[chain_end * 32:(chain_end * 32) + 11]:
+							checksum = (((checksum & 1) << 7) + (checksum >> 1) + c) & 0xFF
+
+						# Mark the chain as deleted if any checksum doesn't match.
+						if any(root[(x * 32) + 13] != checksum for x in range(index, chain_end)):
+							for x in range(index, chain_end):
+								root[x * 32] = 0xE5
+							changed = True
+						index = chain_end
+					else:
+						index += 1
+
+				# Write root directory back.
+				if changed:
+					f.seek(root_offset)
+					f.write(root)
+				return changed
+		except:
+			return False
 
 
 class ASTExtractor(Extractor):
@@ -1228,23 +1345,38 @@ class ImageExtractor(Extractor):
 			# Normalize width.
 			width = -width
 
-			# Read palette.
+			# Read palette entries, which consist of an index byte followed by RGB values.
 			palette_size, = struct.unpack('<H', file_data[10:12])
-			palette = self._vga_palette[::] # start with standard EGA palette
-			palette_index = 0
+			palette_entries = []
 			index = 12
-			while palette_index < palette_size:
+			while len(palette_entries) < palette_size:
 				palette_color = file_data[index:index + 4]
 				if len(palette_color) != 4:
 					break
-				palette[palette_index], = struct.unpack('>I', palette_color) # shortcut to parse _RGB value
-				palette_index += 1
+				palette_entries.append(palette_color)
 				index += 4
+
+			# Use the index bytes if they're unique, or go sequentially otherwise.
+			if len(set(entry[0] for entry in palette_entries)) != len(palette_entries):
+				palette_entries = [bytes([palette_index]) + entry[1:] for palette_index, entry in enumerate(palette_entries)]
+
+			# Scale 6-bit VGA DAC values to 8-bit if no value exceeds 6 bits. (Fujitsu Siemens D1521)
+			scale = max((max(entry[1:]) for entry in palette_entries), default=0) <= 0x3f
+			palette = self._vga_palette[::] # start with standard EGA palette
+			for entry in palette_entries:
+				r, g, b = entry[1:]
+				if scale:
+					r, g, b = ((x << 2) | (x >> 4) for x in (r, g, b))
+				palette[entry[0]] = (r << 16) | (g << 8) | b
+
+			# Image data begins after the palette and the second width/height.
+			image_data_index = 20 + (4 * palette_size)
 
 			self._write_type(dest_dir_0, 'PGX (with {0}-color palette)'.format(palette_size))
 		else:
 			# Use standard EGA palette.
 			palette = self._vga_palette
+			image_data_index = 18
 
 			self._write_type(dest_dir_0, 'PGX (without palette)')
 
@@ -1252,7 +1384,7 @@ class ImageExtractor(Extractor):
 		image = PIL.Image.new('RGB', (width, height))
 
 		# Read image data. This looks a lot like EPA v2 4-bit but it's slightly different.
-		index = 18
+		index = image_data_index
 		bitmap_width = math.ceil(width / 8)
 		bitmap_size = height * bitmap_width
 		for y in range(height):
@@ -1528,6 +1660,147 @@ class HexExtractor(Extractor):
 
 		# Return destination directory.
 		return dest_dir
+
+
+class IBMSurePathExtractor(Extractor):
+	"""Extract compressed modules from IBM SurePath BIOSes."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		# Doubled copyright string present on SurePath BIOSes.
+		self._ibm_pattern = re.compile(b'''\\(\\(CC\\)\\)  CCOOPPYYRRIIGGHHTT  ''')
+
+		# Compressed module header candidates.
+		self._header_pattern = re.compile(b'''\\x04\\x00''')
+
+	def _decompress(self, data, offset, max_size=0x20000):
+		"""Decompress an IBM SurePath LZ stream, consisting of MSB-first bits:
+		   - 0 + 8-bit literal
+		   - 1 + 1 + 7-bit distance + length
+		   - 1 + 0 + 11-bit distance + length
+		   with the length encoded as n zero bits + 1 bit + (n + 1)-bit value,
+		   such that length = (2 << n) + value, and distance 0 marking the end.
+		   Returns the decompressed data and the amount of compressed bytes
+		   consumed, or None if the stream is invalid."""
+		data_len = len(data)
+		bit_pos = offset << 3
+		bit_end = data_len << 3
+		out = bytearray()
+
+		def read_bits(count):
+			nonlocal bit_pos
+			if bit_pos + count > bit_end:
+				raise IndexError()
+			value = 0
+			for _ in range(count):
+				value = (value << 1) | ((data[bit_pos >> 3] >> (7 - (bit_pos & 7))) & 1)
+				bit_pos += 1
+			return value
+
+		try:
+			while len(out) < max_size:
+				if not read_bits(1):
+					# Literal.
+					out.append(read_bits(8))
+				else:
+					# Match.
+					if read_bits(1):
+						distance = read_bits(7)
+					else:
+						distance = read_bits(11)
+
+					# Stop on the end marker.
+					if distance == 0:
+						return out, (bit_pos >> 3) - offset
+
+					# Read length.
+					zeros = 0
+					while not read_bits(1):
+						zeros += 1
+						if zeros > 16:
+							return None
+					length = (2 << zeros) + read_bits(zeros + 1)
+
+					# Copy data.
+					if distance > len(out):
+						return None
+					for _ in range(length):
+						out.append(out[-distance])
+		except IndexError:
+			pass
+
+		# Stream was not terminated properly.
+		return None
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if this file is too small.
+		if len(file_header) < 32768:
+			return False
+
+		# Read up to 16 MB as a safety net.
+		file_header += util.read_complement(file_path, file_header)
+
+		# Stop if this is not a SurePath BIOS.
+		if not self._ibm_pattern.search(file_header):
+			return False
+
+		# Look for compressed modules.
+		modules = []
+		seen = set()
+		for match in self._header_pattern.finditer(file_header):
+			# Decompress data and skip invalid streams.
+			offset = match.start(0)
+			ret = self._decompress(file_header, offset + 4)
+			if not ret:
+				continue
+			data, consumed = ret
+
+			# Skip false positives by checking the consumed size against the header.
+			compressed_size, = struct.unpack('<H', file_header[offset + 2:offset + 4])
+			if len(data) < 1024 or abs(consumed - compressed_size) > 2:
+				continue
+
+			# Skip duplicates.
+			data = bytes(data)
+			if data in seen:
+				continue
+			seen.add(data)
+
+			self.debug_print('Found module at', hex(offset), 'with', len(data), 'bytes')
+			modules.append((offset, data))
+
+		# Stop if no modules were found.
+		if not modules:
+			return False
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir_0):
+			return True
+
+		# Write modules.
+		for offset, data in modules:
+			with open(os.path.join(dest_dir_0, 'surepath_{0:05X}.bin'.format(offset)), 'wb') as f:
+				f.write(data)
+
+		# Move the original file into the destination directory as a remainder.
+		if util.hardlink_or_copy(file_path, os.path.join(dest_dir_0, 'remainder.rom')):
+			try:
+				os.remove(file_path)
+			except:
+				pass
+
+		# Create flag file on the destination directory for the analyzer to
+		# treat it as a big chunk of data.
+		open(os.path.join(dest_dir_0, ':combined:'), 'wb').close()
+
+		# Hardlink or copy any header file to the destination directory.
+		parent_header = os.path.join(os.path.dirname(os.path.abspath(file_path)), ':header:')
+		if os.path.exists(parent_header):
+			util.hardlink_or_copy(parent_header, os.path.join(dest_dir_0, ':header:'))
+
+		# Return destination directory path.
+		return dest_dir_0
 
 
 class ISOExtractor(ArchiveExtractor):
@@ -2352,13 +2625,9 @@ class PEExtractor(ArchiveExtractor):
 			b'''(?P<afuwin>Software\\\\AMI\\\\AFUWIN)|''' # AMIBIOS 8 AFUWIN (many ASRock)
 			b'''(?P<aopen>AOpen FLASH ROM Utility R)|''' # AOpen (AP61)
 			b'''Micro Firmware, Incorporated \\* |''' # Micro Firmware (Intel Monsoon surfaced so far)
-			b'''(?P<asus>ASUS Floppy Image Self-Extrator\\.)''' # ASUS floppy self-extractor (P4VP-MX)
+			b'''(?P<asus>ASUS Floppy Image Self-Extrator\\.)|''' # ASUS floppy self-extractor (P4VP-MX)
+			b'''(?P<biofile>BIOFILE\\x00[\\x21-\\x7E][\\x20-\\x7E]{0,14}\\x00)''' # Dell flasher with embedded Intel BIOS files (Dimension Pxxxv)
 		)
-
-		# Path to the deark utility.
-		self._deark_path = os.path.abspath(os.path.join('deark', 'deark'))
-		if not os.path.exists(self._deark_path):
-			self._deark_path = None
 
 	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
 		# Determine if this is a PE/MZ.
@@ -2457,7 +2726,54 @@ class PEExtractor(ArchiveExtractor):
 		else:
 			return dest_dir
 
+	def _extract_biofile(self, file_path, file_header, dest_dir):
+		# Parse BIOFILE records: signature, 16-byte name, 32-bit size, 32-bit reserved, data.
+		files = []
+		for match in re.finditer(b'''BIOFILE\\x00''', file_header):
+			offset = match.start(0)
+			name = util.read_string(file_header[offset + 8:offset + 24])
+			size, = struct.unpack('<I', file_header[offset + 24:offset + 28])
+			data = file_header[offset + 32:offset + 32 + size]
+			if not name or len(data) != size or self._dos_fn_pattern.search(name):
+				continue
+			self.debug_print('BIOFILE', repr(name), 'with', size, 'bytes at', hex(offset))
+			files.append([name, data])
+
+		# Stop if no valid records were found.
+		if not files:
+			return False
+
+		# Name the first Intel BIOS part after the next part it references, so that
+		# IntelExtractor can find all the parts. (bios.bio => 1006DF0J.BI1)
+		for entry in files:
+			if entry[0].lower()[-4:] == '.bio' and entry[1][90:95] == b'FLASH':
+				next_name = util.read_string(entry[1][96:112]).strip()
+				if next_name[-4:].lower() == '.bi1':
+					entry[0] = next_name[:-4] + '.BIO'
+
+		# Create destination directory and stop if it couldn't be created.
+		if not util.try_makedirs(dest_dir):
+			return True
+
+		# Write files.
+		for name, data in files:
+			with open(os.path.join(dest_dir, name), 'wb') as f:
+				f.write(data)
+
+		# Remove file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory path.
+		return dest_dir
+
 	def _extract_flashtool(self, file_path, file_header, dest_dir, match):
+		# Extract embedded files in BIOFILE records.
+		if match.group('biofile'):
+			return self._extract_biofile(file_path, file_header, dest_dir)
+
 		# Determine embedded ROM start and end offsets.
 		dest_file_name = 'flashtool.bin'
 		if match.group('afuwin'):
@@ -2862,15 +3178,17 @@ class VMExtractor(PEExtractor):
 			b'''(?P<ibmjp>\\x0A\\!\\!\\! Cannot open the file\\[%s\\] to calculate CRC\\.\\x00)|''' # IBM Japan
 			b'''(?P<zenith>Ready to build distribution image with the following attributes:)|''' # Zenith in-house
 			b'''(?P<softpaq>Error reading the Softpaq File information)|''' # Compaq Softpaq
+			b'''(?P<arcmanager>Arcmanager \\(C\\) FUJITSU DEVICES INC\\.)|''' # Fujitsu (extracts to the current directory)
 			b'''(?P<dell>Intel Flash Memory Update Utility|DELLXBIOS[\\x00-\\xFF]+;C_FILE_INFO)[\\x00-\\xFF]+<<NMSG>>''' # Dell in-house
 		)
 		self._rompaq_pattern = re.compile(b'''[\\x00-\\xFF]{12}[A-Z0-9]{7}\\x00[0-9]{2}/[0-9]{2}/[0-9]{2}\\x00''')
 
-		# Filename sanitization pattern.
-		self._dos_fn_pattern = re.compile('''[\\x00-\\x1F\\x7F-\\xFF\\\\/:\\*\\?"<>\\|]''')
-
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
+
+		# Maximum QEMU run time. Some self-extractors take over a minute
+		# even on an idle host. (Fujitsu Siemens D1183 FastPacket: ~70 seconds)
+		self._qemu_timeout = 180
 
 		# Path to QEMU.
 		self._qemu_path = None
@@ -2996,9 +3314,9 @@ class VMExtractor(PEExtractor):
 						self.debug_print('Monitor flag file timed out')
 
 				# Send monitor command if one was specified, and wait for the QEMU process.
-				proc.communicate(input=monitor_cmd, timeout=60)
+				proc.communicate(input=monitor_cmd, timeout=self._qemu_timeout)
 			else:
-				subprocess.run(args, input=monitor_cmd, timeout=60, stdout=self._devnull, stderr=subprocess.STDOUT)
+				subprocess.run(args, input=monitor_cmd, timeout=self._qemu_timeout, stdout=self._devnull, stderr=subprocess.STDOUT)
 		except:
 			self.debug_print('Running QEMU failed (timed out?)')
 		try:
@@ -3050,7 +3368,7 @@ class VMExtractor(PEExtractor):
 			f.write(b'echo 0|') # later revision prompts for standard or LS-120 drive
 		elif match.group('ardi'):
 			f.write(b'echo.|')
-		elif match.group('zenith') or match.group('dell'):
+		elif match.group('zenith') or match.group('dell') or match.group('arcmanager'):
 			f.write(b'a:\r\n')
 		elif match.group('softpaq'):
 			# Create flag file for sending the monitor commands.
@@ -3060,7 +3378,7 @@ class VMExtractor(PEExtractor):
 		f.write(b'd:' + exe_name.encode('cp437', 'ignore'))
 		if match.group('fastpacket'):
 			f.write(b' /b a:\r\n')
-		elif match.group('ardi') or match.group('softpaq'):
+		elif match.group('ardi') or match.group('softpaq') or match.group('arcmanager'):
 			f.write(b'\r\n')
 		elif match.group('zenith'):
 			f.write(b' <c:\\agreed.txt\r\n')
@@ -3151,6 +3469,12 @@ class VMExtractor(PEExtractor):
 
 		# Run this same extractor with detectors pointed at the unpacked data.
 		ret = self.extract(file_path, decomp_file_data, dest_dir, dest_dir_0, allow_deark=False)
+
+		# Keep the original file if extraction failed and the unpacked file is gone,
+		# which can happen if a timed out virtual machine wrote to the shared directory.
+		if not ret and not os.path.exists(unpacked_path):
+			self.debug_print('Unpacked file is gone, keeping original file')
+			return False
 
 		# Remove original file.
 		try:
