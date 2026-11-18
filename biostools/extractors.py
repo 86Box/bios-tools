@@ -3088,13 +3088,19 @@ class UEFIExtractor(Extractor):
 		# Known UEFI signatures.
 		self._signature_pattern = re.compile(b'''EFI_|D(?:xe|XE)|P(?:ei|EI)|NVAR[\\x00-\\xFF]{7}(?:StdDefaults|PlatformLang|AMITSESetup|SecureBootSetup)\\x00''')
 
-		# Ignore padding and microcode files.
-		self._invalid_file_pattern = re.compile('''(?:Padding|Microcode)_''')
+		# Ignore padding and microcode files. (Microcode files are named
+		# "Microcode_" up to UEFIExtract NE A59, "Intel_microcode_" or
+		# "AMD_microcode_" afterwards)
+		self._invalid_file_pattern = re.compile('''(?:Padding|Microcode|(?:Intel|AMD)_microcode)_''')
 
-		# Path to the UEFIExtract utility.
-		self._uefiextract_path = os.path.abspath('UEFIExtract')
-		if not os.path.exists(self._uefiextract_path):
-			self._uefiextract_path = None
+		# Path to the UEFIExtract utility. (Newer Linux releases ship it as
+		# "uefiextract" instead of "UEFIExtract")
+		self._uefiextract_path = None
+		for uefiextract_name in ('UEFIExtract', 'uefiextract'):
+			uefiextract_path = os.path.abspath(uefiextract_name)
+			if os.path.isfile(uefiextract_path):
+				self._uefiextract_path = uefiextract_path
+				break
 
 		# /dev/null handle for suppressing output.
 		self._devnull = open(os.devnull, 'wb')
@@ -3127,10 +3133,6 @@ class UEFIExtractor(Extractor):
 		# Stop if the dump directory was somehow not created.
 		dump_dir = file_path_abs + '.dump'
 		if not os.path.isdir(dump_dir):
-			try:
-				os.remove(report_file)
-			except:
-				pass
 			return False
 
 		# Move dump directory over to the destination.

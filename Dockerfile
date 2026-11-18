@@ -26,7 +26,7 @@ RUN apt-get update && \
 
 # Download UEFIExtract.
 RUN mkdir /biostools && cd /biostools && \
-	wget -O uefiextract.zip https://github.com/LongSoft/UEFITool/releases/download/A59/UEFIExtract_NE_A59_linux_x86_64.zip && \
+	wget -O uefiextract.zip https://github.com/LongSoft/UEFITool/releases/download/A76/UEFIExtract_NE_A76_x64_linux.zip && \
 	unzip -o uefiextract.zip && \
 	rm -f uefiextract.zip
 

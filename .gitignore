@@ -19,6 +19,7 @@ biostools_*_*
 
 # UEFIExtract
 UEFIExtract
+uefiextract
 
 # fdimg
 /fdimg/imgext
