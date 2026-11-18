@@ -31,6 +31,7 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 * **7-Zip** command line utility installed as `7z`.
 * **QEMU** (`qemu-system-i386`) for optionally extracting files which need to be executed.
 * **Unshield** for optionally extracting InstallShield installers.
+* **innoextract** for optionally extracting Inno Setup installers.
 
 ### Installation
 
