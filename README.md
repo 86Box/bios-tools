@@ -36,7 +36,7 @@ A toolkit for extracting and analyzing x86 BIOS ROM images (mostly) within the c
 ### Installation
 
 1. Clone this repository.
-2. Build the `bios_extract` and `deark` tools:
+2. Build the `bios_extract`, `deark` and `fdimg` tools:
 
 ```
 cd /path/to/bios-tools

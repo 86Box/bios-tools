@@ -41,6 +41,10 @@ RUN cd /biostools/bios_extract && \
 RUN cd /biostools/deark && \
 	make -j `nproc`
 
+# Compile fdimg.
+RUN cd /biostools/fdimg && \
+	make -j `nproc`
+
 # Create final image.
 FROM debian:trixie
 

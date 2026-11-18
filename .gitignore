@@ -20,6 +20,10 @@ biostools_*_*
 # UEFIExtract
 UEFIExtract
 
+# fdimg
+/fdimg/imgext
+/fdimg/fdimg
+
 # Local development
 /testcorpus
 /testdir
