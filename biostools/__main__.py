@@ -108,6 +108,7 @@ def extract_process(queue, abort_flag, multifile_lock, dir_number_path, next_dir
 		]
 	file_extractors += [
 		extractors.ISOExtractor(),
+		extractors.FdimgExtractor(),
 		extractors.VMExtractor(),
 		extractors.PEExtractor(),
 		extractors.UnshieldExtractor(),

@@ -15,7 +15,7 @@
 #
 #                Copyright 2021 RichardG.
 #
-import array, codecs, datetime, io, itertools, math, os, re, shutil, socket, struct, subprocess, sys, time, zlib
+import array, codecs, datetime, io, itertools, math, os, re, shutil, socket, struct, subprocess, sys, tempfile, time, zlib
 try:
 	import PIL.Image
 except ImportError:
@@ -1592,6 +1592,93 @@ class FATExtractor(ArchiveExtractor):
 			pass
 
 		# Return destination directory.
+		return dest_dir
+
+
+class FdimgExtractor(ArchiveExtractor):
+	"""Extract floppy disk images, including self-extracting ones,
+	   through the imgext utility from OS/2 Museum's fdimg."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+
+		# Path to the imgext utility.
+		self._imgext_path = os.path.abspath(os.path.join('fdimg', 'imgext'))
+		if not os.path.exists(self._imgext_path):
+			self._imgext_path = None
+
+	def extract(self, file_path, file_header, dest_dir, dest_dir_0):
+		# Stop if imgext is not available.
+		if not self._imgext_path:
+			return False
+
+		# Stop if this file is too small or too big to be a floppy image.
+		try:
+			file_size = os.path.getsize(file_path)
+		except:
+			return False
+		if file_size < 1024 or file_size > 33554432:
+			return False
+
+		# Run imgext to convert the image into a raw one. Raw images are rejected
+		# (exit code 2) as they're handled by other extractors, and imgext would
+		# otherwise treat any file sized as a multiple of 512 bytes as one. The
+		# output goes to a temporary file, as the destination directory should
+		# only be created once we know this is an image.
+		temp_fd, temp_path = tempfile.mkstemp(prefix='biostools_fdimg_', suffix='.img')
+		os.close(temp_fd)
+		try:
+			proc = subprocess.run([self._imgext_path, '-n', os.path.abspath(file_path), temp_path], timeout=60, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+			returncode = proc.returncode
+		except:
+			self.debug_print('imgext timed out on:', file_path)
+			returncode = None
+
+		# Stop if no image was produced.
+		try:
+			image_size = os.path.getsize(temp_path)
+		except:
+			image_size = 0
+		if returncode != 0 or image_size == 0:
+			try:
+				os.remove(temp_path)
+			except:
+				pass
+			return False
+		self.debug_print('imgext produced', image_size, 'bytes:', proc.stdout)
+
+		# Create destination directory and move the image into it.
+		image_path = os.path.join(dest_dir, util.random_name(8, charset=util.random_name_nosymbols) + '.img')
+		try:
+			if not util.try_makedirs(dest_dir):
+				raise Exception()
+			shutil.move(temp_path, image_path)
+		except:
+			try:
+				os.remove(temp_path)
+			except:
+				pass
+			return True
+
+		# Extract image as an archive.
+		ret = self._extract_archive(image_path, dest_dir, remove=False)
+		if type(ret) == str and len(os.listdir(dest_dir)) > 1:
+			# Remove image.
+			try:
+				os.remove(image_path)
+			except:
+				pass
+		else:
+			# Keep the raw image for other extractors to process.
+			self.debug_print('Could not extract image, keeping it raw')
+
+		# Remove original file.
+		try:
+			os.remove(file_path)
+		except:
+			pass
+
+		# Return destination directory path.
 		return dest_dir
 
 
