@@ -312,7 +312,7 @@ phx_write_file(unsigned char *BIOSImage, char *filename, short filetype,
 
 static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 {
-	struct PhoenixModuleHeader *Module, *NewModule;
+	struct PhoenixModuleHeader *Module, *NewModule, NewHeader;
 
 	char *filename, *ModuleName, IsFragment = 0;
 	unsigned char *Buffer;
@@ -349,7 +349,6 @@ static int PhoenixModule(unsigned char *BIOSImage, int BIOSLength, int Offset)
 	/* phoedeco: "for Fujitsu-Siemens Computer D1219" */
 	if ((Module->Compression >= 0) && (Module->Compression <= 5) &&
 		(Module->Signature[1] == 0x31) && (Module->Signature[2] == 0x31)) {
-		struct PhoenixModuleHeader NewHeader;
 		memcpy(&NewHeader, Module, sizeof(struct PhoenixModuleHeader));
 		NewHeader.ExpLen = Module->ExpLen & le32toh(0x00ffffff);
 		NewHeader.FragLength = Module->FragLength & le32toh(0x00ffffff);
@@ -400,12 +399,30 @@ valid_signature:
 
 		Packed = FragLength;
 		FragOffset = le32toh(Module->NextFrag) & (BIOSLength - 1);
+		uint8_t FragBank = 0;
 
 		printf("extra fragments: ");
 		while (FragOffset) {
 			Fragment =
 			    (struct PhoenixFragment *)(BIOSImage + FragOffset);
 			FragLength = le32toh(Fragment->FragLength);
+
+			/* Fragments may be located in a different 128 KB bank, with the
+			   address relative to the top 128 KB window (Fujitsu-Siemens D1132).
+			   Try the bank-relative location if the linear one is invalid. */
+			if (FragBank && ((FragOffset - (FragBank * 0x20000)) > 0) &&
+			    ((((uint64_t) Packed + FragLength) > le32toh(Module->ExpLen)) || (((uint64_t) FragOffset + 9 + FragLength) > BIOSLength))) {
+				int BankFragOffset = FragOffset - (FragBank * 0x20000);
+				struct PhoenixFragment *BankFragment =
+				    (struct PhoenixFragment *)(BIOSImage + BankFragOffset);
+				uint32_t BankFragLength = le32toh(BankFragment->FragLength);
+				if ((((uint64_t) Packed + BankFragLength) <= le32toh(Module->ExpLen)) && (((uint64_t) BankFragOffset + 9 + BankFragLength) <= BIOSLength)) {
+					FragOffset = BankFragOffset;
+					Fragment = BankFragment;
+					FragLength = BankFragLength;
+				}
+			}
+
 			printf("(%05X, %d bytes) ", FragOffset, FragLength);
 
 			if ((((uint64_t) Packed + FragLength) > le32toh(Module->ExpLen)) || (((uint64_t) FragOffset + 9 + FragLength) > BIOSLength)) {
@@ -419,6 +436,7 @@ valid_signature:
 				   FragLength);
 			//SetRemainder(FragOffset + 9, FragLength, FALSE);
 			Packed += FragLength;
+			FragBank = Fragment->NextBank;
 			FragOffset =
 			    le32toh(Fragment->NextFrag) & (BIOSLength - 1);
 		}
@@ -433,10 +451,10 @@ BadFragment:
 
 	ModuleName = PhoenixModuleNameGet(Module->Type);
 	if (ModuleName) {
-		filename = malloc(strlen(ModuleName) + 23);
+		filename = malloc(strlen(ModuleName) + 40);
 		sprintf(filename, "%s_%1d_%05X_%04X_%04X.rom", ModuleName, Module->Id, Offset + Module->HeadLen, Module->Segment, Module->Offset);
 	} else {
-		filename = malloc(25);
+		filename = malloc(40);
 		sprintf(filename, "%02X_%1d_%05X_%04X_%04X.rom", Module->Type, Module->Id, Offset + Module->HeadLen, Module->Segment, Module->Offset);
 	}
 
