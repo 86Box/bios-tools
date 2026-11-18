@@ -691,7 +691,7 @@ const char *dxp_query_comment( img_fns *cb, dxp_ctx *ctx )
 /* Read and decompress a specified track. */
 int dxp_read_track( img_fns *cb, dxp_ctx *ctx, int track_num )
 {
-    int     rc;
+    int     rc = IMG_OK;
 
     if( track_num < ctx->trks_img ) {
         /* Read and decompress track. */

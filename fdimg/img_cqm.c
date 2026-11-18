@@ -339,7 +339,7 @@ const char *cqm_query_comment( img_fns *cb, cqm_ctx *ctx )
 /* Read and decompress a specified track. */
 int cqm_read_track( img_fns *cb, cqm_ctx *ctx, int track_num )
 {
-    int     rc;
+    int     rc = IMG_OK;
 
     if( track_num < ctx->cyls_img * ctx->heads ) {
         /* Read and decompress track. */

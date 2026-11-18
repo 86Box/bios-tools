@@ -22,9 +22,12 @@ THE SOFTWARE.
 
 *****************************************************************************/
 
+#include <stdbool.h>
+
 typedef void    *img_handle;
 
 extern int img_open( const char *fname, img_fns *cb, img_handle *imgh );
 extern int img_read_sect( img_handle imgh, int sect_num, void *buf );
 extern const char *img_query_comment( img_handle imgh );
+extern bool img_is_raw( img_handle imgh );
 extern void img_close( img_handle imgh );

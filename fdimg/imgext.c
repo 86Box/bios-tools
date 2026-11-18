@@ -42,8 +42,20 @@ int main( int argc, char **argv )
     FILE        *fdst;
     int         rc;
 
+    bool        no_raw = false;
+
+    /* The -n option rejects images identified as raw data, so that callers
+     * can tell whether an actual image format was recognized.
+     */
+    if( argc == 4 && !strcmp( argv[1], "-n" ) ) {
+        no_raw = true;
+        ++argv;
+        --argc;
+    }
+
     if( argc != 3 ) {
-        printf( "usage: %s <src_img> <dst_raw_img>\n", argv[0] );
+        printf( "usage: %s [-n] <src_img> <dst_raw_img>\n", argv[0] );
+        printf( "       -n  Fail with exit code 2 if the source is a raw image.\n" );
         return( EXIT_FAILURE );
     }
 
@@ -60,6 +72,12 @@ int main( int argc, char **argv )
         printf( "Failed to open `%s' for reading!\n", argv[1] );
         printf( "Error code: %d\n", rc );
         return( EXIT_FAILURE );
+    }
+
+    if( no_raw && img_is_raw( fsrc ) ) {
+        printf( "Source `%s' is a raw image.\n", argv[1] );
+        img_close( fsrc );
+        return( 2 );
     }
 
     fdst = fopen( argv[2], "wb" );

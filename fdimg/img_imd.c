@@ -363,7 +363,7 @@ void imd_adjust_spt( imd_ctx *imd )
 {
     int         phys_sect;
     uint8_t     low_id;
-    uint8_t     lo_idx;
+    uint8_t     lo_idx = 0;
     trk_desc    *tdesc;
     sect_desc   *sdesc;
 
@@ -383,9 +383,10 @@ void imd_adjust_spt( imd_ctx *imd )
         /* Look for the lowest sector ID. */
         low_id = 255;
         for( phys_sect = 0; phys_sect < tdesc->num_desc; ++phys_sect ) {
-            if( sdesc[phys_sect].sect_id < low_id )
+            if( sdesc[phys_sect].sect_id < low_id ) {
                 low_id = sdesc[phys_sect].sect_id;
                 lo_idx = phys_sect;
+            }
         }
 
         /* See if the lowest sector and cylinder IDs are both zero. */

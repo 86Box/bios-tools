@@ -1,0 +1,22 @@
+fdimg - floppy disk image tools by Michal Necasek (OS/2 Museum)
+Imported from https://www.os2museum.com/hg/fdimg (revision a2d9cb117171).
+
+Local changes, made for use by biostools' FdimgExtractor:
+
+- GNUmakefile: build imgext and fdimg with GCC on Linux. The original Watcom
+  "makefile" is untouched; GNU make prefers GNUmakefile. FNM_IGNORECASE (Watcom)
+  is mapped to FNM_CASEFOLD (glibc). bldf.sh is out of date and does not link.
+- imgext: new -n option, which exits with code 2 instead of converting an image
+  identified as raw data (raw_identify accepts any file sized as a multiple of
+  512 bytes). Backed by a new img_is_raw() function in img_fns.c/h.
+- img_fns.h: include stdbool.h, needed before C23.
+
+Bug fixes:
+- img_sxd.c: CRC table initialization wrote one entry past the end of the table.
+- dxp_lh5.c: "weight[i++] = 1U << (16 - i)" is undefined behavior; split the
+  increment out as in the original LHA code.
+- img_imd.c: missing braces made lo_idx the last sector instead of the one with
+  the lowest ID; lo_idx was also potentially uninitialized.
+- img_td.c: track index bounds check was off by one.
+- img_cqm.c, img_dxp.c, img_sxd.c: *_read_track returned an uninitialized value
+  for tracks not present in the image (freshly formatted).

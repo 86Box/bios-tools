@@ -542,7 +542,7 @@ int td_build_track_map( img_fns *cb, td_ctx *td, long start_ofs )
 
         /* Calculate and validate track number. */
         trk_idx = thdr.cylinder * 2 + (thdr.head & TRK_HEAD_MASK);
-        if( trk_idx > sizeof( td->trk_ofs ) / sizeof( td->trk_ofs[0] ) )
+        if( trk_idx >= sizeof( td->trk_ofs ) / sizeof( td->trk_ofs[0] ) )
             return( IMG_ERR_BAD_IMG );  /* Track out of bounds. */
 
         /* Update 'last valid track' counter, but skip junk FM tracks.

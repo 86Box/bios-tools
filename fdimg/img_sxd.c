@@ -183,7 +183,7 @@ static void sxd_init_crc_table( void )
 {
     unsigned    i, j, val;
 
-    for( i = 0; i <= sizeof( crc_table ) / sizeof( crc_table[0] ); ++i ) {
+    for( i = 0; i < sizeof( crc_table ) / sizeof( crc_table[0] ); ++i ) {
         val = i;
         for( j = 0; j < 8; ++j ) {
             if( val & 1 )
@@ -634,7 +634,7 @@ const char *sxd_query_comment( img_fns *cb, sxd_ctx *ctx )
 /* Read and decompress a specified track. */
 int sxd_read_track( img_fns *cb, sxd_ctx *ctx, int track_num )
 {
-    int     rc;
+    int     rc = IMG_OK;
 
     if( track_num < ctx->cyls_img * ctx->heads ) {
         /* Read and decompress track. */

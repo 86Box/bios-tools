@@ -130,8 +130,10 @@ void make_table( int nchar, uint8_t bitlen[], int tablebits, uint16_t table[] )
         start[i] >>= jutbits;
         weight[i] = 1U << (tablebits - i);
     }
-    while( i <= 16 )
-        weight[i++] = 1U << (16 - i);
+    while( i <= 16 ) {
+        weight[i] = 1U << (16 - i);
+        i++;
+    }
 
     i = start[tablebits + 1] >> jutbits;
     if( i != (uint16_t)(1U << 16) ) {

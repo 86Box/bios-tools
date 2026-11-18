@@ -299,6 +299,14 @@ int img_read_sect( img_handle imgh, int sect_num, void *buf )
     return( rc );
 }
 
+/* Returns true if the image was identified as raw (headerless) data. */
+bool img_is_raw( img_handle imgh )
+{
+    img_ctx     *img = imgh;
+
+    return( img->imgt == IMG_RAW );
+}
+
 const char *img_query_comment( img_handle imgh )
 {
     img_ctx     *img = imgh;
