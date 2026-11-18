@@ -1752,6 +1752,7 @@ class IBMSurePathAnalyzer(Analyzer):
 		self._surepath_pattern = re.compile(b'''SurePath BIOS Version ([\\x20-\\x7E]+)(?:[\\x0D\\x0A\\x00]+([\\x20-\\x7E]+)?)?''')
 		self._apricot_pattern = re.compile(b'''@\\(#\\)(?:Apricot .*|XEN-PC) BIOS [\\x20-\\x7E]+''')
 		self._apricot_version_pattern = re.compile(b'''@\\(#\\)Version [\\x20-\\x7E]+''')
+		self._apricot_surepath_version_pattern = re.compile(b'''Surepath \\(tm\\) BIOS Version ([0-9\\.]+)''')
 
 	def can_handle(self, file_path, file_data, header_data):
 		if not self._ibm_pattern.search(file_data):
@@ -1774,9 +1775,12 @@ class IBMSurePathAnalyzer(Analyzer):
 			# Special case for Apricot-licensed SurePath.
 			match = self._apricot_pattern.search(file_data)
 			if match:
-				# There appears to be a real SurePath version number hidden
-				# in there (2.0) but it must be inside a compressed body.
+				# The real SurePath version number (2.0) is located inside
+				# the setup module, which is compressed on the original image.
 				self.version = 'SurePath'
+				version_match = self._apricot_surepath_version_pattern.search(file_data)
+				if version_match:
+					self.version += ' ' + version_match.group(1).decode('cp437', 'ignore')
 
 				# Extract Apricot customization as a sign-on.
 				customization = match.group(0)
@@ -2075,6 +2079,8 @@ class PhoenixAnalyzer(Analyzer):
 		self._ignore_pattern = re.compile(b'''search=f000,0,ffff,S,"|\\x00\\xC3\\x82as Ltd. de Phoenix del \\xC2\\x83 de Tecnolog\\xC3\\x83\\x00''')
 		self._bcpsegment_pattern = re.compile(b'''BCPSEGMENT''')
 		self._valid_id_pattern = re.compile(b'''[\\x20-\\x7E][\\x00\\x20-\\x7E]{7,}''')
+		self._valid_dmi_string_pattern = re.compile(b'''[\\x20-\\x7E\\xFF]{0,64}\\x00''') # FF = unprogrammed (Micronics Spitfire)
+		self._invalid_signon_pattern = re.compile(b'''[^\\x00]*?[\\x01-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]''')
 
 		self._rombios_version_pattern = re.compile(
 			b'''(?:Phoenix )?''' # Phoenix brand (not always present)
@@ -2125,6 +2131,7 @@ class PhoenixAnalyzer(Analyzer):
 		self._rombios_signon_dec_pattern = re.compile(b'''Copyright \\(C\\) [0-9]{4} Digital Equipment Corporation''')
 		self._segment_pattern = re.compile('''(?:segment_([0-9A-F]{4})|bioscode_[0-9]+_[0-9A-F]{5,}_000F_([0-9A-F]{4}))\\.rom$''')
 		self._strings_pattern = re.compile('''strings_[0-9A-F_]+\\.rom$''')
+		self._module_pattern = re.compile('''_[0-9A-F]{5,}_([0-9A-F]{4})_([0-9A-F]{4})\\.rom$''')
 		self._date_pattern = re.compile(b'''((?:0[1-9]|1[0-2])/(?:0[1-9]|[12][0-9]|3[01])/[0-9]{2}|(?:0{2}[1-9]{2}|1{2}[0-2]{2})/(?:0{2}[1-9]{2}|[12]{2}[0-9]{2}|3{2}[01]{2})/[0-9]{4})[^0-9]''')
 
 		# Reverse engineered from Phoenix BIOS Editor Pro.
@@ -2769,6 +2776,18 @@ class PhoenixAnalyzer(Analyzer):
 		# Skip BCP parsing if this is not 4.0x or newer.
 		raw_data = b''
 		bios_maj = bios_min = code_segment = regtable_segment = None
+		virtual_mem = b''
+		module_ranges = []
+
+		def _read_mem(segment, offset, length, runtime=False):
+			"""Read from the virtual memory space, or from a runtime-mapped module if requested."""
+			linear = (segment << 4) + offset
+			if runtime:
+				for start, end, data in module_ranges:
+					if linear >= start and linear < end:
+						return data[linear - start:linear - start + length]
+				return None
+			return virtual_mem[linear:linear + length]
 		if self._bcpsegment_pattern.search(file_data):
 			# Load raw BIOS data.
 			compressed = os.path.isdir(file_path)
@@ -2854,6 +2873,20 @@ class PhoenixAnalyzer(Analyzer):
 			if compressed:
 				# Go through extracted files.
 				for file_in_dir in os.listdir(file_path):
+					# Keep track of modules with a runtime address, which are used to resolve
+					# pointers that don't appear to be valid on the virtual memory space.
+					match = self._module_pattern.search(file_in_dir)
+					if match:
+						module_start = (int(match.group(1), 16) << 16) + int(match.group(2), 16)
+						if module_start:
+							try:
+								f = open(os.path.join(file_path, file_in_dir), 'rb')
+								data = f.read()
+								f.close()
+								module_ranges.append((module_start, module_start + len(data), data))
+							except:
+								self.debug_print('Could not load module file:', file_in_dir)
+
 					match = self._segment_pattern.match(file_in_dir)
 					if match:
 						# Read segment data.
@@ -3111,18 +3144,43 @@ class PhoenixAnalyzer(Analyzer):
 
 			# Extract DMI information from BCPDMI if required.
 			if not self._bonus_dmi:
+				dmi_runtime = False
 				def _read_dmi_string(offset):
 					if offset in (0x0000, 0xffff):
 						return ''
 					else:
-						string_offset = (dmi_segment << 4) + offset
-						return util.read_string(virtual_mem[string_offset:string_offset + 256]).strip()
+						return util.read_string(_read_mem(dmi_segment, offset, 256, dmi_runtime) or b'').strip()
+
+				def _valid_dmi_strings(segment, offsets, runtime):
+					for offset in offsets:
+						if offset not in (0x0000, 0xffff):
+							if not self._valid_dmi_string_pattern.match(_read_mem(segment, offset, 65, runtime) or b''):
+								return False
+					return True
 
 				for bcpdmi in bcp.get('BCPDMI', []):
 					# BCPDMI versions observed:
 					# - 2.10 (4.05-4.0R6)
 					# - 2.11 (4.0R6-SecureCore)
 					self.debug_print('BCPDMI version:', bcpdmi.version_maj, bcpdmi.version_min)
+
+					# The DMI string segment is not always the one we came up with. Validate
+					# the strings, and try other likely segments if they appear to be bogus.
+					# (compressed 4.05 with strings in the F000 runtime segment: Siemens Nixdorf D990)
+					all_offsets = []
+					if len(bcpdmi.data) >= 0x10:
+						all_offsets += struct.unpack('<HHH', bcpdmi.data[0x0a:0x10])
+					if len(bcpdmi.data) >= 0x1c:
+						all_offsets += struct.unpack('<HHH', bcpdmi.data[0x16:0x1c])
+					for candidate_segment, candidate_runtime in ((dmi_segment, False), (0xf000, False), (code_segment, False), (regtable_segment, False), (0xf000, True), (code_segment, True), (0xe000, True)):
+						if candidate_segment != None and _valid_dmi_strings(candidate_segment, all_offsets, candidate_runtime):
+							if (candidate_segment, candidate_runtime) != (dmi_segment, False):
+								self.debug_print('DMI strings appear bogus at segment', hex(dmi_segment), ', using', hex(candidate_segment), candidate_runtime and '(runtime)' or '')
+								dmi_segment, dmi_runtime = candidate_segment, candidate_runtime
+							break
+					else:
+						self.debug_print('DMI strings appear bogus at all candidate segments')
+						continue
 					self.debug_print('DMI table segment:', hex(dmi_segment))
 
 					dmi_tables = []
@@ -3291,12 +3349,42 @@ class PhoenixAnalyzer(Analyzer):
 					is_mfi = False
 			if not is_mfi and regtable_segment:
 				self.debug_print('Version string pointer:', hex(regtable_segment), ':', hex(version_offset))
-				version_offset += regtable_segment << 4
-				if virtual_mem[version_offset:version_offset + 1] == b'\x00': # pointer may be off by one (Gateway Solo 2500)
-					version_offset += 1
-				version_string = util.read_string(virtual_mem[version_offset:version_offset + 4096])
-				self.debug_print('Raw 4.0x version:', repr(version_string))
-				self.metadata.append(('ID', version_string.strip()))
+
+				# The string is not always at the register table segment. Validate it, and try
+				# other likely segments, including runtime-mapped modules, if it appears to be bogus.
+				# (romexec module at F000 on 256 KB 4.0R6: Intel AL440LX)
+				version_data = None
+				for candidate_segment, runtime in ((regtable_segment, False), (0xf000, True), (code_segment, True), (0xe000, True), (0xf000, False), (code_segment, False)):
+					if candidate_segment == None:
+						continue
+					candidate_data = _read_mem(candidate_segment, version_offset, 4096, runtime)
+					if not candidate_data:
+						continue
+					if candidate_data[:1] == b'\x00': # pointer may be off by one (Gateway Solo 2500)
+						candidate_data = candidate_data[1:]
+					if version_data == None: # keep the original string around in case nothing else is valid
+						version_data = candidate_data
+					if self._valid_id_pattern.match(candidate_data):
+						if (candidate_segment, runtime) != (regtable_segment, False):
+							self.debug_print('Version string appears bogus, using', hex(candidate_segment), runtime and '(runtime)' or '')
+						version_data = candidate_data
+						break
+				else:
+					# Discard the original string if it contains control characters.
+					if self._invalid_signon_pattern.match(version_data):
+						self.debug_print('Version string appears bogus at all candidate segments:', repr(version_data[:32]))
+						version_data = None
+
+				if version_data:
+					version_string = util.read_string(version_data)
+					self.debug_print('Raw 4.0x version:', repr(version_string))
+					version_string = version_string.replace('\r\n', '\n').replace('\r', '\n') # CR line breaks (cME)
+					self.metadata.append(('ID', version_string.strip()))
+
+					# Take the product name as the version on cME, which reports core version 5.0.
+					# (not to be confused with the ALR 4.0 Release 5.10.3 case above)
+					if bios_maj == 5 and version_string[:12] == 'Phoenix cME ':
+						self.version = version_string[8:].split('\n')[0].strip()
 
 			# Read sign-on string pointer.
 			signon_segment = code_segment
@@ -3304,7 +3392,7 @@ class PhoenixAnalyzer(Analyzer):
 
 			# Handle 4.04+ where the string pointer points to a string table pointer instead of a string.
 			signon = None
-			if bios_maj >= 6 or (bios_maj == 4 and bios_min >= 6):
+			if bios_maj >= 6 or (bios_maj == 4 and bios_min >= 6) or (bios_maj == 5 and len(strings_files) > 0): # 5.x = cME (Fujitsu Siemens D2156)
 				# 4.0R6+: string table pointer is relative to string table file minus header.
 				self.debug_print('BCPOST sign-on points to string table file offset', hex(signon_offset))
 
@@ -3325,33 +3413,48 @@ class PhoenixAnalyzer(Analyzer):
 				else:
 					self.debug_print('BCPOST missing strings file')
 			else:
-				self.debug_print('BCPOST sign-on points to', hex(signon_segment), ':', hex(signon_offset))
+				# Try the code segment first, then F000 if the string appears to be bogus.
+				# (compressed 4.04 with no code segment on BCPSYS: Siemens Nixdorf D873)
+				pointer_offset = signon_offset
+				for signon_segment in (code_segment, 0xf000):
+					signon_offset = pointer_offset
+					self.debug_print('BCPOST sign-on points to', hex(signon_segment), ':', hex(signon_offset))
 
-				if bios_maj >= 5 or (bios_maj == 4 and bios_min >= 4):
-					# 4.04-4.05: string table pointer is relative to string table segment.
-					signon_offset = (signon_segment << 4) + signon_offset
-					string_table_offset = virtual_mem[signon_offset:signon_offset + 2]
-					if len(string_table_offset) == 2:
-						# Look for a string table segment overlapping the string pointer's segment and offset.
-						for start, end in segment_ranges:
-							if signon_offset >= start and signon_offset < end:
-								signon_segment = start >> 4
-								break
+					if bios_maj >= 5 or (bios_maj == 4 and bios_min >= 4):
+						# 4.04-4.05: string table pointer is relative to string table segment.
+						signon_offset = (signon_segment << 4) + signon_offset
+						string_table_offset = virtual_mem[signon_offset:signon_offset + 2]
+						if len(string_table_offset) == 2:
+							# Look for a string table segment overlapping the string pointer's segment and offset.
+							for start, end in segment_ranges:
+								if signon_offset >= start and signon_offset < end:
+									signon_segment = start >> 4
+									break
 
-						# Now we should have a pointer to the actual string.
-						signon_offset, = struct.unpack('<H', string_table_offset)
-						self.debug_print('BCPOST sign-on string table entry points to', hex(signon_segment), ':', hex(signon_offset))
-					else:
-						self.debug_print('BCPOST sign-on string table short read')
+							# Now we should have a pointer to the actual string.
+							signon_offset, = struct.unpack('<H', string_table_offset)
+							self.debug_print('BCPOST sign-on string table entry points to', hex(signon_segment), ':', hex(signon_offset))
+						else:
+							self.debug_print('BCPOST sign-on string table short read')
 
-				# Add segment to pointer.
-				signon_offset += signon_segment << 4
-				signon = virtual_mem[signon_offset:signon_offset + 4096]
+					# Add segment to pointer.
+					signon_offset += signon_segment << 4
+					signon = virtual_mem[signon_offset:signon_offset + 4096]
+
+					# Stop if the string appears to be valid.
+					if not self._invalid_signon_pattern.match(signon):
+						break
+					self.debug_print('BCPOST sign-on appears bogus:', repr(signon[:32]))
+					signon = None
 
 			# Read string if one was found.
 			if signon:
-				self.signon = util.read_string(signon)
-				self.debug_print('Raw BCPOST sign-on:', repr(self.signon))
+				signon = util.read_string(signon)
+				self.debug_print('Raw BCPOST sign-on:', repr(signon))
+
+				# Don't replace a sign-on found by the Intel check with a blank one. (Intel SSH4)
+				if signon.strip() or not self.signon:
+					self.signon = signon
 		else:
 			# Determine if this is a customized Dell BIOS.
 			match = self._dell_system_pattern.search(file_data)
